@@ -29,6 +29,7 @@ public class PaperbaseAIBehaviorOptionsBindingTestModule : AbpModule
                 ["PaperbaseAIBehavior:DefaultLanguage"] = "en",
                 ["PaperbaseAIBehavior:EnableLlmRerank"] = "true",
                 ["PaperbaseAIBehavior:RecallExpandFactor"] = "7",
+                ["PaperbaseAIBehavior:DocumentChatMinScore"] = "0.44",
             })
             .Build();
 
@@ -60,6 +61,7 @@ public class PaperbaseAIBehaviorOptionsBinding_Tests
         _options.DefaultLanguage.ShouldBe("en");                             // default "ja"
         _options.EnableLlmRerank.ShouldBeTrue();                              // default false
         _options.RecallExpandFactor.ShouldBe(7);                              // default 4
+        _options.DocumentChatMinScore.ShouldBe(0.44);                         // default 0.45
     }
 
     [Fact]
@@ -73,5 +75,6 @@ public class PaperbaseAIBehaviorOptionsBinding_Tests
         _options.ChunkSize.ShouldBe(800);
         _options.ChunkOverlap.ShouldBe(100);
         _options.ChunkBoundaryTolerance.ShouldBe(120);
+        _options.MaxTitleGenerationMarkdownLength.ShouldBe(4000);
     }
 }

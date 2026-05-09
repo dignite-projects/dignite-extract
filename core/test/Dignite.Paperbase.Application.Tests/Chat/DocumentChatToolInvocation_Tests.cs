@@ -118,7 +118,8 @@ public class DocumentChatToolInvocation_Tests
             Arg.Is<VectorSearchRequest>(r =>
                 r.QueryText == "payment terms"
                 && r.DocumentTypeCode == "contract.general"
-                && r.TopK == 7),
+                && r.TopK == 7
+                && r.MinScore == 0.45),
             Arg.Any<CancellationToken>());
 
         var conversation = await WithUnitOfWorkAsync(async () =>
@@ -132,6 +133,77 @@ public class DocumentChatToolInvocation_Tests
         var assistant = conversation!.Messages.Single(m => m.Role == ChatMessageRole.Assistant);
         assistant.CitationsJson.ShouldNotBeNullOrEmpty();
         assistant.CitationsJson.ShouldContain(docId.ToString());
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_Uses_DocumentChatMinScore_For_Unscoped_Conversation()
+    {
+        _knowledgeIndex.SearchAsync(Arg.Any<VectorSearchRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new List<VectorSearchResult>
+            {
+                new()
+                {
+                    RecordId = Guid.NewGuid(),
+                    DocumentId = Guid.NewGuid(),
+                    ChunkIndex = 0,
+                    Text = "The contract amount is 1,000,000 JPY."
+                }
+            });
+
+        var conversationId = await CreateConversationAsync(documentTypeCode: null);
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            using (ChangeUser(OwnerUserId))
+            {
+                await _appService.SendMessageAsync(conversationId, new SendChatMessageInput
+                {
+                    Message = "八月株式会社の契約金額はいくらですか?",
+                    ClientTurnId = Guid.NewGuid()
+                });
+            }
+        });
+
+        await _knowledgeIndex.Received(1).SearchAsync(
+            Arg.Is<VectorSearchRequest>(r =>
+                r.DocumentTypeCode == null
+                && r.DocumentId == null
+                && r.MinScore == 0.45),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_Uses_Conversation_MinScore_When_Explicitly_Set()
+    {
+        _knowledgeIndex.SearchAsync(Arg.Any<VectorSearchRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new List<VectorSearchResult>
+            {
+                new()
+                {
+                    RecordId = Guid.NewGuid(),
+                    DocumentId = Guid.NewGuid(),
+                    ChunkIndex = 0,
+                    Text = "Explicit threshold context."
+                }
+            });
+
+        var conversationId = await CreateConversationAsync(documentTypeCode: null, minScore: 0.72);
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            using (ChangeUser(OwnerUserId))
+            {
+                await _appService.SendMessageAsync(conversationId, new SendChatMessageInput
+                {
+                    Message = "Use explicit min score",
+                    ClientTurnId = Guid.NewGuid()
+                });
+            }
+        });
+
+        await _knowledgeIndex.Received(1).SearchAsync(
+            Arg.Is<VectorSearchRequest>(r => r.MinScore == 0.72),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -232,7 +304,10 @@ public class DocumentChatToolInvocation_Tests
         toolCalls[0].ExceptionType.ShouldNotBeNullOrEmpty();
     }
 
-    private async Task<Guid> CreateConversationAsync(int? topK = null)
+    private async Task<Guid> CreateConversationAsync(
+        int? topK = null,
+        string? documentTypeCode = "contract.general",
+        double? minScore = null)
     {
         return await WithUnitOfWorkAsync(async () =>
         {
@@ -241,8 +316,9 @@ public class DocumentChatToolInvocation_Tests
                 var dto = await _appService.CreateConversationAsync(new CreateChatConversationInput
                 {
                     Title = "Tool Invocation Test",
-                    DocumentTypeCode = "contract.general",
-                    TopK = topK
+                    DocumentTypeCode = documentTypeCode,
+                    TopK = topK,
+                    MinScore = minScore
                 });
                 return dto.Id;
             }

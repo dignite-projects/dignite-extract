@@ -56,4 +56,17 @@ public class PaperbaseAIBehaviorOptions
     /// 实际召回数 = 文档聊天 TopK × 此值。
     /// </summary>
     public int RecallExpandFactor { get; set; } = 4;
+
+    /// <summary>
+    /// 文档 Chat RAG 搜索默认最小相关度阈值。显式设置在会话上的 MinScore 优先。
+    /// 低于底层知识库默认值是为了改善跨语言查询和专有名词查询的召回。
+    /// 设为 null 时回落到 <c>PaperbaseKnowledgeIndex:MinScore</c>。
+    /// </summary>
+    public double? DocumentChatMinScore { get; set; } = 0.45;
+
+    /// <summary>
+    /// Title 生成时送入 LLM 的 Markdown 最大字符数。
+    /// 超出时截断尾部（文档开头通常已包含标题、摘要等关键信息）。
+    /// </summary>
+    public int MaxTitleGenerationMarkdownLength { get; set; } = 4000;
 }

@@ -54,4 +54,14 @@ public class DefaultPromptProvider : IPromptProvider, ITransientDependency
         "Prefer the user's language. Keep it under 60 characters. " +
         $"Working language: {language}."
     );
+
+    public virtual PromptTemplate GetTitleGenerationPrompt(string language) => new(
+        "You generate concise document titles. " +
+        "Given a document in Markdown format, return one short descriptive title only — " +
+        "the kind that appears in a file browser or search result. " +
+        "Do not wrap it in quotes. Do not add surrounding punctuation. " +
+        "If the document has an explicit title heading, use it verbatim. " +
+        "Otherwise summarize the document's subject in under 80 characters. " +
+        "Respond in the same language as the document."
+    );
 }

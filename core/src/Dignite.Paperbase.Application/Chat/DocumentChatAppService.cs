@@ -59,7 +59,6 @@ public class DocumentChatAppService : PaperbaseAppService, IDocumentChatAppServi
     private readonly IPromptProvider _promptProvider;
     private readonly DocumentChatHistoryProvider _historyProvider;
     private readonly PaperbaseAIBehaviorOptions _aiOptions;
-    private readonly PaperbaseKnowledgeIndexOptions _ragOptions;
     private readonly IEnumerable<IDocumentChatToolContributor> _toolContributors;
     private readonly IDocumentChatToolFactory _toolFactory;
     private readonly DocumentChatTelemetryRecorder _telemetryRecorder;
@@ -72,7 +71,6 @@ public class DocumentChatAppService : PaperbaseAppService, IDocumentChatAppServi
         IPromptProvider promptProvider,
         DocumentChatHistoryProvider historyProvider,
         IOptions<PaperbaseAIBehaviorOptions> aiOptions,
-        IOptions<PaperbaseKnowledgeIndexOptions> ragOptions,
         IEnumerable<IDocumentChatToolContributor> toolContributors,
         IDocumentChatToolFactory toolFactory,
         DocumentChatTelemetryRecorder telemetryRecorder)
@@ -84,7 +82,6 @@ public class DocumentChatAppService : PaperbaseAppService, IDocumentChatAppServi
         _promptProvider = promptProvider;
         _historyProvider = historyProvider;
         _aiOptions = aiOptions.Value;
-        _ragOptions = ragOptions.Value;
         _toolContributors = toolContributors;
         _toolFactory = toolFactory;
         _telemetryRecorder = telemetryRecorder;
@@ -347,12 +344,19 @@ public class DocumentChatAppService : PaperbaseAppService, IDocumentChatAppServi
     {
         // Scope is built from the aggregate, not from ambient context — required so the
         // search delegate closure captures the right tenant even on background threads.
+        //
+        // Document Chat uses a looser default than the provider-neutral knowledge-index
+        // default because cross-language queries and proper-noun lookups often score lower
+        // while still being valid hits. A per-conversation MinScore remains the strongest
+        // override; null falls through to the adapter's PaperbaseKnowledgeIndex fallback.
+        var effectiveMinScore = conversation.MinScore
+            ?? _aiOptions.DocumentChatMinScore;
         var scope = new DocumentSearchScope
         {
             DocumentId = conversation.DocumentId,
             DocumentTypeCode = conversation.DocumentTypeCode,
             TopK = conversation.TopK,
-            MinScore = conversation.MinScore
+            MinScore = effectiveMinScore
         };
 
         var template = _promptProvider.GetQaPrompt(_aiOptions.DefaultLanguage);

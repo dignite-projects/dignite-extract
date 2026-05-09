@@ -14,4 +14,6 @@ public interface IPromptProvider
     PromptTemplate GetRerankPrompt(string language);
 
     PromptTemplate GetConversationTitlePrompt(string language);
+
+    PromptTemplate GetTitleGenerationPrompt(string language);
 }

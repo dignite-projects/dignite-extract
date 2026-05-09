@@ -30,7 +30,8 @@ Chat-related knobs live in `PaperbaseAIBehavior` alongside the other Application
 ```json
 "PaperbaseAIBehavior": {
   "EnableLlmRerank": false,
-  "RecallExpandFactor": 4
+  "RecallExpandFactor": 4,
+  "DocumentChatMinScore": 0.45
 }
 ```
 
@@ -38,6 +39,7 @@ Chat-related knobs live in `PaperbaseAIBehavior` alongside the other Application
 | --- | --- | --- |
 | `EnableLlmRerank` | `false` | When enabled, document chat retrieves an expanded candidate set, asks the chat model to rerank chunks by question relevance, and injects only the final `TopK` into the answer prompt. Off by default to conserve tokens; enable when retrieval quality is the bottleneck (often in mixed-language corpora). |
 | `RecallExpandFactor` | `4` | Multiplier applied to the conversation's `topK` (or `PaperbaseKnowledgeIndex:DefaultTopK`) before LLM rerank. With the defaults `topK=5` × `4` = 20 candidates rescored. |
+| `DocumentChatMinScore` | `0.45` | Default normalized cosine threshold for document chat RAG searches when the conversation has no explicit `minScore`. This is intentionally lower than `PaperbaseKnowledgeIndex:MinScore` to improve recall for cross-language questions and proper-noun lookups. Set to `null` to fall back to the knowledge-index default. |
 
 Document chat uses a single MAF tool-calling path: the agent exposes `search_paperbase_documents` (RAG) plus any business-module contributor tools, with `ChatToolMode.Auto` so the model picks when (and with what query / `documentIds`) to invoke them. There is no operator switch for "always retrieve before answering" — see *When the answer is degraded* below for the honest-signal contract that replaced it.
 

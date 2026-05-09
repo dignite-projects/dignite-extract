@@ -1,8 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Dignite.Paperbase.Abstractions.TextExtraction;
+using Dignite.Paperbase.Ai;
 using Dignite.Paperbase.Documents;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Volo.Abp.BackgroundJobs;
 using Volo.Abp.BlobStoring;
 using Volo.Abp.DependencyInjection;
@@ -21,6 +27,9 @@ public class DocumentTextExtractionBackgroundJob
     private readonly ITextExtractor _textExtractor;
     private readonly IBlobContainer<PaperbaseDocumentContainer> _blobContainer;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
+    private readonly IChatClient _chatClient;
+    private readonly IPromptProvider _promptProvider;
+    private readonly PaperbaseAIBehaviorOptions _behaviorOptions;
 
     public DocumentTextExtractionBackgroundJob(
         IDocumentRepository documentRepository,
@@ -29,7 +38,10 @@ public class DocumentTextExtractionBackgroundJob
         DocumentPipelineJobScheduler pipelineJobScheduler,
         ITextExtractor textExtractor,
         IBlobContainer<PaperbaseDocumentContainer> blobContainer,
-        IUnitOfWorkManager unitOfWorkManager)
+        IUnitOfWorkManager unitOfWorkManager,
+        IChatClient chatClient,
+        IPromptProvider promptProvider,
+        IOptions<PaperbaseAIBehaviorOptions> behaviorOptions)
     {
         _documentRepository = documentRepository;
         _pipelineRunManager = pipelineRunManager;
@@ -38,6 +50,9 @@ public class DocumentTextExtractionBackgroundJob
         _textExtractor = textExtractor;
         _blobContainer = blobContainer;
         _unitOfWorkManager = unitOfWorkManager;
+        _chatClient = chatClient;
+        _promptProvider = promptProvider;
+        _behaviorOptions = behaviorOptions.Value;
     }
 
     public override async Task ExecuteAsync(DocumentTextExtractionJobArgs args)
@@ -57,7 +72,8 @@ public class DocumentTextExtractionBackgroundJob
             var result = await _textExtractor.ExtractAsync(blobStream, ctx);
 
             var actualSourceType = result.UsedOcr ? SourceType.Physical : SourceType.Digital;
-            var title = MarkdownTitleExtractor.ExtractTitle(result.Markdown)
+            var title = await TryGenerateTitleAsync(result.Markdown)
+                ?? MarkdownTitleExtractor.ExtractTitle(result.Markdown)
                 ?? FallbackTitleFromFileName(workItem.OriginalFileName);
             await CompleteRunAsync(args.DocumentId, workItem.RunId, result.Markdown, title, actualSourceType);
         }
@@ -105,6 +121,38 @@ public class DocumentTextExtractionBackgroundJob
         await _pipelineJobScheduler.QueueAsync(document, PaperbasePipelines.Classification);
 
         await uow.CompleteAsync();
+    }
+
+    private async Task<string?> TryGenerateTitleAsync(string markdown, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var truncated = markdown.Length > _behaviorOptions.MaxTitleGenerationMarkdownLength
+                ? markdown[.._behaviorOptions.MaxTitleGenerationMarkdownLength]
+                : markdown;
+
+            var template = _promptProvider.GetTitleGenerationPrompt(_behaviorOptions.DefaultLanguage);
+            var messages = new List<ChatMessage>
+            {
+                new(ChatRole.System, template.SystemInstructions),
+                new(ChatRole.User, PromptBoundary.WrapDocument(truncated))
+            };
+
+            var response = await _chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken);
+            var title = response.Text?.Trim();
+
+            if (string.IsNullOrWhiteSpace(title))
+                return null;
+
+            return title.Length <= DocumentConsts.MaxTitleLength
+                ? title
+                : title[..DocumentConsts.MaxTitleLength];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogWarning(ex, "AI title generation failed; falling back to rule-based extractor.");
+            return null;
+        }
     }
 
     /// <summary>
