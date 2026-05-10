@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Dignite.Paperbase.Documents.Pipelines.Classification;
 using Dignite.Paperbase.Documents.Pipelines.Embedding;
+using Dignite.Paperbase.Documents.Pipelines.RelationDiscovery;
 using Dignite.Paperbase.Documents.Pipelines.TextExtraction;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
@@ -58,6 +59,12 @@ public class DocumentPipelineJobScheduler : ITransientDependency
                 }),
             PaperbasePipelines.Embedding => _backgroundJobManager.EnqueueAsync(
                 new DocumentEmbeddingJobArgs
+                {
+                    DocumentId = documentId,
+                    PipelineRunId = pipelineRunId
+                }),
+            PaperbasePipelines.RelationDiscovery => _backgroundJobManager.EnqueueAsync(
+                new RelationDiscoveryJobArgs
                 {
                     DocumentId = documentId,
                     PipelineRunId = pipelineRunId

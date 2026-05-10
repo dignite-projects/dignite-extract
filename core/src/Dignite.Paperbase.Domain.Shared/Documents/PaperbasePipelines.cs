@@ -18,6 +18,12 @@ public static class PaperbasePipelines
     /// <summary>文本分块 + 向量化。非关键流水线，失败降级为全文检索。</summary>
     public const string Embedding = "embedding";
 
+    /// <summary>
+    /// Issue #115 L2: 关系发现（基于业务模块 <c>IDocumentIdentifierProvider</c> fan-out）。
+    /// 非关键流水线——失败不影响 Document 生命周期；orphan 文档（无业务模块认领）会自然短路成 0 关系。
+    /// </summary>
+    public const string RelationDiscovery = "relation-discovery";
+
     /// <summary>生命周期派生时视为"关键"的流水线集合。</summary>
     public static readonly IReadOnlyCollection<string> KeyPipelines = new[]
     {
