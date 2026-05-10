@@ -294,6 +294,67 @@ public class SemanticRelationDiscoveryService_Tests
     }
 
     [Fact]
+    public async Task DiscoverAsync_Should_Run_LLM_And_Vector_Search_Without_Ambient_UoW()
+    {
+        // .claude/rules/background-jobs.md § Tests: regression guard against future code
+        // accidentally wrapping L3 in an outer UoW that holds a DB connection during LLM calls.
+        // L3 service itself opens NO UoW; when called from the background job (after L2's UoW
+        // has been disposed), ambient ICurrentUnitOfWork must be null at every external boundary.
+        var uowManager = GetRequiredService<Volo.Abp.Uow.IUnitOfWorkManager>();
+        var source = CreateDocument(markdown: "合同内容");
+        var candidate = CreateDocument(markdown: "强相关发票");
+        SetupSource(source);
+        SetupCandidate(candidate);
+        SetupNoExistingRelations(source.Id);
+
+        // Assert NO ambient UoW at the embedding boundary.
+        _embeddingGenerator.GenerateAsync(
+                Arg.Any<IEnumerable<string>>(),
+                Arg.Any<EmbeddingGenerationOptions>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                uowManager.Current.ShouldBeNull();
+                return new GeneratedEmbeddings<Embedding<float>>(new[]
+                {
+                    new Embedding<float>(new[] { 0.1f, 0.2f, 0.3f })
+                });
+            });
+
+        // Assert NO ambient UoW at the vector search boundary.
+        _knowledgeIndex.SearchAsync(
+                Arg.Any<VectorSearchRequest>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                uowManager.Current.ShouldBeNull();
+                return (IReadOnlyList<VectorSearchResult>)new[] { CreateVectorResult(candidate.Id, 0.9) };
+            });
+
+        // Assert NO ambient UoW at the LLM evaluation boundary.
+        _inferenceAgent.EvaluateAsync(
+                Arg.Any<DocumentSnapshot>(), Arg.Any<DocumentSnapshot>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                uowManager.Current.ShouldBeNull();
+                return new RelationInferenceResult
+                {
+                    IsRelated = true, Confidence = 0.85, Description = "match"
+                };
+            });
+
+        var created = await _service.DiscoverAsync(source.Id);
+
+        created.Count.ShouldBe(1);
+        // Sanity: all three external boundaries were actually hit (the assertion ran).
+        await _embeddingGenerator.Received(1).GenerateAsync(
+            Arg.Any<IEnumerable<string>>(), Arg.Any<EmbeddingGenerationOptions>(), Arg.Any<CancellationToken>());
+        await _knowledgeIndex.Received(1).SearchAsync(Arg.Any<VectorSearchRequest>(), Arg.Any<CancellationToken>());
+        await _inferenceAgent.Received(1).EvaluateAsync(
+            Arg.Any<DocumentSnapshot>(), Arg.Any<DocumentSnapshot>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task DiscoverAsync_Should_Skip_Candidate_With_No_Markdown()
     {
         var source = CreateDocument(markdown: "合同内容");

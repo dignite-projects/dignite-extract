@@ -45,7 +45,6 @@ public class RelationDiscoveryBackgroundJobTestModule : AbpModule
             Substitute.For<RelationInferenceAgent>(
                 Substitute.For<IChatClient>(),
                 Options.Create(new PaperbaseAIBehaviorOptions())),
-            Substitute.For<ICurrentTenant>(),
             Options.Create(new PaperbaseAIBehaviorOptions())));
     }
 }

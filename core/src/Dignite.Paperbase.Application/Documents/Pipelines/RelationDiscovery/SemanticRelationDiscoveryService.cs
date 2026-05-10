@@ -10,7 +10,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Services;
-using Volo.Abp.MultiTenancy;
 
 namespace Dignite.Paperbase.Documents.Pipelines.RelationDiscovery;
 
@@ -51,16 +50,16 @@ public class SemanticRelationDiscoveryService : DomainService
     private readonly IDocumentKnowledgeIndex _knowledgeIndex;
     private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddingGenerator;
     private readonly RelationInferenceAgent _inferenceAgent;
-    private readonly ICurrentTenant _currentTenant;
     private readonly PaperbaseAIBehaviorOptions _aiOptions;
 
+    // No ICurrentTenant injection: tenant flows through DocumentSnapshot.TenantId, sourced from
+    // Document.TenantId (Hangfire-safe). Background jobs may run without an ambient ICurrentTenant.
     public SemanticRelationDiscoveryService(
         IDocumentRepository documentRepository,
         IDocumentRelationRepository relationRepository,
         IDocumentKnowledgeIndex knowledgeIndex,
         IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
         RelationInferenceAgent inferenceAgent,
-        ICurrentTenant currentTenant,
         IOptions<PaperbaseAIBehaviorOptions> aiOptions)
     {
         _documentRepository = documentRepository;
@@ -68,7 +67,6 @@ public class SemanticRelationDiscoveryService : DomainService
         _knowledgeIndex = knowledgeIndex;
         _embeddingGenerator = embeddingGenerator;
         _inferenceAgent = inferenceAgent;
-        _currentTenant = currentTenant;
         _aiOptions = aiOptions.Value;
     }
 
@@ -116,8 +114,10 @@ public class SemanticRelationDiscoveryService : DomainService
         }
 
         // Phase 4: per-candidate LLM evaluation. Provider-isolation: one bad LLM call must not
-        // tank the rest of the candidates.
-        var sourceSnapshot = new DocumentSnapshot(source.DocumentTypeCode, source.Markdown);
+        // tank the rest of the candidates. TenantId carried via snapshot so the write path
+        // (EvaluateAndCreateAsync) doesn't depend on ambient ICurrentTenant — Hangfire-safe,
+        // matches the explicit-tenant strategy used by RecallCandidatesAsync.
+        var sourceSnapshot = new DocumentSnapshot(source.TenantId, source.DocumentTypeCode, source.Markdown);
         var created = new List<DocumentRelation>();
 
         foreach (var candidateId in freshCandidates)
@@ -198,7 +198,7 @@ public class SemanticRelationDiscoveryService : DomainService
             return null;
         }
 
-        var candidateSnapshot = new DocumentSnapshot(candidate.DocumentTypeCode, candidate.Markdown);
+        var candidateSnapshot = new DocumentSnapshot(candidate.TenantId, candidate.DocumentTypeCode, candidate.Markdown);
 
         RelationInferenceResult inference;
         try
@@ -223,9 +223,12 @@ public class SemanticRelationDiscoveryService : DomainService
             ? "Semantic match (LLM-evaluated)"
             : inference.Description!.Trim();
 
+        // TenantId from sourceSnapshot (Hangfire-safe — no ambient context dependency).
+        // Source and candidate must be in the same tenant: ABP IMultiTenant filter on the
+        // vector search guarantees that. We trust source.TenantId as the authoritative value.
         var relation = new DocumentRelation(
             GuidGenerator.Create(),
-            _currentTenant.Id,
+            sourceSnapshot.TenantId,
             sourceDocumentId: sourceDocumentId,
             targetDocumentId: candidateId,
             description: description,
