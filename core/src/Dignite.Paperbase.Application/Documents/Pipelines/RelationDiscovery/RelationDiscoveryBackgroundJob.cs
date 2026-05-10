@@ -37,6 +37,7 @@ public class RelationDiscoveryBackgroundJob
     private readonly DocumentPipelineRunManager _pipelineRunManager;
     private readonly DocumentPipelineRunAccessor _pipelineRunAccessor;
     private readonly RelationDiscoveryService _discoveryService;
+    private readonly SemanticRelationDiscoveryService _semanticDiscoveryService;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
 
     public RelationDiscoveryBackgroundJob(
@@ -44,12 +45,14 @@ public class RelationDiscoveryBackgroundJob
         DocumentPipelineRunManager pipelineRunManager,
         DocumentPipelineRunAccessor pipelineRunAccessor,
         RelationDiscoveryService discoveryService,
+        SemanticRelationDiscoveryService semanticDiscoveryService,
         IUnitOfWorkManager unitOfWorkManager)
     {
         _documentRepository = documentRepository;
         _pipelineRunManager = pipelineRunManager;
         _pipelineRunAccessor = pipelineRunAccessor;
         _discoveryService = discoveryService;
+        _semanticDiscoveryService = semanticDiscoveryService;
         _unitOfWorkManager = unitOfWorkManager;
     }
 
@@ -105,13 +108,29 @@ public class RelationDiscoveryBackgroundJob
 
     protected virtual async Task<int> DiscoverAsync(Guid documentId)
     {
-        // L2 service inserts DocumentRelation aggregates with autoSave: false; wrap in a UoW
-        // so the writes commit. Pure DB work — no external IO — but the rule "begin → external → complete"
-        // is honored in spirit by isolating the discovery write transaction from the run-state writes.
-        using var uow = _unitOfWorkManager.Begin(requiresNew: true);
-        var created = await _discoveryService.DiscoverAsync(documentId);
-        await uow.CompleteAsync();
-        return created.Count;
+        // L2: structured fan-out across business-module providers. Cheap (DB queries only).
+        // L2 writes commit in a dedicated UoW (autoSave: false on inserts ⇒ uow.CompleteAsync()).
+        int l2Count;
+        using (var uow = _unitOfWorkManager.Begin(requiresNew: true))
+        {
+            var created = await _discoveryService.DiscoverAsync(documentId);
+            await uow.CompleteAsync();
+            l2Count = created.Count;
+        }
+
+        if (l2Count > 0)
+        {
+            // L2 found structured matches — that's strong signal; don't run L3 (expensive LLM)
+            // on top. L3 is the fallback for "structured matching found nothing".
+            return l2Count;
+        }
+
+        // L3 fallback: vector recall + LLM evaluation. Disabled by default (operator opt-in).
+        // NOT wrapped in an outer UoW: SemanticRelationDiscoveryService uses autoSave: true on
+        // each relation insert (per-call implicit UoW), so LLM calls between candidates run with
+        // no ambient UoW — satisfies the "no DB connection during external work" rule.
+        var l3Created = await _semanticDiscoveryService.DiscoverAsync(documentId);
+        return l3Created.Count;
     }
 
     protected virtual async Task CompleteRunAsync(Guid documentId, Guid runId, int createdCount)

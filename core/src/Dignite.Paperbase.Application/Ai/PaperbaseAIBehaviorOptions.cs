@@ -103,4 +103,29 @@ public class PaperbaseAIBehaviorOptions
     /// Set to 0 to disable the cap (not recommended in production).
     /// </summary>
     public int MaxCapturedCitations { get; set; } = 50;
+
+    /// <summary>
+    /// Issue #115 L3: 启用基于"向量召回 + LLM 评判"的语义关系发现作为 L2 兜底。
+    /// 默认 <c>false</c>——LLM 调用按文档数线性增长，操作员需明确开启并自行控制成本。
+    /// 关闭时 L2 找不到关系的文档保持无 AiSuggested 状态，等待用户手动建立。
+    /// </summary>
+    public bool EnableSemanticRelationDiscovery { get; set; } = false;
+
+    /// <summary>
+    /// L3 向量召回 top-K——LLM 评判前的候选数量上限。
+    /// 越大召回越宽，但 LLM 调用成本线性增长。建议 5–10。
+    /// </summary>
+    public int SemanticRelationDiscoveryTopK { get; set; } = 5;
+
+    /// <summary>
+    /// L3 向量召回最低分数。低于此分数的候选直接淘汰，不送 LLM。
+    /// 高于普通 chat RAG 的 <see cref="DocumentChatMinScore"/>——L3 只关心强语义匹配，弱匹配是噪音。
+    /// </summary>
+    public double SemanticRelationDiscoveryMinScore { get; set; } = 0.65;
+
+    /// <summary>
+    /// L3 LLM 评判的 confidence 下限。LLM 输出 <see cref="RelationInferenceResult.Confidence"/>
+    /// 低于此值的候选不创建 AiSuggested 关系。建议 0.7+。
+    /// </summary>
+    public double SemanticRelationDiscoveryConfidenceThreshold { get; set; } = 0.7;
 }

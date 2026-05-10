@@ -3,10 +3,14 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Dignite.Paperbase.Ai;
 using Dignite.Paperbase.Documents;
 using Dignite.Paperbase.Documents.Pipelines;
 using Dignite.Paperbase.Documents.Pipelines.RelationDiscovery;
+using Dignite.Paperbase.KnowledgeIndex;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Shouldly;
 using Volo.Abp.MultiTenancy;
@@ -30,6 +34,19 @@ public class RelationDiscoveryBackgroundJobTestModule : AbpModule
             Array.Empty<IDocumentIdentifierProvider>(),
             Substitute.For<IDocumentRelationRepository>(),
             Substitute.For<ICurrentTenant>()));
+
+        // Same treatment for L3 — substitute so this test stays focused on the job's lifecycle
+        // and L2 → L3 fallback chaining; L3's own logic is covered by SemanticRelationDiscoveryService_Tests.
+        context.Services.AddSingleton(Substitute.For<SemanticRelationDiscoveryService>(
+            Substitute.For<IDocumentRepository>(),
+            Substitute.For<IDocumentRelationRepository>(),
+            Substitute.For<IDocumentKnowledgeIndex>(),
+            Substitute.For<IEmbeddingGenerator<string, Embedding<float>>>(),
+            Substitute.For<RelationInferenceAgent>(
+                Substitute.For<IChatClient>(),
+                Options.Create(new PaperbaseAIBehaviorOptions())),
+            Substitute.For<ICurrentTenant>(),
+            Options.Create(new PaperbaseAIBehaviorOptions())));
     }
 }
 
@@ -44,12 +61,20 @@ public class RelationDiscoveryBackgroundJob_Tests
     private readonly RelationDiscoveryBackgroundJob _job;
     private readonly IDocumentRepository _documentRepository;
     private readonly RelationDiscoveryService _discoveryService;
+    private readonly SemanticRelationDiscoveryService _semanticDiscoveryService;
 
     public RelationDiscoveryBackgroundJob_Tests()
     {
         _job = GetRequiredService<RelationDiscoveryBackgroundJob>();
         _documentRepository = GetRequiredService<IDocumentRepository>();
         _discoveryService = GetRequiredService<RelationDiscoveryService>();
+        _semanticDiscoveryService = GetRequiredService<SemanticRelationDiscoveryService>();
+
+        // Default: L3 fallback returns empty (most lifecycle tests don't care about L3 results).
+        // Tests exercising the fallback path override this explicitly.
+        _semanticDiscoveryService
+            .DiscoverAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<DocumentRelation>)new List<DocumentRelation>());
     }
 
     [Fact]
@@ -97,6 +122,62 @@ public class RelationDiscoveryBackgroundJob_Tests
         await _job.ExecuteAsync(new RelationDiscoveryJobArgs { DocumentId = documentId });
 
         await _discoveryService.DidNotReceive().DiscoverAsync(
+            Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_Fall_Back_To_L3_When_L2_Returns_Empty()
+    {
+        // L2 finds nothing → background job invokes L3. L3 returns one relation.
+        var doc = CreateDocument();
+        SetupDocumentRepository(doc);
+
+        _discoveryService
+            .DiscoverAsync(doc.Id, Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<DocumentRelation>)new List<DocumentRelation>());
+
+        var l3Relation = new DocumentRelation(
+            Guid.NewGuid(), null,
+            sourceDocumentId: doc.Id,
+            targetDocumentId: Guid.NewGuid(),
+            description: "semantic match",
+            source: RelationSource.AiSuggested,
+            confidence: 0.85);
+
+        _semanticDiscoveryService
+            .DiscoverAsync(doc.Id, Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<DocumentRelation>)new List<DocumentRelation> { l3Relation });
+
+        await _job.ExecuteAsync(new RelationDiscoveryJobArgs { DocumentId = doc.Id });
+
+        await _semanticDiscoveryService.Received(1).DiscoverAsync(doc.Id, Arg.Any<CancellationToken>());
+        var run = doc.GetLatestRun(PaperbasePipelines.RelationDiscovery);
+        run.ShouldNotBeNull();
+        run.Status.ShouldBe(PipelineRunStatus.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Should_Skip_L3_When_L2_Found_Relations()
+    {
+        // L2 found ≥1 relation → L3 (expensive LLM) must NOT be invoked.
+        var doc = CreateDocument();
+        SetupDocumentRepository(doc);
+
+        var l2Relation = new DocumentRelation(
+            Guid.NewGuid(), null,
+            sourceDocumentId: doc.Id,
+            targetDocumentId: Guid.NewGuid(),
+            description: "structured match",
+            source: RelationSource.AiSuggested,
+            confidence: 0.95);
+
+        _discoveryService
+            .DiscoverAsync(doc.Id, Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<DocumentRelation>)new List<DocumentRelation> { l2Relation });
+
+        await _job.ExecuteAsync(new RelationDiscoveryJobArgs { DocumentId = doc.Id });
+
+        await _semanticDiscoveryService.DidNotReceive().DiscoverAsync(
             Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
