@@ -106,3 +106,4 @@ Reference implementation: `modules/contracts/src/Dignite.Paperbase.Contracts.App
 - [Knowledge index](knowledge-index.md) — what backs retrieval
 - [Hybrid search](hybrid-search.md) — BM25 + dense recall fusion
 - [Embedding pipeline](embedding.md) — where chunks come from
+- [Relation discovery](relation-discovery.md) — populates the `DocumentRelation` graph the chat agent reaches via `get_document_relations`

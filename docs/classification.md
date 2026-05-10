@@ -78,4 +78,5 @@ The prompt language follows `PaperbaseAIBehavior:DefaultLanguage` (see [ai-provi
 
 - [Text extraction](text-extraction.md) — produces the `Document.Markdown` consumed here
 - [Embedding pipeline](embedding.md) — the next stage triggered on successful classification
+- [Relation discovery](relation-discovery.md) — also subscribes to `DocumentClassifiedEto`; queues L2/L3 to find relations to other documents
 - [Pipeline runs](pipeline-runs.md) — the `Candidates` payload schema for the review UI
