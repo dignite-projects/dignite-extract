@@ -1,0 +1,167 @@
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <h6 class="mb-0">
+      <i class="fas fa-share-nodes me-2"></i>
+      {{ '::Document:RelationGraph:Title' | abpLocalization }}
+    </h6>
+
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <!-- Depth selector -->
+      <div class="btn-group btn-group-sm" role="group">
+        <button
+          *ngFor="let d of [1, 2, 3]"
+          type="button"
+          class="btn"
+          [class.btn-primary]="depth() === d"
+          [class.btn-outline-secondary]="depth() !== d"
+          (click)="setDepth(d)"
+          [disabled]="isLoading()"
+        >
+          {{ d }} {{ '::Document:RelationGraph:Hop' | abpLocalization }}
+        </button>
+      </div>
+
+      <!-- Show AiSuggested toggle -->
+      <div class="form-check form-check-inline mb-0">
+        <input
+          class="form-check-input"
+          type="checkbox"
+          id="graph-show-ai"
+          [checked]="includeAiSuggested()"
+          (change)="toggleAiSuggested()"
+          [disabled]="isLoading()"
+        />
+        <label class="form-check-label small" for="graph-show-ai">
+          <i class="fas fa-robot text-warning me-1"></i>
+          {{ '::Document:RelationGraph:IncludeAiSuggested' | abpLocalization }}
+        </label>
+      </div>
+
+      <!-- Refresh -->
+      <button
+        type="button"
+        class="btn btn-sm btn-outline-secondary"
+        (click)="load()"
+        [disabled]="isLoading()"
+      >
+        <i class="fas fa-sync-alt" [class.fa-spin]="isLoading()"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="card-body p-0 graph-canvas-wrapper">
+    @if (error()) {
+      <div class="alert alert-danger m-3 mb-0 small">
+        {{ error()! | abpLocalization }}
+      </div>
+    } @else if (isLoading() && !graph()) {
+      <div class="text-center py-5">
+        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+      </div>
+    } @else if (nodes().length <= 1) {
+      <p class="text-muted text-center py-5 mb-0 small">
+        {{ '::Document:RelationGraph:NoRelatedDocuments' | abpLocalization }}
+      </p>
+    } @else {
+      <svg
+        class="graph-svg"
+        [attr.viewBox]="(-viewBoxSize / 2) + ' ' + (-viewBoxSize / 2) + ' ' + viewBoxSize + ' ' + viewBoxSize"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <!-- Background concentric rings (one per hop distance) — visual cue for depth -->
+        @for (d of [1, 2, 3]; track d) {
+          @if (d <= depth()) {
+            <circle
+              [attr.r]="d * ringRadiusStep"
+              cx="0"
+              cy="0"
+              class="ring-guide"
+            />
+          }
+        }
+
+        <!-- Edges first (so nodes paint on top) -->
+        @for (e of edges(); track e.edge.id) {
+          <line
+            [attr.x1]="e.x1"
+            [attr.y1]="e.y1"
+            [attr.x2]="e.x2"
+            [attr.y2]="e.y2"
+            [class]="edgeStrokeClass(e.edge)"
+            (mouseenter)="hoveredEdge.set(e.edge)"
+            (mouseleave)="hoveredEdge.set(null)"
+          />
+        }
+
+        <!-- Nodes -->
+        @for (n of nodes(); track n.documentId) {
+          <g
+            class="graph-node"
+            [class.is-root]="n.isRoot"
+            [attr.transform]="'translate(' + n.x + ',' + n.y + ')'"
+            (click)="navigateToNode(n)"
+            (mouseenter)="hoveredNode.set(n)"
+            (mouseleave)="hoveredNode.set(null)"
+          >
+            <circle
+              [attr.r]="n.isRoot ? 28 : 22"
+              [class]="nodeFillClass(n)"
+            />
+            <!-- Document type code as inner label -->
+            @if (n.documentTypeCode) {
+              <text class="node-type" y="-2" text-anchor="middle">
+                {{ shortLabel(n.documentTypeCode, 10) }}
+              </text>
+            }
+            <!-- Title under the circle (foreignObject keeps it readable) -->
+            <text
+              class="node-title"
+              [attr.y]="n.isRoot ? 48 : 38"
+              text-anchor="middle"
+            >
+              {{ shortLabel(n.title, 24) }}
+            </text>
+          </g>
+        }
+      </svg>
+
+      <!-- Hover info bar -->
+      <div class="graph-hover-bar small">
+        @if (hoveredNode(); as n) {
+          <div>
+            <strong>{{ '::Document:RelationGraph:Node' | abpLocalization }}:</strong>
+            {{ n.title || '—' }}
+            @if (n.documentTypeCode) {
+              <span class="badge bg-info text-dark ms-1">{{ n.documentTypeCode }}</span>
+            }
+            <span class="text-muted ms-2">
+              {{ '::Document:RelationGraph:Distance' | abpLocalization }} {{ n.distance }}
+            </span>
+            @if (n.summary) {
+              <div class="text-muted mt-1 graph-hover-summary">{{ n.summary }}</div>
+            }
+          </div>
+        } @else if (hoveredEdge(); as e) {
+          <div>
+            <strong>{{ '::Document:RelationGraph:Edge' | abpLocalization }}:</strong>
+            {{ e.description }}
+            @if (e.source === RelationSource.AiSuggested) {
+              <span class="badge bg-warning text-dark ms-1">
+                <i class="fas fa-robot me-1"></i>{{ '::Document:RelationSource:AI' | abpLocalization }}
+              </span>
+              @if (e.confidence != null && e.confidence > 0) {
+                <span class="text-muted ms-2">{{ (e.confidence * 100).toFixed(0) }}%</span>
+              }
+            } @else if (e.source === RelationSource.Manual) {
+              <span class="badge bg-success ms-1">{{ '::Document:RelationSource:Manual' | abpLocalization }}</span>
+            }
+          </div>
+        } @else {
+          <div class="text-muted">
+            {{ '::Document:RelationGraph:HoverHint' | abpLocalization }}
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

@@ -107,6 +107,12 @@
               {{ '::Document:Relations' | abpLocalization }}
             </button>
           </li>
+          <li class="nav-item">
+            <button class="nav-link" [class.active]="activeTab() === 'graph'" (click)="setTab('graph')">
+              <i class="fas fa-share-nodes me-1"></i>
+              {{ '::Document:RelationGraph:Tab' | abpLocalization }}
+            </button>
+          </li>
         </ul>
 
         <!-- Tab: Info -->
@@ -269,6 +275,11 @@
         <!-- Tab: Relations -->
         @if (activeTab() === 'relations') {
           <lib-document-relations [documentId]="document()!.id" />
+        }
+
+        <!-- Tab: Relation Graph (wiki-style navigability) -->
+        @if (activeTab() === 'graph') {
+          <lib-document-relation-graph [documentId]="document()!.id" />
         }
 
       </div>

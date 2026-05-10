@@ -1,0 +1,123 @@
+.graph-canvas-wrapper {
+  position: relative;
+  background: #f8f9fa;
+}
+
+.graph-svg {
+  display: block;
+  width: 100%;
+  height: 520px;
+  user-select: none;
+}
+
+// Concentric ring guides
+.ring-guide {
+  fill: none;
+  stroke: #dee2e6;
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+// Nodes
+.graph-node {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+
+  &.is-root {
+    cursor: default;
+  }
+
+  &:hover circle {
+    stroke-width: 3;
+    filter: brightness(0.95);
+  }
+}
+
+circle.node-root {
+  fill: #198754;
+  stroke: #145c32;
+  stroke-width: 2;
+}
+circle.node-ready {
+  fill: #ffffff;
+  stroke: #198754;
+  stroke-width: 2;
+}
+circle.node-processing {
+  fill: #fff3cd;
+  stroke: #ffc107;
+  stroke-width: 2;
+}
+circle.node-failed {
+  fill: #f8d7da;
+  stroke: #dc3545;
+  stroke-width: 2;
+}
+circle.node-default {
+  fill: #ffffff;
+  stroke: #adb5bd;
+  stroke-width: 2;
+}
+
+text.node-type {
+  font-size: 10px;
+  font-weight: 600;
+  fill: #495057;
+  pointer-events: none;
+}
+
+.is-root text.node-type {
+  fill: #ffffff;
+}
+
+text.node-title {
+  font-size: 11px;
+  fill: #212529;
+  pointer-events: none;
+}
+
+// Edges
+line {
+  fill: none;
+  stroke-width: 1.5;
+  cursor: pointer;
+  transition: stroke-width 0.15s ease;
+
+  &:hover {
+    stroke-width: 3;
+  }
+}
+
+line.edge-manual {
+  stroke: #198754;
+}
+line.edge-ai {
+  stroke: #ffc107;
+  stroke-dasharray: 6 4;
+}
+line.edge-module {
+  stroke: #0dcaf0;
+}
+line.edge-default {
+  stroke: #adb5bd;
+}
+
+// Hover info bar at the bottom of the graph
+.graph-hover-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border-top: 1px solid #dee2e6;
+  min-height: 38px;
+  pointer-events: none;
+}
+
+.graph-hover-summary {
+  max-height: 40px;
+  overflow: hidden;
+  font-size: 11px;
+}
