@@ -15,6 +15,10 @@
     <!-- AIFunction is the only ME.AI type in the public contract; kept here so business
          modules implementing IChatToolContributor don't need a separate reference. -->
     <PackageReference Include="Microsoft.Extensions.AI" />
+    <!-- MAF AIAgent is required by the WithValidationRetry extension (Agents/ folder).
+         Business modules already reference MAF directly to build ChatClientAgent, so this
+         doesn't add new transitive coupling — it just consolidates the contract surface. -->
+    <PackageReference Include="Microsoft.Agents.AI" />
   </ItemGroup>
 
 </Project>

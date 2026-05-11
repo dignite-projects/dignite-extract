@@ -1,4 +1,5 @@
 using System;
+using Volo.Abp;
 using Volo.Abp.Domain.Entities.Auditing;
 using Volo.Abp.MultiTenancy;
 
@@ -139,6 +140,7 @@ public class Contract : AuditedAggregateRoot<Guid>, IMultiTenant
 
     protected virtual void ApplyFields(ContractFields fields)
     {
+        ValidateFields(fields);
         Title = fields.Title;
         ContractNumber = fields.ContractNumber;
         PartyAName = fields.PartyAName;
@@ -153,6 +155,41 @@ public class Contract : AuditedAggregateRoot<Guid>, IMultiTenant
         TerminationNoticeDays = fields.TerminationNoticeDays;
         GoverningLaw = fields.GoverningLaw;
         Summary = fields.Summary;
+    }
+
+    /// <summary>
+    /// Last-line-of-defense domain guard. The LLM-side
+    /// <c>ContractExtractionValidator</c> already enforces these rules at the raw
+    /// JSON shape, but we re-check on the typed <see cref="ContractFields"/> just
+    /// before persisting so any future bypass path (admin tool, data import, hand-rolled
+    /// migration) cannot write inconsistent values into the aggregate.
+    /// </summary>
+    protected virtual void ValidateFields(ContractFields fields)
+    {
+        if (fields is null) throw new ArgumentNullException(nameof(fields));
+
+        if (fields.TotalAmount.HasValue && fields.TotalAmount.Value < 0)
+        {
+            throw new BusinessException("Contracts:InvalidContractField")
+                .WithData("Field", nameof(fields.TotalAmount))
+                .WithData("Value", fields.TotalAmount.Value);
+        }
+
+        if (fields.EffectiveDate.HasValue && fields.ExpirationDate.HasValue &&
+            fields.EffectiveDate.Value > fields.ExpirationDate.Value)
+        {
+            throw new BusinessException("Contracts:InvalidContractField")
+                .WithData("Field", nameof(fields.EffectiveDate))
+                .WithData("EffectiveDate", fields.EffectiveDate.Value)
+                .WithData("ExpirationDate", fields.ExpirationDate.Value);
+        }
+
+        if (fields.TerminationNoticeDays.HasValue && fields.TerminationNoticeDays.Value < 0)
+        {
+            throw new BusinessException("Contracts:InvalidContractField")
+                .WithData("Field", nameof(fields.TerminationNoticeDays))
+                .WithData("Value", fields.TerminationNoticeDays.Value);
+        }
     }
 
     protected virtual void SetReviewStatus(ContractReviewStatus reviewStatus)

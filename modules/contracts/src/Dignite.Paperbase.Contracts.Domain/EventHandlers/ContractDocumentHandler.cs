@@ -1,9 +1,12 @@
 using System.Text;
 using System.Threading.Tasks;
+using Dignite.Paperbase.Abstractions.Agents;
 using Dignite.Paperbase.Abstractions.Documents;
 using Dignite.Paperbase.Contracts.Contracts;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.EventBus.Distributed;
 using Volo.Abp.MultiTenancy;
@@ -22,19 +25,25 @@ public class ContractDocumentHandler :
     private readonly IChatClient _chatClient;
     private readonly ICurrentTenant _currentTenant;
     private readonly IContractExtractionExampleProvider _exampleProvider;
+    private readonly IExtractionValidator<ContractExtractionResult> _extractionValidator;
+    private readonly ILogger<ContractDocumentHandler> _logger;
 
     public ContractDocumentHandler(
         IContractRepository contractRepository,
         ContractManager contractManager,
         IChatClient chatClient,
         ICurrentTenant currentTenant,
-        IContractExtractionExampleProvider exampleProvider)
+        IContractExtractionExampleProvider exampleProvider,
+        IExtractionValidator<ContractExtractionResult> extractionValidator,
+        ILogger<ContractDocumentHandler>? logger = null)
     {
         _contractRepository = contractRepository;
         _contractManager = contractManager;
         _chatClient = chatClient;
         _currentTenant = currentTenant;
         _exampleProvider = exampleProvider;
+        _extractionValidator = extractionValidator;
+        _logger = logger ?? NullLogger<ContractDocumentHandler>.Instance;
     }
 
     public virtual async Task HandleEventAsync(DocumentClassifiedEto eventData)
@@ -122,9 +131,14 @@ public class ContractDocumentHandler :
         string documentTypeCode)
     {
         var instructions = await BuildExtractionInstructionsAsync(documentTypeCode);
+        // WithValidationRetry wraps the agent with a sense-check loop: on validator failure
+        // the rule-violations are appended as a user-role feedback message and the agent is
+        // called again. Exhausting retries returns the last response unchanged so the
+        // ExtractionConfidence-based PendingReview routing still kicks in downstream.
         var agent = new ChatClientAgent(
-            _chatClient,
-            instructions: instructions);
+                _chatClient,
+                instructions: instructions)
+            .WithValidationRetry(_extractionValidator, _logger);
 
         var run = await agent.RunAsync<ContractExtractionResult>(extractedText);
         return run.Result ?? new ContractExtractionResult();
