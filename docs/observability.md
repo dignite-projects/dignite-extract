@@ -93,6 +93,19 @@ Expected sightings:
 
 aspire-dashboard takes 30–60 seconds to become reachable after `Up` status. If `http://localhost:18888` refuses, wait and retry — or check `docker compose logs aspire-dashboard | tail` for `Now listening on:`.
 
+### Gotcha: the `Experimental.*` source-name prefix
+
+MAF and `Microsoft.Extensions.AI` currently publish their ActivitySources and Meters under names with an **`Experimental.`** prefix:
+
+| Library | Actual source name | Why |
+|---|---|---|
+| `Microsoft.Agents.AI` | `Experimental.Microsoft.Agents.AI` | Follows the OpenTelemetry GenAI semantic-convention draft (https://opentelemetry.io/docs/specs/semconv/gen-ai/) — the spec is still pre-stable so Microsoft scopes the telemetry under "Experimental" until conventions freeze. |
+| `Microsoft.Extensions.AI` | `Experimental.Microsoft.Extensions.AI` | Same reason. |
+
+The prefix will be dropped once the spec stabilizes. `PaperbaseHostModule.ConfigureOpenTelemetry` registers both the prefixed and unprefixed names so the pipeline keeps working through that rename.
+
+**Symptom of forgetting the prefix**: Aspire Dashboard shows the bare `HTTP POST api.siliconflow.cn:443` (or other provider) spans from `System.Net.Http` instrumentation, but no wrapping `chat-client.GetResponseAsync` parent and no `execute_tool {tool_name}` children. The OpenTelemetry SDK silently drops spans from unregistered sources — no exception, no warning. If you see only HTTP leaf spans for a Chat request, this is the first thing to check.
+
 ## Pointing at a different OTLP backend
 
 OTLP is vendor-neutral. To switch from aspire-dashboard to anything else, change only the endpoint:

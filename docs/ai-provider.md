@@ -33,6 +33,34 @@ The split keeps credentials (`ApiKey`) out of any `IOptions<>` flowing into busi
 
 The two model ids are independent — pair a small embedding model with a strong chat model freely. When changing the embedding model dimension, follow the steps in [Embedding pipeline → Switching the embedding model](embedding.md#switching-the-embedding-model).
 
+## Picking a chat model
+
+Three capabilities the chat model **must** have for Paperbase to work end-to-end:
+
+| Capability | Where it's used | Failure mode if weak |
+|---|---|---|
+| Function calling (OpenAI-compatible `tool_calls`) | Chat (`search_paperbase_documents`, `get_document_outline`, `get_document_excerpt`, contributor tools), classification, business-module field extractors | Tools never invoked → Chat degrades to answering from training memory; classification fails silently |
+| Structured JSON output (`response_format: json_schema`) | Contract / invoice / license field extraction via `agent.RunAsync<T>` | Extraction returns nulls or invalid JSON → `StructuredExtractionRetryMiddleware` burns its retries and the record is routed to manual review |
+| **Tool-call _willingness_** — the model's tendency to actually CALL a tool when the question requires retrieval, instead of guessing from training data | Document chat above all (RAG is the whole point) | Worse failure than "function calling broken" — the model produces a confident-sounding answer that is **not grounded in the user's documents** at all |
+
+The third capability is the one that surprises teams. Models that pass the OpenAI tool-calling test suite can still **decline to call tools** for plausible-sounding questions, answering from their training distribution instead. Smaller models (≤ 8B) are markedly worse at this than larger ones.
+
+### Practical guidance
+
+For **production chat**, prefer a model that scores well on tool-use benchmarks AND is large enough that it doesn't shortcut around retrieval:
+
+| Tier | Examples (OpenAI-compatible providers) | Trade-off |
+|---|---|---|
+| **Recommended** | `gpt-4o-mini` / `gpt-4o`, `claude-3-5-sonnet`, `Qwen/Qwen3-32B`, `Pro/moonshotai/Kimi-K2.6`, `deepseek-ai/DeepSeek-V3` | Reliable tool selection; 3–10× slower / costlier than the budget tier |
+| **Budget** (development only) | `Qwen/Qwen3-8B`, `Qwen/Qwen2.5-7B-Instruct`, small Llama variants | Tool calling protocol works for **explicit, narrow** tool calls (e.g. `get_contract_detail` when the question literally says "this contract") but the model often skips `search_paperbase_documents` for open-ended questions. Fast and free, but expect ungrounded answers. |
+| **Avoid** | Models that don't advertise OpenAI-compatible function calling | Tools won't be invoked at all |
+
+Field extraction is more forgiving than chat because the prompt explicitly demands a schema-conforming JSON object — even small models comply when forced. Classification is similarly forgiving. **It's chat-tier RAG behavior that needs the bigger model.**
+
+### Choosing per-pipeline (advanced)
+
+A single `PaperbaseAI` block registers one chat client used by every pipeline. To split (e.g. small fast model for classification + large model for chat), replace `ConfigureAI` in your host with a per-purpose registration using `AddKeyedChatClient` — see the existing `PaperbaseAIConsts.SummarizerChatClientKey` keyed registration in `PaperbaseHostModule.ConfigureAI` for the pattern. Production teams running tight token budgets often go this route.
+
 ## Where it is used
 
 | Caller | Uses |
