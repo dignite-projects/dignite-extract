@@ -15,9 +15,7 @@ internal static class ChatInstructionsBuilder
     /// <summary>
     /// Multi-step / cross-document reasoning guidance appended to the system prompt
     /// of every chat turn. Intent-driven: tells the model WHICH tool family fits the
-    /// question (content vs metadata vs anchor-graph) and — critically — that
-    /// structured-only searches must fall back to vector retrieval when they come up
-    /// empty, instead of answering "not found".
+    /// question (content vs metadata vs anchor-graph).
     ///
     /// <para>
     /// Empirical motivation: with a step-1-then-step-2 chain framing, DeepSeek-V3
@@ -25,8 +23,18 @@ internal static class ChatInstructionsBuilder
     /// the empty/insufficient result as authoritative, and skipped vector search
     /// because the prompt framed it as "follow up *if cross-document evidence is needed*"
     /// — a conditional the model interpreted strictly. Switching to intent-driven
-    /// language with an explicit "empty → fall back" rule reliably routes content
-    /// questions through <c>search_paperbase_documents</c>.
+    /// language reliably routes content questions through <c>search_paperbase_documents</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// Issue #148: the previous "structured returned EMPTY → try vector before concluding
+    /// 'not found'" line was removed from the system prompt. That decision now lives in
+    /// each <c>IChatToolContributor</c> implementation — contributors whose data benefits
+    /// from a vector fallback (e.g. <c>ContractChatToolContributor</c>) embed a nudge in
+    /// their own empty-result payload; contributors whose data is fully structured (future
+    /// invoice / receipt modules) can return a clean empty payload with no nudge. This
+    /// keeps fully-structured modules from paying vector cost on questions they can already
+    /// answer "no records exist" to.
     /// </para>
     /// </summary>
     public const string MultiStepReasoningGuidance =
@@ -44,14 +52,12 @@ internal static class ChatInstructionsBuilder
              "first to discover related document ids, then pass them into " +
              "search_paperbase_documents(documentIds=[...]) for precise retrieval.\n" +
         "\n" +
-        "When to fall back to search_paperbase_documents after a structured tool:\n" +
-        "  • The structured tool returned EMPTY → try vector before concluding 'not found'. " +
-             "An empty structured search is not proof that nothing matches; the filter may have " +
-             "missed the document.\n" +
-        "  • The structured tool returned ids / metadata but the question is about CONTENT " +
-             "(clauses, terms, specifics) → drill in via " +
-             "search_paperbase_documents(documentIds=returned_ids) to read the actual text.\n" +
-        "  Do NOT fall back when the structured result fully answers a metadata-only question.\n" +
+        "When a structured tool returned ids / metadata but the question is about CONTENT " +
+        "(clauses, terms, specifics) → drill in via " +
+        "search_paperbase_documents(documentIds=returned_ids) to read the actual text. " +
+        "When a structured tool's own result payload contains an instruction to try vector " +
+        "search (e.g. an empty-result hint), follow that contributor-supplied instruction. " +
+        "Do NOT add a vector follow-up when the structured result fully answers a metadata-only question.\n" +
         "\n" +
         "Chaining patterns:\n" +
         "  • Narrow-then-content: search_contracts(filter) → search_paperbase_documents(documentIds=returned_ids).\n" +

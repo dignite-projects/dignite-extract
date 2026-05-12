@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dignite.Paperbase.Abstractions.Chat;
+using Dignite.Paperbase.Ai;
 using Dignite.Paperbase.Contracts.Contracts;
 using Dignite.Paperbase.Contracts.Permissions;
 using Microsoft.AspNetCore.Authorization;
@@ -246,22 +247,27 @@ public class ContractChatToolContributor : IChatToolContributor, ITransientDepen
                 return JsonSerializer.Serialize(emptyHint);
             }
 
+            // Issue #148: LLM-extracted free-text fields (title / party names / summary /
+            // contractNumber) are user-controlled at the source (uploaded document text) and
+            // can carry indirect prompt injection payloads. Wrap them in <field>…</field>
+            // before they enter the model context. Structural fields (IDs, dates, amounts,
+            // enums, currency code) stay bare.
             var result = new
             {
                 documentIds = contracts.Select(c => c.DocumentId).ToList(),
                 contracts = contracts.Select(c => new
                 {
                     documentId = c.DocumentId,
-                    contractNumber = c.ContractNumber,
-                    title = c.Title,
-                    partyAName = c.PartyAName,
-                    partyBName = c.PartyBName,
-                    counterpartyName = c.CounterpartyName,
+                    contractNumber = PromptBoundary.WrapField(c.ContractNumber),
+                    title = PromptBoundary.WrapField(c.Title),
+                    partyAName = PromptBoundary.WrapField(c.PartyAName),
+                    partyBName = PromptBoundary.WrapField(c.PartyBName),
+                    counterpartyName = PromptBoundary.WrapField(c.CounterpartyName),
                     totalAmount = c.TotalAmount,
                     currency = c.Currency,
                     signedDate = c.SignedDate?.ToString("yyyy-MM-dd"),
                     expirationDate = c.ExpirationDate?.ToString("yyyy-MM-dd"),
-                    summary = c.Summary
+                    summary = PromptBoundary.WrapField(c.Summary)
                 }).ToList()
             };
 
@@ -299,15 +305,16 @@ public class ContractChatToolContributor : IChatToolContributor, ITransientDepen
                 });
             }
 
+            // Issue #148: same field-level injection defense as SearchAsync.
             var detail = new
             {
                 found = true,
                 documentId = contract.DocumentId,
-                title = contract.Title,
-                contractNumber = contract.ContractNumber,
-                partyAName = contract.PartyAName,
-                partyBName = contract.PartyBName,
-                counterpartyName = contract.CounterpartyName,
+                title = PromptBoundary.WrapField(contract.Title),
+                contractNumber = PromptBoundary.WrapField(contract.ContractNumber),
+                partyAName = PromptBoundary.WrapField(contract.PartyAName),
+                partyBName = PromptBoundary.WrapField(contract.PartyBName),
+                counterpartyName = PromptBoundary.WrapField(contract.CounterpartyName),
                 totalAmount = contract.TotalAmount,
                 currency = contract.Currency,
                 signedDate = contract.SignedDate?.ToString("yyyy-MM-dd"),
@@ -315,9 +322,9 @@ public class ContractChatToolContributor : IChatToolContributor, ITransientDepen
                 expirationDate = contract.ExpirationDate?.ToString("yyyy-MM-dd"),
                 autoRenewal = contract.AutoRenewal,
                 terminationNoticeDays = contract.TerminationNoticeDays,
-                governingLaw = contract.GoverningLaw,
+                governingLaw = PromptBoundary.WrapField(contract.GoverningLaw),
                 status = contract.Status.ToString(),
-                summary = contract.Summary,
+                summary = PromptBoundary.WrapField(contract.Summary),
                 needsReview = contract.NeedsReview,
                 reviewStatus = contract.ReviewStatus.ToString(),
                 extractionConfidence = contract.ExtractionConfidence
