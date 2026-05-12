@@ -37,12 +37,13 @@ sudo apt install -y postgresql-16-pgvector
 
 ## Infrastructure Services
 
-Paperbase requires two services that run as Docker containers:
+Paperbase requires two services that run as Docker containers, plus one optional one for local observability:
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| **Qdrant** | 6333 (HTTP), 6334 (gRPC) | Vector store for document embeddings and hybrid search |
-| **PaddleOCR** | 8866 | OCR sidecar for scanned documents (PP-StructureV3, CPU mode) |
+| Service | Port | Purpose | Profile |
+|---------|------|---------|---------|
+| **Qdrant** | 6333 (HTTP), 6334 (gRPC) | Vector store for document embeddings and hybrid search | default |
+| **PaddleOCR** | 8866 | OCR sidecar for scanned documents (PP-StructureV3, CPU mode) | default |
+| **aspire-dashboard** | 18888 (UI), 4317 (OTLP gRPC) | Local OpenTelemetry backend — renders traces / metrics / logs from the app at `http://localhost:18888`. Optional but recommended; the project's launchSettings.json defaults to sending OTel signals to `localhost:4317`. | `observability` |
 
 Start the required services:
 
@@ -50,6 +51,14 @@ Start the required services:
 cd host
 docker compose up -d
 ```
+
+Add the dashboard when you want to see traces / metrics:
+
+```bash
+docker compose --profile observability up -d aspire-dashboard
+```
+
+See [observability.md](./observability.md) for what's emitted, how to point at a different OTLP backend (Jaeger / Datadog / Tempo / Azure Monitor), and the tagging policy.
 
 Verify Qdrant is ready:
 
