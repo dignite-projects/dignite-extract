@@ -31,6 +31,13 @@ public class DocumentPipelineBackgroundJobPersistenceTestModule : AbpModule
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
         context.Services.AddSingleton(Substitute.For<IChatClient>());
         context.Services.AddSingleton(Substitute.For<IPromptProvider>());
+        // DocumentTextExtractionBackgroundJob now depends on the title-generator keyed
+        // IChatClient (see PaperbaseAIConsts.TitleGeneratorChatClientKey); register a
+        // substitute so DI can construct the job. Title generation is best-effort and
+        // its failures are swallowed, so the substitute returning null is fine.
+        context.Services.AddKeyedSingleton(
+            PaperbaseAIConsts.TitleGeneratorChatClientKey,
+            Substitute.For<IChatClient>());
     }
 }
 

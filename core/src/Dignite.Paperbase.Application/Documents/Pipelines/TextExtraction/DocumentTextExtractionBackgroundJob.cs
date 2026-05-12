@@ -7,6 +7,7 @@ using Dignite.Paperbase.Abstractions.TextExtraction;
 using Dignite.Paperbase.Ai;
 using Dignite.Paperbase.Documents;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Volo.Abp.BackgroundJobs;
@@ -27,7 +28,14 @@ public class DocumentTextExtractionBackgroundJob
     private readonly ITextExtractor _textExtractor;
     private readonly IBlobContainer<PaperbaseDocumentContainer> _blobContainer;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
-    private readonly IChatClient _chatClient;
+    /// <summary>
+    /// Document-title generation is single-shot, tool-free, prompt-unique — same shape as
+    /// <c>ChatAppService.TryGenerateAndApplyTitleAsync</c>. Reuses the host-registered
+    /// <see cref="PaperbaseAIConsts.TitleGeneratorChatClientKey"/> client (no
+    /// FunctionInvocation, no DistributedCache) so traces stay clean and hosts can
+    /// optionally point title generation at a smaller / cheaper model than the main chat.
+    /// </summary>
+    private readonly IChatClient _titleGeneratorChatClient;
     private readonly IPromptProvider _promptProvider;
     private readonly PaperbaseAIBehaviorOptions _behaviorOptions;
 
@@ -39,7 +47,7 @@ public class DocumentTextExtractionBackgroundJob
         ITextExtractor textExtractor,
         IBlobContainer<PaperbaseDocumentContainer> blobContainer,
         IUnitOfWorkManager unitOfWorkManager,
-        IChatClient chatClient,
+        [FromKeyedServices(PaperbaseAIConsts.TitleGeneratorChatClientKey)] IChatClient titleGeneratorChatClient,
         IPromptProvider promptProvider,
         IOptions<PaperbaseAIBehaviorOptions> behaviorOptions)
     {
@@ -50,7 +58,7 @@ public class DocumentTextExtractionBackgroundJob
         _textExtractor = textExtractor;
         _blobContainer = blobContainer;
         _unitOfWorkManager = unitOfWorkManager;
-        _chatClient = chatClient;
+        _titleGeneratorChatClient = titleGeneratorChatClient;
         _promptProvider = promptProvider;
         _behaviorOptions = behaviorOptions.Value;
     }
@@ -138,7 +146,7 @@ public class DocumentTextExtractionBackgroundJob
                 new(ChatRole.User, PromptBoundary.WrapDocument(truncated))
             };
 
-            var response = await _chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken);
+            var response = await _titleGeneratorChatClient.GetResponseAsync(messages, cancellationToken: cancellationToken);
             var title = response.Text?.Trim();
 
             if (string.IsNullOrWhiteSpace(title))
