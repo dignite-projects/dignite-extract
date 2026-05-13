@@ -265,10 +265,10 @@ public class ChatTelemetryRecorder : ISingletonDependency
 
     /// <summary>
     /// Returns true if <paramref name="toolName"/> identifies a vector-search tool
-    /// (currently just the built-in <see cref="ChatConsts.SearchPaperbaseDocumentsToolName"/>).
+    /// (currently just the built-in <see cref="ChatToolNames.SearchPaperbaseDocuments"/>).
     /// </summary>
     protected virtual bool IsVectorSearchTool(string toolName)
-        => string.Equals(toolName, ChatConsts.SearchPaperbaseDocumentsToolName, StringComparison.Ordinal);
+        => string.Equals(toolName, ChatToolNames.SearchPaperbaseDocuments, StringComparison.Ordinal);
 
     /// <summary>
     /// Returns true for MAF's skill-system meta tools that do not constitute grounding

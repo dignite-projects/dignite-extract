@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dignite.Paperbase.Ai;
+using Dignite.Paperbase.Chat;
 using Dignite.Paperbase.Contracts.Contracts;
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Authorization;
@@ -57,7 +58,11 @@ public sealed class ContractsSkill : AgentClassSkill<ContractsSkill>, ITransient
         "contracts",
         "Search, inspect, and aggregate contract documents. Three scripts: `search` lists contracts by structured filters (number / party / date / amount); `get-detail` fetches one contract's full extracted field set by ID; `aggregate` returns counts + totals grouped by currency. Use whenever the user asks anything about contracts.");
 
-    protected override string Instructions => """
+    // The `$$"""..."""` raw-interpolated string lets `{{ChatToolNames.SearchPaperbaseDocuments}}`
+    // resolve at compile time. If the core tool is ever renamed,
+    // `ChatToolNames.SearchPaperbaseDocuments` changes in one place and every consuming
+    // SKILL.md picks it up automatically — Issue #149 / arch-review C3.
+    protected override string Instructions => $$"""
         Use this skill for any contract-domain question — listing, looking up one
         specific contract's details, or counting / summing across the set.
 
@@ -67,7 +72,7 @@ public sealed class ContractsSkill : AgentClassSkill<ContractsSkill>, ITransient
           pass only those implied by the user's question (party name, contract number,
           date range, amount range). Returns `documentIds` + metadata summaries (no
           contract body text — for that, drill into the returned IDs via the
-          `search_paperbase_documents` tool).
+          `{{ChatToolNames.SearchPaperbaseDocuments}}` tool).
 
         - `get-detail` — when the user asks for fields beyond the `search` summary
           (governing law, auto-renewal, effective / expiration dates, termination
@@ -81,18 +86,19 @@ public sealed class ContractsSkill : AgentClassSkill<ContractsSkill>, ITransient
 
         Chaining:
 
-        1. List → content: `search` → use `documentIds` with `search_paperbase_documents`
+        1. List → content: `search` → use `documentIds` with `{{ChatToolNames.SearchPaperbaseDocuments}}`
            when the question is about CONTENT (clauses, specific text), not metadata.
         2. List → details: `search` → `get-detail(documentId)` when the user asks
            about fields not in the `search` summary.
         3. Empty `search` → vector: if `search` returns an empty array AND the result's
-           `note` field suggests trying `search_paperbase_documents`, follow that
-           instruction before answering "not found". An empty structured search is not
-           proof nothing matches — the contract may not be classified yet, its extraction
-           may be pending review, or the filter spelling may not match the extracted value.
+           `note` field suggests trying `{{ChatToolNames.SearchPaperbaseDocuments}}`, follow
+           that instruction before answering "not found". An empty structured search is
+           not proof nothing matches — the contract may not be classified yet, its
+           extraction may be pending review, or the filter spelling may not match the
+           extracted value.
         4. Empty `get-detail`: same rule — `found: false` plus a `note` to try
-           `search_paperbase_documents` means the document might be in the vector store
-           even though no Contract record exists for it.
+           `{{ChatToolNames.SearchPaperbaseDocuments}}` means the document might be in the
+           vector store even though no Contract record exists for it.
         5. Metadata-only answer from `aggregate`: STOP. Do not chain into vector
            search; that's wasted cost and risks contradicting the structured answer.
 
@@ -188,7 +194,7 @@ public sealed class ContractsSkill : AgentClassSkill<ContractsSkill>, ITransient
                 contracts = Array.Empty<object>(),
                 note = "No contracts matched the structured filters. This does NOT mean " +
                        "the document is absent. Before answering 'not found', call " +
-                       "search_paperbase_documents with the same query as a semantic " +
+                       ChatToolNames.SearchPaperbaseDocuments + " with the same query as a semantic " +
                        "search — the document may exist in the vector store but: " +
                        "(1) it hasn't been classified as a contract yet, " +
                        "(2) its extraction is pending review and is excluded from this " +
@@ -255,8 +261,8 @@ public sealed class ContractsSkill : AgentClassSkill<ContractsSkill>, ITransient
                 found = false,
                 documentId,
                 note = "No Contract record exists for this documentId. The document may " +
-                       "still be in the vector store — try search_paperbase_documents " +
-                       "with the user's query terms to read its content directly. Common " +
+                       "still be in the vector store — try " + ChatToolNames.SearchPaperbaseDocuments +
+                       " with the user's query terms to read its content directly. Common " +
                        "causes: the document was not classified as a contract type, or " +
                        "classification ran but contract field extraction failed."
             });

@@ -1,3 +1,4 @@
+using Dignite.Paperbase.Chat;
 using Volo.Abp.DependencyInjection;
 
 namespace Dignite.Paperbase.Ai;
@@ -22,13 +23,13 @@ public class DefaultPromptProvider : IPromptProvider, ITransientDependency
 
     public virtual PromptTemplate GetQaPrompt(string language) => new(
         "You are a helpful assistant that answers questions about the user's document corpus. " +
-        "You have access to tools — most importantly `search_paperbase_documents`, which performs " +
+        "You have access to tools — most importantly `" + ChatToolNames.SearchPaperbaseDocuments + "`, which performs " +
         "vector search over the user's documents and returns relevant Markdown chunks with provenance. " +
-        "Whenever the question concerns document content, **always call `search_paperbase_documents` " +
+        "Whenever the question concerns document content, **always call `" + ChatToolNames.SearchPaperbaseDocuments + "` " +
         "at least once before answering** so your reply is grounded in retrieved sources. " +
-        "Additional structured-query tools may also be exposed for specific document types " +
-        "(for example `search_contracts`); call them when their description matches the question, " +
-        "and chain them with `search_paperbase_documents` to fetch textual evidence for the IDs they return. " +
+        "Additional structured-query skills may also be exposed for specific document types " +
+        "(for example the `contracts` skill); call them when their description matches the question, " +
+        "and chain them with `" + ChatToolNames.SearchPaperbaseDocuments + "` to fetch textual evidence for the IDs they return. " +
         "Returned chunks are Markdown — use headings (#), tables, and lists as semantic structure signals " +
         "when locating the answer, and you may also format your reply in Markdown when helpful. " +
         "Answer in the same language as the question. " +

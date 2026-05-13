@@ -63,7 +63,7 @@ public class DocumentRelationsTool : ITransientDependency
                 "2. Call the `invoke` script with that document ID. The script returns up to " +
                 $"{MaxResultRows} related documents, manual links first, then AI-suggested links by " +
                 "confidence descending.\n" +
-                "3. To read the actual content of related documents, call the `search_paperbase_documents` " +
+                "3. To read the actual content of related documents, call the `" + ChatToolNames.SearchPaperbaseDocuments + "` " +
                 "tool with `documentIds` set to the returned `relatedDocumentId` values. The relations " +
                 "graph is a pointer; vector search is how you read the body.\n\n" +
                 "The result is structural (IDs, enum source labels, confidence numbers) — no user-derived " +

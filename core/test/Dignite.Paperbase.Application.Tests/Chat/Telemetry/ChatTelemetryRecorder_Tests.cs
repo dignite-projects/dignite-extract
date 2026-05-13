@@ -49,7 +49,7 @@ public class ChatTelemetryRecorder_Tests
     {
         using var auditScope = _auditingManager.BeginScope();
 
-        _recorder.RecordToolCall(BuildToolEntry(ChatConsts.SearchPaperbaseDocumentsToolName));
+        _recorder.RecordToolCall(BuildToolEntry(ChatToolNames.SearchPaperbaseDocuments));
 
         _recorder.RecordTurn(BuildTurnEntry());
 
@@ -57,7 +57,7 @@ public class ChatTelemetryRecorder_Tests
         turn.GroundingSource.ShouldBe(GroundingSource.Vector);
         turn.ToolCallDepth.ShouldBe(1);
         turn.ToolCallSummary.ShouldNotBeNull();
-        turn.ToolCallSummary!.ShouldContainKeyAndValue(ChatConsts.SearchPaperbaseDocumentsToolName, 1);
+        turn.ToolCallSummary!.ShouldContainKeyAndValue(ChatToolNames.SearchPaperbaseDocuments, 1);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class ChatTelemetryRecorder_Tests
         turn.ToolCallDepth.ShouldBe(2);
         turn.ToolCallSummary!.ShouldContainKeyAndValue("search_contracts", 1);
         turn.ToolCallSummary!.ShouldContainKeyAndValue("get_contract_detail", 1);
-        turn.ToolCallSummary!.ShouldNotContainKey(ChatConsts.SearchPaperbaseDocumentsToolName);
+        turn.ToolCallSummary!.ShouldNotContainKey(ChatToolNames.SearchPaperbaseDocuments);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class ChatTelemetryRecorder_Tests
     {
         using var auditScope = _auditingManager.BeginScope();
 
-        _recorder.RecordToolCall(BuildToolEntry(ChatConsts.SearchPaperbaseDocumentsToolName));
+        _recorder.RecordToolCall(BuildToolEntry(ChatToolNames.SearchPaperbaseDocuments));
         _recorder.RecordToolCall(BuildToolEntry("get_contract_aggregate"));
 
         _recorder.RecordTurn(BuildTurnEntry());
@@ -102,15 +102,15 @@ public class ChatTelemetryRecorder_Tests
         // documentTypeCode). The telemetry must count both, not just the last.
         using var auditScope = _auditingManager.BeginScope();
 
-        _recorder.RecordToolCall(BuildToolEntry(ChatConsts.SearchPaperbaseDocumentsToolName));
-        _recorder.RecordToolCall(BuildToolEntry(ChatConsts.SearchPaperbaseDocumentsToolName));
+        _recorder.RecordToolCall(BuildToolEntry(ChatToolNames.SearchPaperbaseDocuments));
+        _recorder.RecordToolCall(BuildToolEntry(ChatToolNames.SearchPaperbaseDocuments));
         _recorder.RecordToolCall(BuildToolEntry("search_contracts"));
 
         _recorder.RecordTurn(BuildTurnEntry());
 
         var turn = ReadTurnFromAuditScope();
         turn.ToolCallDepth.ShouldBe(3);
-        turn.ToolCallSummary!.ShouldContainKeyAndValue(ChatConsts.SearchPaperbaseDocumentsToolName, 2);
+        turn.ToolCallSummary!.ShouldContainKeyAndValue(ChatToolNames.SearchPaperbaseDocuments, 2);
         turn.ToolCallSummary!.ShouldContainKeyAndValue("search_contracts", 1);
         turn.GroundingSource.ShouldBe(GroundingSource.Mixed);
     }
@@ -123,7 +123,7 @@ public class ChatTelemetryRecorder_Tests
         // a single, faithful per-turn signal.
         using var auditScope = _auditingManager.BeginScope();
 
-        _recorder.RecordToolCall(BuildToolEntry(ChatConsts.SearchPaperbaseDocumentsToolName));
+        _recorder.RecordToolCall(BuildToolEntry(ChatToolNames.SearchPaperbaseDocuments));
 
         _recorder.RecordTurn(BuildTurnEntry(citationsTrimmed: true));
 
@@ -187,7 +187,7 @@ public class ChatTelemetryRecorder_Tests
         using var auditScope = _auditingManager.BeginScope();
 
         _recorder.RecordToolCall(BuildToolEntry("skill:search-contracts/invoke"));
-        _recorder.RecordToolCall(BuildToolEntry(ChatConsts.SearchPaperbaseDocumentsToolName));
+        _recorder.RecordToolCall(BuildToolEntry(ChatToolNames.SearchPaperbaseDocuments));
 
         _recorder.RecordTurn(BuildTurnEntry());
 
@@ -261,8 +261,8 @@ public class ChatTelemetryRecorder_Tests
         var args = new Microsoft.Extensions.AI.AIFunctionArguments();
 
         ChatToolFactory.AuditedChatFunction.DeriveSkillAwareToolName(
-            ChatConsts.SearchPaperbaseDocumentsToolName, args)
-            .ShouldBe(ChatConsts.SearchPaperbaseDocumentsToolName);
+            ChatToolNames.SearchPaperbaseDocuments, args)
+            .ShouldBe(ChatToolNames.SearchPaperbaseDocuments);
 
         ChatToolFactory.AuditedChatFunction.DeriveSkillAwareToolName("load_skill", args)
             .ShouldBe("load_skill");
@@ -298,7 +298,7 @@ public class ChatTelemetryRecorder_Tests
         using var auditScope = _auditingManager.BeginScope();
 
         _recorder.RecordToolCall(BuildToolEntry(
-            ChatConsts.SearchPaperbaseDocumentsToolName,
+            ChatToolNames.SearchPaperbaseDocuments,
             outcome: ChatTelemetryOutcome.Failure));
 
         _recorder.RecordTurn(BuildTurnEntry());

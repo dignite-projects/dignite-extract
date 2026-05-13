@@ -212,7 +212,7 @@ public class ChatToolInvocation_Tests
         // only search_paperbase_documents was invoked once → Vector grounding.
         turn.ToolCallDepth.ShouldBe(1);
         turn.ToolCallSummary.ShouldNotBeNull();
-        turn.ToolCallSummary!.ShouldContainKeyAndValue(ChatConsts.SearchPaperbaseDocumentsToolName, 1);
+        turn.ToolCallSummary!.ShouldContainKeyAndValue(ChatToolNames.SearchPaperbaseDocuments, 1);
         turn.GroundingSource.ShouldBe(GroundingSource.Vector);
     }
 

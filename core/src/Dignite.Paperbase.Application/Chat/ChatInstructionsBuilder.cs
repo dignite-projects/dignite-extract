@@ -30,7 +30,7 @@ internal static class ChatInstructionsBuilder
     public const string MultiStepReasoningGuidance =
         "Reasoning approach:\n" +
         "  • CONTENT questions — clauses, terms, specific text inside documents — should be " +
-             "answered through `search_paperbase_documents`, which is the primary always-available " +
+             "answered through `" + ChatToolNames.SearchPaperbaseDocuments + "`, which is the primary always-available " +
              "vector-retrieval tool. It returns Markdown chunks with citations; cite them as [chunk N].\n" +
         "  • METADATA / DOMAIN questions — counts, sums, structured filters, business-specific " +
              "field lookups — should be answered through the relevant agent skill from the " +
@@ -40,10 +40,10 @@ internal static class ChatInstructionsBuilder
         "  • ANCHOR-LINKED questions — anchor document id present AND question implies linked " +
              "documents (payments, receipts, attachments, amendments) — should consult the " +
              "`get-document-relations` skill first to discover related document ids, then pass them " +
-             "into `search_paperbase_documents` for precise retrieval.\n" +
+             "into `" + ChatToolNames.SearchPaperbaseDocuments + "` for precise retrieval.\n" +
         "\n" +
         "When a skill returns ids / metadata but the question is about CONTENT, drill in via " +
-        "`search_paperbase_documents(documentIds=returned_ids)` to read the actual text.\n" +
+        "`" + ChatToolNames.SearchPaperbaseDocuments + "(documentIds=returned_ids)` to read the actual text.\n" +
         "When any tool or skill result payload contains an explicit instruction to try another " +
         "tool (e.g. an empty-result hint suggesting vector fallback), follow that contributor-" +
         "supplied instruction. The skill author placed it there for a reason.\n" +

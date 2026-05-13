@@ -425,7 +425,7 @@ public class ChatAppService : PaperbaseAppService, IChatAppService
             capture,
             toolContext,
             _toolFactory,
-            functionName: ChatConsts.SearchPaperbaseDocumentsToolName,
+            functionName: ChatToolNames.SearchPaperbaseDocuments,
             functionDescription:
                 "Search Paperbase documents (vector). Returns top chunks with citations. " +
                 "Optional documentIds: restrict to specific document IDs returned by another tool — " +

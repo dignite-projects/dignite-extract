@@ -108,7 +108,7 @@ Dignite.Paperbase.Abstractions（扩展契约层，无其他项目依赖）
 - **Skill 命名 / 解析 / 共享工具名约定**：
   - **每个 skill 一个 `AgentClassSkill<T>`**，绑定一个 domain（同 aggregate root / 同权限 / 同 chaining 模式）；该领域的多种操作作为不同 `[AgentSkillScript("...")]` 方法挂在一个类上（合同模块的 `ContractsSkill` 三脚本是范例）。**不要每个 script 单开一个 skill 类**——advertise 开销 × N 且不利于 LLM 选择。
   - **DI 解析只走 `IEnumerable<AgentSkill>`**，不要按具体类型 inject。`[ExposeServices(typeof(AgentSkill))]` 默认 `IncludeSelf = false`，`GetRequiredService<ContractsSkill>()` 会抛——是有意的。
-  - **Skill instructions 里出现 `search_paperbase_documents` 字符串属于跨模块约定**：这个工具名是 LLM-mediated 协议的一部分。core 重命名 `ChatConsts.SearchPaperbaseDocumentsToolName` 时必须 grep 所有 skill 类的 `Instructions` 字符串同步更新（架构上业务模块不能 reference `Domain.Shared`，所以这是有意的人工同步点）。改前先开 Issue 说明影响范围。
+  - **跨模块 LLM-facing 标识符走 `Dignite.Paperbase.Abstractions.Chat.ChatToolNames`**：业务模块需要在 SKILL.md `Instructions` 里 reference 核心工具/技能名（典型如 "fall back to `search_paperbase_documents` on empty"）时，**不要硬编码字符串**——把常量从 `ChatToolNames` 中通过 `$$"""... {{ChatToolNames.SearchPaperbaseDocuments}} ..."""` raw-interpolated 字符串里读出。`ChatToolNames` 故意住 `Abstractions/Chat/` 而不是 `Domain.Shared/Chat/ChatConsts`——后者是 DB schema 常量层，业务模块按 ABP 模块边界不能 reference 它；前者业务模块本来就 reference 着。core 重命名工具时直接改常量值，所有 skill 的 prose 编译期同步更新。
 
 ## 处理规则
 

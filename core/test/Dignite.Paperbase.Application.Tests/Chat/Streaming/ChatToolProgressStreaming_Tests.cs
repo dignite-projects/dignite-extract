@@ -99,14 +99,14 @@ public class ChatToolProgressStreaming_Tests
         // should resolve to the structured "正在跨全库向量检索…" label (no doc-ids /
         // type were supplied in the scripted call args).
         var firstStarted = deltas[0];
-        firstStarted.ToolName.ShouldBe(ChatConsts.SearchPaperbaseDocumentsToolName);
+        firstStarted.ToolName.ShouldBe(ChatToolNames.SearchPaperbaseDocuments);
         firstStarted.ToolCallId.ShouldBe(searchCallId);
         firstStarted.ProgressDescription.ShouldBe("正在跨全库向量检索…");
 
         // First Completed — correlates by ToolCallId, ElapsedMs populated, success.
         var firstCompleted = deltas[1];
         firstCompleted.ToolCallId.ShouldBe(searchCallId);
-        firstCompleted.ToolName.ShouldBe(ChatConsts.SearchPaperbaseDocumentsToolName);
+        firstCompleted.ToolName.ShouldBe(ChatToolNames.SearchPaperbaseDocuments);
         firstCompleted.ToolCallSucceeded.ShouldBe(true);
         firstCompleted.ElapsedMs.ShouldNotBeNull();
 
@@ -170,7 +170,7 @@ public class ChatToolProgressStreaming_Tests
         // in arguments → describer returns the "全库向量检索" label.
         yield return UpdateWithContent(new MEAI.FunctionCallContent(
             callId: searchCallId,
-            name: ChatConsts.SearchPaperbaseDocumentsToolName,
+            name: ChatToolNames.SearchPaperbaseDocuments,
             arguments: new Dictionary<string, object?> { ["query"] = "anything" }));
 
         await Task.Yield();
