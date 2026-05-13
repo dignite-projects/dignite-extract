@@ -80,11 +80,13 @@ Both core skills require `Paperbase.Documents.Default` (re-asserted inside each 
 
 ### Business-module skills
 
-Every business module that wants to expose structured queries to the agent ships one or more `AgentClassSkill<TSelf>` subclasses (registered as `ITransientDependency` with `[ExposeServices(typeof(AgentSkill))]`). Reference: the contracts module contributes three skills:
+Every business module that wants to expose structured queries to the agent ships one or more `AgentClassSkill<TSelf>` subclasses (registered as `ITransientDependency` with `[ExposeServices(typeof(AgentSkill))]`). Reference: the contracts module contributes a single `contracts` skill with three scripts:
 
-- `search-contracts` — list contracts by counterparty / number / date / amount range — see `modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/SearchContractsSkill.cs`
-- `get-contract-detail` — fetch a single contract's full extracted field set — see `GetContractDetailSkill.cs`
-- `aggregate-contracts` — sum amounts and counts across a filtered contract set — see `AggregateContractsSkill.cs`
+| Skill | Scripts | What it does |
+|---|---|---|
+| `contracts` | `search` / `get-detail` / `aggregate` | `search`: list contracts by counterparty / number / date / amount range. `get-detail`: fetch one contract's full extracted field set by ID. `aggregate`: sum amounts and counts grouped by currency. See [`ContractsSkill.cs`](../modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/ContractsSkill.cs). |
+
+> **Granularity guideline**: bundle scripts under one skill when they share a domain (same aggregate root, same auth, same chaining patterns). Split into separate skills when intents diverge enough that one SKILL.md cannot cover all of them. Future contract operations (export / compare / lifecycle) become new `[AgentSkillScript]` methods on `ContractsSkill`, not new skill classes.
 
 See [Adding a skill](#adding-a-skill-business-modules) for the contract every new skill must follow.
 
@@ -191,7 +193,7 @@ Notable fields on `Chat.Turn`:
 | --- | --- | --- |
 | `GroundingSource` | enum | `None` / `Vector` / `Structured` / `Mixed` — derived by `ClassifyGrounding` from the per-tool entries, not a flag the model can set |
 | `ToolCallDepth` | `int` | Total tool invocations in this turn (sum of `ToolCallSummary` values; includes failed invocations because they reflect actual model behaviour) |
-| `ToolCallSummary` | `Dictionary<string,int>` | Per-tool invocation count, e.g. `{ "search_paperbase_documents": 2, "get_contract_detail": 1 }` |
+| `ToolCallSummary` | `Dictionary<string,int>` | Per-tool invocation count. Direct tools appear under their registered name; skill scripts appear under `skill:<skill-name>/<script-name>`. Example: `{ "search_paperbase_documents": 2, "skill:contracts/get-detail": 1 }`. MAF skill meta-tools (`load_skill` / `read_skill_resource`) also appear when invoked, but are filtered out of `GroundingSource` classification (loading instructions ≠ grounding evidence). |
 | `CitationsTrimmed` | `bool` | `true` if `MaxCapturedCitations` was hit and additional vector-search hits were dropped |
 | `AnchorResolutionFailed` | `bool` | `true` if the conversation has a `documentId` but the per-turn anchor lookup degraded (document deleted, tenant mismatch, or caller lost `Documents.Default`). The turn proceeds **without** the anchor hint — never throws 404. |
 
@@ -201,27 +203,35 @@ These dimensions are what drives the upgrade decision in the future: if producti
 
 To let the chat answer business-domain questions ("show contracts with Acme Corp expiring this quarter"), a business module ships one or more [MAF Agent Skills](https://learn.microsoft.com/agent-framework/agents/skills) ([open spec](https://agentskills.io)) — Paperbase consumes the framework primitive directly, no custom contributor abstraction.
 
-The pattern is one capability per skill class:
+The pattern is one **domain capability package** per skill class — typically one skill per business module aggregate, exposing one or more named scripts:
 
 ```csharp
 [ExposeServices(typeof(AgentSkill))]
-public sealed class SearchInvoicesSkill : AgentClassSkill<SearchInvoicesSkill>, ITransientDependency
+public sealed class InvoicesSkill : AgentClassSkill<InvoicesSkill>, ITransientDependency
 {
     public override AgentSkillFrontmatter Frontmatter { get; } = new(
-        "search-invoices",
-        "Find invoices by structured filters: number, vendor, date, amount range. Use when ...");
+        "invoices",
+        "Search, inspect, and aggregate invoices. Scripts: search, get-detail, aggregate. Use whenever the user asks anything about invoices.");
 
     protected override string Instructions => """
-        Use this skill when the user asks for a list of invoices ...
-        ...detailed how-to-use guidance loaded via `load_skill` only when relevant.
+        Use this skill for any invoice-domain question — listing, looking up one
+        specific invoice's details, or counting / summing across the set.
+
+        Scripts:
+        - `search` — find invoices by structured filters. Optional parameters; pass
+          only those implied by the user's question. Returns documentIds + metadata.
+        - `get-detail` — fetch full extracted fields by document ID.
+        - `aggregate` — counts + totals grouped by currency, for arithmetic questions.
+
+        ...chaining patterns, empty-result fallback advice, prompt-boundary notes...
         """;
 
-    [AgentSkillScript("invoke")]
+    [AgentSkillScript("search")]
     [Description("Search invoices by structured criteria.")]
-    private static async Task<string> InvokeAsync(
-        string? vendorName,
-        /* other [Description] params */
+    private static async Task<string> SearchAsync(
         IServiceProvider serviceProvider,
+        [Description("Vendor name (partial match).")] string? vendorName = null,
+        /* other [Description] params */
         CancellationToken cancellationToken = default)
     {
         // Fail-closed: explicit auth + explicit tenant predicate + bounded result set.
@@ -245,20 +255,25 @@ public sealed class SearchInvoicesSkill : AgentClassSkill<SearchInvoicesSkill>, 
             })
         });
     }
+
+    // Additional [AgentSkillScript("get-detail")] / [AgentSkillScript("aggregate")]
+    // methods on the same class — they share the Frontmatter + Instructions + helpers.
 }
 ```
 
 Three rules, each enforced at PR review:
 
 1. **`Frontmatter` and `Instructions` are static** — never interpolate user-controlled text. Both feed directly into the LLM context (Frontmatter advertised every turn, Instructions loaded via `load_skill`).
-2. **Each script method is fail-closed**: explicit `IAuthorizationService.CheckAsync(...)` for the feature permission + explicit `Where(x => x.TenantId == currentTenant.Id)` (do not rely on ABP's ambient `DataFilter`) + a hard `Take(N)` row cap.
+2. **Each script method is fail-closed**: explicit `IAuthorizationService.CheckAsync(...)` for the feature permission + explicit `Where(x => x.TenantId == currentTenant.Id)` (do not rely on ABP's ambient `DataFilter`) + a hard `Take(N)` row cap. **Optional filter parameters must have `= null` defaults** so `AIFunctionFactory`'s JSON schema marks them optional, not required — put `IServiceProvider` first in the parameter list to satisfy C#'s default-value ordering rule.
 3. **No raw SQL.** Compose queries via `IRepository<T>.GetQueryableAsync()` so all framework filters (soft-delete, tenant, audit) stay in effect. Wrap user-derived free-text fields via `PromptBoundary.WrapField(...)` before serialization.
 
 ABP auto-registers the skill via `[ExposeServices(typeof(AgentSkill))]` + `ITransientDependency`; `ChatAppService` collects every registered `AgentSkill` into a single MAF `AgentSkillsProvider` per turn — no module-side wiring needed beyond the class itself.
 
-**Granularity guideline**: each public capability gets its own skill class (one `Frontmatter` per capability, one `[AgentSkillScript("invoke")]` method). Multiple related scripts on one skill are reserved for cases where they share an intent and the same SKILL.md instructions cover all of them — `document-inspection`'s `outline` + `excerpt` is the canonical example of "two scripts, one intent".
+**Resolution rule**: skills are consumed via `IEnumerable<AgentSkill>`, never by concrete type. `[ExposeServices(typeof(AgentSkill))]` defaults to `IncludeSelf = false`, so `GetRequiredService<InvoicesSkill>()` will throw — by design. Tests that want to inspect the skill in isolation should `new` it directly (the constructor is parameterless; services are resolved per-script-call via the `IServiceProvider` parameter).
 
-Reference implementations: `modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/SearchContractsSkill.cs` (and the sibling `GetContractDetailSkill.cs` / `AggregateContractsSkill.cs` / `ContractSkillHelpers.cs`). Counter-examples and the rationale: [`.claude/rules/doc-chat-anti-patterns.md`](../.claude/rules/doc-chat-anti-patterns.md).
+**Granularity guideline**: bundle scripts under one skill when they share a domain (same aggregate root, same auth, same chaining patterns). Split into separate skills only when intents diverge enough that one SKILL.md cannot cover them all. The contracts module is the canonical example: one `ContractsSkill` with `search` / `get-detail` / `aggregate` scripts — they all operate over the `Contract` aggregate with the same `ContractsPermissions.Contracts.Default` permission. Future contract operations (export / compare / lifecycle) become new `[AgentSkillScript]` methods on the same class.
+
+Reference implementations: [`ContractsSkill.cs`](../modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/ContractsSkill.cs) + [`ContractSkillHelpers.cs`](../modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/ContractSkillHelpers.cs). Counter-examples and the rationale: [`.claude/rules/doc-chat-anti-patterns.md`](../.claude/rules/doc-chat-anti-patterns.md).
 
 ## See also
 

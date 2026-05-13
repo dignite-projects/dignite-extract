@@ -59,7 +59,7 @@ Tenant scoping is explicit on every search and delete filter — it does **not**
 
 The vector store is dense-only. We do not enable MEVD's `IKeywordHybridSearchable` because:
 
-1. **Keyword-precise queries (合同号 / 产品编号 / 人名) go through business-module MAF Agent Skills** (`SearchContractsSkill`, `GetContractDetailSkill`, etc.) that query SQL directly. The LLM routes structured-lookup intents to those skills before reaching `search_paperbase_documents`.
+1. **Keyword-precise queries (合同号 / 产品编号 / 人名) go through business-module MAF Agent Skills** (e.g. `ContractsSkill` with `search` / `get-detail` / `aggregate` scripts) that query SQL directly. The LLM routes structured-lookup intents to those skills before reaching `search_paperbase_documents`.
 2. **MEVD's hybrid for Qdrant uses Qdrant's full-text payload index + dense vector in parallel union**, not sparse BM25 + RRF. Its score range is not normalized cosine similarity, so a single `MinScore` threshold cannot safely apply to both branches.
 3. **Capability overlap.** Pure dense vector search is the right tool for "find documents semantically similar to this one"; business skills are the right tool for exact-match lookups. The hybrid in between was solving a problem we no longer have.
 

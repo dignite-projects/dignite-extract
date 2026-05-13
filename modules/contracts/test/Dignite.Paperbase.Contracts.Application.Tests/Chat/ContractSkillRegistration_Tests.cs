@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Agents.AI;
 using Shouldly;
@@ -6,10 +7,10 @@ using Xunit;
 namespace Dignite.Paperbase.Contracts.Chat;
 
 /// <summary>
-/// Issue #149 follow-up: guard the ABP DI wiring that exposes the three contract
-/// skills to <c>ChatAppService</c>. The skills rely on
-/// <c>[ExposeServices(typeof(AgentSkill))]</c> + <c>ITransientDependency</c> on each
-/// <see cref="AgentClassSkill{TSelf}"/> subclass so ABP auto-registers them as
+/// Issue #149 follow-up: guard the ABP DI wiring that exposes
+/// <see cref="ContractsSkill"/> to <c>ChatAppService</c>. The skill relies on
+/// <c>[ExposeServices(typeof(AgentSkill))]</c> + <c>ITransientDependency</c> on the
+/// <see cref="AgentClassSkill{TSelf}"/> subclass so ABP auto-registers it as
 /// <see cref="AgentSkill"/>. If a future refactor drops one of those attributes (or
 /// switches the base class), this test fails loudly — without it, the application
 /// would still compile and chat would still run; only contract questions would
@@ -19,31 +20,29 @@ public class ContractSkillRegistration_Tests
     : ContractsApplicationTestBase<ContractsApplicationTestModule>
 {
     [Fact]
-    public void ContractsApplicationModule_Registers_All_Three_Skills_As_AgentSkill()
+    public void ContractsApplicationModule_Registers_ContractsSkill_As_AgentSkill()
     {
-        var skills = GetRequiredService<System.Collections.Generic.IEnumerable<AgentSkill>>().ToList();
-        var names = skills.Select(s => s.Frontmatter.Name).ToHashSet();
+        var skills = GetRequiredService<IEnumerable<AgentSkill>>().ToList();
 
-        names.ShouldContain("search-contracts");
-        names.ShouldContain("get-contract-detail");
-        names.ShouldContain("aggregate-contracts");
+        skills.ShouldContain(s => s is ContractsSkill,
+            "ContractsSkill must be auto-registered as AgentSkill via [ExposeServices(typeof(AgentSkill))] + ITransientDependency");
     }
 
     [Fact]
-    public void Registered_AgentSkills_Are_Distinct_Instances_Of_Each_Type()
+    public void ContractsSkill_Advertises_The_Expected_Skill_Name_And_Three_Scripts()
     {
-        // Resolving as IEnumerable<AgentSkill> must return one instance per skill class
-        // — not the same instance returned multiple times under different facades. A
-        // mis-registration ("AddSingleton<AgentSkill, SearchContractsSkill>()" only)
-        // would collapse the inventory to one entry; we want three.
-        var skills = GetRequiredService<System.Collections.Generic.IEnumerable<AgentSkill>>().ToList();
+        // Arch review C2: one contracts skill, three scripts. LLM advertises ~100 tokens
+        // (the skill name + Frontmatter description); per-script docstrings live inside
+        // the SKILL.md instructions that load_skill returns.
+        var contracts = GetRequiredService<IEnumerable<AgentSkill>>()
+            .OfType<ContractsSkill>()
+            .ShouldHaveSingleItem();
 
-        skills.Count.ShouldBeGreaterThanOrEqualTo(3);
-        // Class-based skill instances are distinct types — the runtime types must include
-        // all three concrete subclasses.
-        var runtimeTypes = skills.Select(s => s.GetType()).ToHashSet();
-        runtimeTypes.ShouldContain(typeof(SearchContractsSkill));
-        runtimeTypes.ShouldContain(typeof(GetContractDetailSkill));
-        runtimeTypes.ShouldContain(typeof(AggregateContractsSkill));
+        contracts.Frontmatter.Name.ShouldBe("contracts");
+
+        var scriptNames = contracts.Scripts.ShouldNotBeNull()
+            .Select(s => s.Name)
+            .ToHashSet();
+        scriptNames.ShouldBe(new HashSet<string> { "search", "get-detail", "aggregate" });
     }
 }

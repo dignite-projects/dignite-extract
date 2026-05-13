@@ -246,9 +246,7 @@ public sealed class SearchInvoicesSkill : AgentClassSkill<SearchInvoicesSkill>, 
 ```
 
 **参照实现**：
-- `modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/SearchContractsSkill.cs`
-- `modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/GetContractDetailSkill.cs`
-- `modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/AggregateContractsSkill.cs`
+- `modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/ContractsSkill.cs`（`contracts` skill，三个 `[AgentSkillScript]`：`search` / `get-detail` / `aggregate`）
 - 共享 helper：`modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/ContractSkillHelpers.cs`
 
 ---

@@ -99,7 +99,16 @@ Dignite.Paperbase.Abstractions（扩展契约层，无其他项目依赖）
 
 - **Chat 路径的诚实信号**：`ChatAppService` 走在线请求，检索通过 MAF `AIFunction`（`search_paperbase_documents`）由模型 `ChatToolMode.Auto` 自决调用；模型未调用 search 工具时 `ChatTurnResultDto.IsDegraded = true` 是**诚实信号**，不做强制注入兜底；**不保留 FullText 降级**——未向量化文档由上游流水线保证最终被向量化。
 - **AI 配置两节正交**：`PaperbaseAI`（host 装配 `IChatClient`，含凭据）与 `PaperbaseAIBehavior`（Application 层行为参数）**职责正交不可合并**——前者是 provider wiring，后者是行为参数，混合会让 host 看到不该看的行为开关、Application 看到不该看的凭据。
-- **业务模块向 Chat 贡献能力直接用 MAF Agent Skills**（[agentskills.io open spec](https://agentskills.io)）：继承 `AgentClassSkill<TSelf>`（来自 `Microsoft.Agents.AI`），加 `[ExposeServices(typeof(AgentSkill))]` + `ITransientDependency` 让 ABP 自动注册（实例由 `IEnumerable<AgentSkill>` 在 `ChatAppService` 里被 `AgentSkillsProvider` 聚合）。每个 `[AgentSkillScript]` 方法体内**显式** `IAuthorizationService.CheckAsync(...)` + **显式** `TenantId` 谓词（不依赖 ambient `DataFilter`）+ 结果集硬上限（`Take(N)`），不得裸跑 raw SQL；用户派生自由文本字段（`title` / `partyName` / `summary` 等）经 `PromptBoundary.WrapField(...)` 包裹后再进 JSON 返回值。Paperbase**不**自造 contributor 抽象——business modules 直接消费 MAF 原语。反例见 `.claude/rules/doc-chat-anti-patterns.md` 反例 C，参照 `modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/SearchContractsSkill.cs`。
+- **业务模块向 Chat 贡献能力直接用 MAF Agent Skills**（[agentskills.io open spec](https://agentskills.io)）：继承 `AgentClassSkill<TSelf>`（来自 `Microsoft.Agents.AI`），加 `[ExposeServices(typeof(AgentSkill))]` + `ITransientDependency` 让 ABP 自动注册（实例由 `IEnumerable<AgentSkill>` 在 `ChatAppService` 里被 `AgentSkillsProvider` 聚合）。每个 `[AgentSkillScript]` 方法体内**显式** `IAuthorizationService.CheckAsync(...)` + **显式** `TenantId` 谓词（不依赖 ambient `DataFilter`）+ 结果集硬上限（`Take(N)`），不得裸跑 raw SQL；用户派生自由文本字段（`title` / `partyName` / `summary` 等）经 `PromptBoundary.WrapField(...)` 包裹后再进 JSON 返回值。Paperbase**不**自造 contributor 抽象——business modules 直接消费 MAF 原语。反例见 `.claude/rules/doc-chat-anti-patterns.md` 反例 C，参照 `modules/contracts/src/Dignite.Paperbase.Contracts.Application/Chat/ContractsSkill.cs`。
+- **Tool vs Skill 判据**：把一个能力注册成 MAF Skill（走 `AgentSkillsProvider`），还是注册成普通 AIFunction（直接挂 `ChatOptions.Tools`），按下面三条判：
+  - **频率**：每轮几乎都用 → Tool（如 `search_paperbase_documents`），避免每轮多一次 `load_skill` 来回；只在某些意图下才用 → Skill。
+  - **"何时使用"的说明长度**：单凭参数 schema 让模型自己判断 → Tool；需要多段 prose 教模型 chaining / fallback / 不应该使用的场景 → Skill。
+  - **相关操作的聚类**：单一原子操作 → Tool；同领域多个操作（如 contracts 的 search/get-detail/aggregate）共享一份 instructions → Skill。
+  > 灰区遇到时优先 Skill：progressive disclosure 让 advertise 成本固定（~100 tokens/skill），不会因为多放 instructions 撑爆 prompt。改判一个能力的归属属于架构决策，先开 Issue。
+- **Skill 命名 / 解析 / 共享工具名约定**：
+  - **每个 skill 一个 `AgentClassSkill<T>`**，绑定一个 domain（同 aggregate root / 同权限 / 同 chaining 模式）；该领域的多种操作作为不同 `[AgentSkillScript("...")]` 方法挂在一个类上（合同模块的 `ContractsSkill` 三脚本是范例）。**不要每个 script 单开一个 skill 类**——advertise 开销 × N 且不利于 LLM 选择。
+  - **DI 解析只走 `IEnumerable<AgentSkill>`**，不要按具体类型 inject。`[ExposeServices(typeof(AgentSkill))]` 默认 `IncludeSelf = false`，`GetRequiredService<ContractsSkill>()` 会抛——是有意的。
+  - **Skill instructions 里出现 `search_paperbase_documents` 字符串属于跨模块约定**：这个工具名是 LLM-mediated 协议的一部分。core 重命名 `ChatConsts.SearchPaperbaseDocumentsToolName` 时必须 grep 所有 skill 类的 `Instructions` 字符串同步更新（架构上业务模块不能 reference `Domain.Shared`，所以这是有意的人工同步点）。改前先开 Issue 说明影响范围。
 
 ## 处理规则
 

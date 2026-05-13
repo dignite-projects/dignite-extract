@@ -16,8 +16,15 @@ namespace Dignite.Paperbase.Chat;
 /// it is purely internal to core's <c>search_paperbase_documents</c> audit wrapper —
 /// business modules no longer see or implement it.
 /// </para>
+///
+/// <para>
+/// Arch review A3: visibility narrowed from <c>public</c> to <c>internal</c> to match
+/// actual reach (three consumers, all in <c>Dignite.Paperbase.Application</c>). Test
+/// assembly <c>Dignite.Paperbase.Application.Tests</c> sees it via the
+/// <c>InternalsVisibleTo</c> declared in the csproj.
+/// </para>
 /// </summary>
-public sealed class ChatToolContext
+internal sealed class ChatToolContext
 {
     /// <summary>
     /// Optional document type hint for audit/telemetry tagging. Issue #100 stopped

@@ -9,11 +9,10 @@ using Volo.Abp.MultiTenancy;
 namespace Dignite.Paperbase.Contracts.Chat;
 
 /// <summary>
-/// Shared infrastructure for the three contract-management agent skills
-/// (<see cref="SearchContractsSkill"/>, <see cref="GetContractDetailSkill"/>,
-/// <see cref="AggregateContractsSkill"/>). Centralises the fail-closed safety
-/// contract — auth check + explicit tenant predicate + bounded result set — so
-/// the three skill scripts cannot diverge from it.
+/// Shared infrastructure for <see cref="ContractsSkill"/>'s three scripts
+/// (<c>search</c> / <c>get-detail</c> / <c>aggregate</c>). Centralises the
+/// fail-closed safety contract — auth check + explicit tenant predicate +
+/// bounded result set — so the scripts cannot diverge from it.
 ///
 /// <para>
 /// fail-closed safety contract — see <c>.claude/rules/doc-chat-anti-patterns.md</c>

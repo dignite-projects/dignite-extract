@@ -45,18 +45,19 @@ public class ChatToolFactory : ITransientDependency
         _recorder = recorder;
     }
 
-    // Issue #130: split into two overloads (mirroring the interface) so external
-    // implementers compiled against the pre-#129 interface still bind. The 4-arg
-    // is the original required member; the 5-arg is the opt-in describer-aware
-    // overload introduced for #116.
-    public virtual AIFunction Create(
+    // Arch review A3: these methods are `internal virtual` because ChatToolContext is
+    // internal. Visibility is correct — only core's DocumentTextSearchAdapter and
+    // AuditingSkillsContextProvider call them; business modules speak MAF skills, not
+    // this factory. `virtual` is kept so test subclasses (InternalsVisibleTo grants the
+    // test assembly access) can override for hermetic unit tests.
+    internal virtual AIFunction Create(
         ChatToolContext ctx,
         Delegate method,
         string name,
         string description)
         => Create(ctx, method, name, description, progressDescriber: null);
 
-    public virtual AIFunction Create(
+    internal virtual AIFunction Create(
         ChatToolContext ctx,
         Delegate method,
         string name,
@@ -83,7 +84,7 @@ public class ChatToolFactory : ITransientDependency
     /// double-wrap) the already-audited <c>search_paperbase_documents</c> tool.
     /// </para>
     /// </summary>
-    public virtual AIFunction WrapAudited(AIFunction inner, ChatToolContext ctx)
+    internal virtual AIFunction WrapAudited(AIFunction inner, ChatToolContext ctx)
         => inner is AuditedChatFunction ? inner : new AuditedChatFunction(inner, ctx, _recorder);
 
     private static IReadOnlyDictionary<string, object?> SummarizeArguments(AIFunctionArguments? arguments)

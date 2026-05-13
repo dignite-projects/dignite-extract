@@ -577,7 +577,10 @@ public class ChatAppService : PaperbaseAppService, IChatAppService
         return new AuditingSkillsContextProvider(inner, _toolFactory, CreateToolContext(conversation));
     }
 
-    protected virtual ChatToolContext CreateToolContext(ChatConversation conversation)
+    // Arch review A3: internal because ChatToolContext is internal — this helper
+    // exists only so PrepareAgentSetupAsync and BuildAgentSkillsProvider can stamp
+    // every audit-wrapper call with the same per-conversation envelope.
+    internal virtual ChatToolContext CreateToolContext(ChatConversation conversation)
         => new()
         {
             // Issue #100: scope is no longer pinned to the conversation. The hint

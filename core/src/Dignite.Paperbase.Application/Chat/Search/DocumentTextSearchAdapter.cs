@@ -23,9 +23,9 @@ namespace Dignite.Paperbase.Chat.Search;
 ///
 /// <para>
 /// Keyword-precise queries (合同号 / 产品编号 / 人名) are handled by business-module
-/// MAF Agent Skills (e.g. <c>SearchContractsSkill</c>) that query SQL directly —
-/// the LLM routes structured-lookup intents to those skills before reaching this
-/// adapter. Vector retrieval therefore covers semantic similarity only; we
+/// MAF Agent Skills (e.g. <c>ContractsSkill</c>'s <c>search</c> script) that query
+/// SQL directly — the LLM routes structured-lookup intents to those skills before
+/// reaching this adapter. Vector retrieval therefore covers semantic similarity only; we
 /// intentionally do not enable MEVD's <c>IKeywordHybridSearchable</c> because its
 /// scoring is non-normalized (cosine threshold would silently drop valid hits)
 /// and its capability overlaps with business-module structured search.
@@ -205,7 +205,10 @@ public class DocumentTextSearchAdapter : ITransientDependency
     /// sets <paramref name="capture"/> so that citations remain available after the turn.
     /// </para>
     /// </summary>
-    public virtual AIFunction CreateSearchFunction(
+    // Arch review A3: internal because ChatToolContext is internal — only
+    // ChatAppService (same assembly) builds this function. `virtual` is kept so test
+    // subclasses (InternalsVisibleTo grants the test assembly access) can override.
+    internal virtual AIFunction CreateSearchFunction(
         Guid? tenantId,
         DocumentSearchScope? baseScope,
         DocumentSearchCapture capture,
