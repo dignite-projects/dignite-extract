@@ -40,7 +40,7 @@ public class EfCoreContractRepository_Tests : PaperbaseContractsEntityFrameworkC
         found.ShouldNotBeNull();
         found.Id.ShouldBe(contract.Id);
         found.DocumentId.ShouldBe(documentId);
-        found.CounterpartyName.ShouldBe("株式会社サンプル");
+        found.PartyBName.ShouldBe("株式会社サンプル");
     }
 
     [Fact]
@@ -62,7 +62,6 @@ public class EfCoreContractRepository_Tests : PaperbaseContractsEntityFrameworkC
             ContractNumber = "CNT-2026-001",
             PartyAName = "株式会社ディグナイト",
             PartyBName = "株式会社サンプル",
-            CounterpartyName = "株式会社サンプル",
             SignedDate = new DateTime(2026, 4, 1),
             EffectiveDate = new DateTime(2026, 4, 1),
             ExpirationDate = new DateTime(2027, 3, 31),

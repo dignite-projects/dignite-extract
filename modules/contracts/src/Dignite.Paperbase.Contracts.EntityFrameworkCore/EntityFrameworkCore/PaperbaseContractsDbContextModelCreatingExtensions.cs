@@ -18,7 +18,6 @@ public static class PaperbaseContractsDbContextModelCreatingExtensions
 
             b.HasIndex(x => x.DocumentId).IsUnique();
             b.HasIndex(x => x.ExpirationDate);
-            b.HasIndex(x => x.CounterpartyName);
             b.HasIndex(x => x.Status);
             b.HasIndex(x => x.ReviewStatus);
 
@@ -27,7 +26,6 @@ public static class PaperbaseContractsDbContextModelCreatingExtensions
             b.Property(x => x.ContractNumber).HasMaxLength(ContractConsts.MaxContractNumberLength);
             b.Property(x => x.PartyAName).HasMaxLength(ContractConsts.MaxPartyNameLength);
             b.Property(x => x.PartyBName).HasMaxLength(ContractConsts.MaxPartyNameLength);
-            b.Property(x => x.CounterpartyName).HasMaxLength(ContractConsts.MaxPartyNameLength);
             b.Property(x => x.Currency).HasMaxLength(ContractConsts.MaxCurrencyLength);
             b.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
             b.Property(x => x.GoverningLaw).HasMaxLength(ContractConsts.MaxGoverningLawLength);

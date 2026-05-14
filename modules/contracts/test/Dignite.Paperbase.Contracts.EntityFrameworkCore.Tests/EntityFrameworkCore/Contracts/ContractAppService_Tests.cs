@@ -36,7 +36,7 @@ public class ContractAppService_Tests : PaperbaseContractsEntityFrameworkCoreTes
 
         dto.ShouldNotBeNull();
         dto.Id.ShouldBe(contract.Id);
-        dto.CounterpartyName.ShouldBe("甲公司");
+        dto.PartyBName.ShouldBe("甲公司");
         dto.TotalAmount.ShouldBe(1_000_000m);
         dto.Status.ShouldBe(ContractStatus.Draft);
     }
@@ -57,22 +57,6 @@ public class ContractAppService_Tests : PaperbaseContractsEntityFrameworkCoreTes
     }
 
     [Fact]
-    public async Task GetList_Filters_By_CounterpartyKeyword()
-    {
-        await CreateAndSaveAsync("テスト株式会社", 1_000_000m, new DateTime(2027, 3, 31), false);
-        await CreateAndSaveAsync("另一公司", 2_000_000m, new DateTime(2027, 6, 30), false);
-
-        var result = await _appService.GetListAsync(new GetContractListInput
-        {
-            CounterpartyKeyword = "テスト",
-            MaxResultCount = 100
-        });
-
-        result.Items.ShouldAllBe(c => c.CounterpartyName!.Contains("テスト"));
-        result.Items.ShouldNotContain(c => c.CounterpartyName == "另一公司");
-    }
-
-    [Fact]
     public async Task GetList_Filters_By_ExpirationDate_Range()
     {
         await CreateAndSaveAsync("早到期公司", 1_000_000m, new DateTime(2027, 1, 1), false);
@@ -86,9 +70,9 @@ public class ContractAppService_Tests : PaperbaseContractsEntityFrameworkCoreTes
             MaxResultCount = 100
         });
 
-        result.Items.ShouldContain(c => c.CounterpartyName == "中到期公司");
-        result.Items.ShouldNotContain(c => c.CounterpartyName == "早到期公司");
-        result.Items.ShouldNotContain(c => c.CounterpartyName == "晚到期公司");
+        result.Items.ShouldContain(c => c.PartyBName == "中到期公司");
+        result.Items.ShouldNotContain(c => c.PartyBName == "早到期公司");
+        result.Items.ShouldNotContain(c => c.PartyBName == "晚到期公司");
     }
 
     [Fact]
@@ -104,8 +88,8 @@ public class ContractAppService_Tests : PaperbaseContractsEntityFrameworkCoreTes
         });
 
         result.Items.ShouldAllBe(c => c.NeedsReview);
-        result.Items.ShouldContain(c => c.CounterpartyName == "需审核公司");
-        result.Items.ShouldNotContain(c => c.CounterpartyName == "普通公司");
+        result.Items.ShouldContain(c => c.PartyBName == "需审核公司");
+        result.Items.ShouldNotContain(c => c.PartyBName == "普通公司");
     }
 
     [Fact]
@@ -122,9 +106,9 @@ public class ContractAppService_Tests : PaperbaseContractsEntityFrameworkCoreTes
             MaxResultCount = 100
         });
 
-        result.Items.ShouldContain(c => c.CounterpartyName == "中额公司");
-        result.Items.ShouldNotContain(c => c.CounterpartyName == "小额公司");
-        result.Items.ShouldNotContain(c => c.CounterpartyName == "大额公司");
+        result.Items.ShouldContain(c => c.PartyBName == "中额公司");
+        result.Items.ShouldNotContain(c => c.PartyBName == "小额公司");
+        result.Items.ShouldNotContain(c => c.PartyBName == "大额公司");
     }
 
     [Fact]
@@ -141,7 +125,7 @@ public class ContractAppService_Tests : PaperbaseContractsEntityFrameworkCoreTes
         });
 
         result.TotalCount.ShouldBe(1);
-        result.Items[0].CounterpartyName.ShouldBe("目标合同公司");
+        result.Items[0].PartyBName.ShouldBe("目标合同公司");
     }
 
     // ────────────────────────────────────────────────────────────────────────────
@@ -158,7 +142,7 @@ public class ContractAppService_Tests : PaperbaseContractsEntityFrameworkCoreTes
         var before = await _appService.GetAsync(contract.Id);
         var snapshot = ToFullSnapshot(before);
         snapshot.Title = "更新后标题";
-        snapshot.CounterpartyName = "新公司";
+        snapshot.PartyBName = "新公司";
         snapshot.TotalAmount = 2_000_000m;
         snapshot.ExpirationDate = new DateTime(2028, 12, 31);
 
@@ -166,14 +150,13 @@ public class ContractAppService_Tests : PaperbaseContractsEntityFrameworkCoreTes
 
         // Changed fields take new values.
         dto.Title.ShouldBe("更新后标题");
-        dto.CounterpartyName.ShouldBe("新公司");
+        dto.PartyBName.ShouldBe("新公司");
         dto.TotalAmount.ShouldBe(2_000_000m);
         dto.ExpirationDate.ShouldBe(new DateTime(2028, 12, 31));
 
         // Fields NOT in the user's correction must be preserved (full-snapshot semantics
         // round-trips the unchanged values rather than nulling them out).
         dto.PartyAName.ShouldBe(before.PartyAName);
-        dto.PartyBName.ShouldBe(before.PartyBName);
         dto.ContractNumber.ShouldBe(before.ContractNumber);
         dto.SignedDate.ShouldBe(before.SignedDate);
         dto.EffectiveDate.ShouldBe(before.EffectiveDate);
@@ -292,7 +275,6 @@ public class ContractAppService_Tests : PaperbaseContractsEntityFrameworkCoreTes
             ContractNumber = dto.ContractNumber,
             PartyAName = dto.PartyAName,
             PartyBName = dto.PartyBName,
-            CounterpartyName = dto.CounterpartyName,
             SignedDate = dto.SignedDate,
             EffectiveDate = dto.EffectiveDate,
             ExpirationDate = dto.ExpirationDate,
@@ -306,7 +288,7 @@ public class ContractAppService_Tests : PaperbaseContractsEntityFrameworkCoreTes
     }
 
     private async Task<Contract> CreateAndSaveAsync(
-        string counterpartyName,
+        string partyBName,
         decimal totalAmount,
         DateTime expirationDate,
         bool needsReview,
@@ -320,11 +302,10 @@ public class ContractAppService_Tests : PaperbaseContractsEntityFrameworkCoreTes
             PaperbaseContractsDocumentTypes.General,
             new ContractFields
             {
-                Title = $"{counterpartyName}的合同",
+                Title = $"{partyBName}的合同",
                 ContractNumber = $"CNT-{Guid.NewGuid():N}".Substring(0, 16),
                 PartyAName = "我方公司",
-                PartyBName = counterpartyName,
-                CounterpartyName = counterpartyName,
+                PartyBName = partyBName,
                 SignedDate = new DateTime(2026, 1, 1),
                 EffectiveDate = new DateTime(2026, 1, 1),
                 ExpirationDate = expirationDate,

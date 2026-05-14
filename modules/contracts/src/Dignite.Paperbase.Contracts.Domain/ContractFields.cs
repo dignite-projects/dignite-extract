@@ -23,8 +23,6 @@ public class ContractFields
 
     public string? PartyBName { get; set; }
 
-    public string? CounterpartyName { get; set; }
-
     public DateTime? SignedDate { get; set; }
 
     public DateTime? EffectiveDate { get; set; }

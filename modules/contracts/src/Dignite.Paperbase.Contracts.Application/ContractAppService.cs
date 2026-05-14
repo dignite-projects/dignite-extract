@@ -99,13 +99,6 @@ public class ContractAppService : PaperbaseContractsAppService, IContractAppServ
             query = query.Where(x => x.DocumentId == input.DocumentId.Value);
         }
 
-        if (!input.CounterpartyKeyword.IsNullOrWhiteSpace())
-        {
-            query = query.Where(x =>
-                x.CounterpartyName != null &&
-                x.CounterpartyName.Contains(input.CounterpartyKeyword!));
-        }
-
         if (input.ExpirationDateFrom.HasValue)
         {
             query = query.Where(x =>
@@ -155,7 +148,6 @@ public class ContractAppService : PaperbaseContractsAppService, IContractAppServ
             ContractNumber = contract.ContractNumber,
             PartyAName = contract.PartyAName,
             PartyBName = contract.PartyBName,
-            CounterpartyName = contract.CounterpartyName,
             SignedDate = contract.SignedDate,
             EffectiveDate = contract.EffectiveDate,
             ExpirationDate = contract.ExpirationDate,
@@ -177,7 +169,6 @@ public class ContractAppService : PaperbaseContractsAppService, IContractAppServ
             ContractNumber = input.ContractNumber,
             PartyAName = input.PartyAName,
             PartyBName = input.PartyBName,
-            CounterpartyName = input.CounterpartyName,
             SignedDate = input.SignedDate,
             EffectiveDate = input.EffectiveDate,
             ExpirationDate = input.ExpirationDate,
@@ -212,8 +203,6 @@ public class ContractAppService : PaperbaseContractsAppService, IContractAppServ
         {
             "expirationDate" => query.OrderBy(x => x.ExpirationDate),
             "expirationDate desc" => query.OrderByDescending(x => x.ExpirationDate),
-            "counterpartyName" => query.OrderBy(x => x.CounterpartyName),
-            "counterpartyName desc" => query.OrderByDescending(x => x.CounterpartyName),
             "signedDate" => query.OrderBy(x => x.SignedDate),
             "signedDate desc" => query.OrderByDescending(x => x.SignedDate),
             _ => query.OrderByDescending(x => x.CreationTime)
@@ -223,7 +212,7 @@ public class ContractAppService : PaperbaseContractsAppService, IContractAppServ
     private static string BuildContractCsv(List<Contract> contracts)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Id,DocumentId,DocumentTypeCode,Title,ContractNumber,PartyAName,PartyBName,CounterpartyName,SignedDate,EffectiveDate,ExpirationDate,TotalAmount,Currency,Status");
+        sb.AppendLine("Id,DocumentId,DocumentTypeCode,Title,ContractNumber,PartyAName,PartyBName,SignedDate,EffectiveDate,ExpirationDate,TotalAmount,Currency,Status");
 
         foreach (var c in contracts)
         {
@@ -235,7 +224,6 @@ public class ContractAppService : PaperbaseContractsAppService, IContractAppServ
                 EscapeCsv(c.ContractNumber),
                 EscapeCsv(c.PartyAName),
                 EscapeCsv(c.PartyBName),
-                EscapeCsv(c.CounterpartyName),
                 c.SignedDate?.ToString("yyyy-MM-dd") ?? string.Empty,
                 c.EffectiveDate?.ToString("yyyy-MM-dd") ?? string.Empty,
                 c.ExpirationDate?.ToString("yyyy-MM-dd") ?? string.Empty,

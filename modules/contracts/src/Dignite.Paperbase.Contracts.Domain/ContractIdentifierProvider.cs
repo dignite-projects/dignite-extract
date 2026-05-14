@@ -15,7 +15,7 @@ namespace Dignite.Paperbase.Contracts;
 /// <strong>映射关系</strong>：
 /// <list type="bullet">
 /// <item><see cref="DocumentIdentifierTypes.ContractNumber"/> ↔ <see cref="Contract.ContractNumber"/></item>
-/// <item><see cref="DocumentIdentifierTypes.PartyName"/> ↔ <see cref="Contract.PartyAName"/> / <see cref="Contract.PartyBName"/> / <see cref="Contract.CounterpartyName"/>
+/// <item><see cref="DocumentIdentifierTypes.PartyName"/> ↔ <see cref="Contract.PartyAName"/> / <see cref="Contract.PartyBName"/>
 ///       （任意一个字段命中即视为持有该 PartyName）</item>
 /// </list>
 /// </para>

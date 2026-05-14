@@ -21,8 +21,6 @@ public class Contract : AuditedAggregateRoot<Guid>, IMultiTenant
 
     public virtual string? PartyBName { get; private set; }
 
-    public virtual string? CounterpartyName { get; private set; }
-
     public virtual DateTime? SignedDate { get; private set; }
 
     public virtual DateTime? EffectiveDate { get; private set; }
@@ -101,7 +99,6 @@ public class Contract : AuditedAggregateRoot<Guid>, IMultiTenant
         if (ContractNumber != fields.ContractNumber) { ContractNumber = fields.ContractNumber; changed = true; }
         if (PartyAName != fields.PartyAName) { PartyAName = fields.PartyAName; changed = true; }
         if (PartyBName != fields.PartyBName) { PartyBName = fields.PartyBName; changed = true; }
-        if (CounterpartyName != fields.CounterpartyName) { CounterpartyName = fields.CounterpartyName; changed = true; }
         if (SignedDate != fields.SignedDate) { SignedDate = fields.SignedDate; changed = true; }
         if (EffectiveDate != fields.EffectiveDate) { EffectiveDate = fields.EffectiveDate; changed = true; }
         if (ExpirationDate != fields.ExpirationDate) { ExpirationDate = fields.ExpirationDate; changed = true; }
@@ -145,7 +142,6 @@ public class Contract : AuditedAggregateRoot<Guid>, IMultiTenant
         ContractNumber = fields.ContractNumber;
         PartyAName = fields.PartyAName;
         PartyBName = fields.PartyBName;
-        CounterpartyName = fields.CounterpartyName;
         SignedDate = fields.SignedDate;
         EffectiveDate = fields.EffectiveDate;
         ExpirationDate = fields.ExpirationDate;

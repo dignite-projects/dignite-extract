@@ -15,6 +15,4 @@ public static class ContractConsts
     public static int MaxGoverningLawLength { get; set; } = 128;
 
     public static int MaxSummaryLength { get; set; } = 2000;
-
-    public static int MaxCounterpartyKeywordLength { get; set; } = 256;
 }

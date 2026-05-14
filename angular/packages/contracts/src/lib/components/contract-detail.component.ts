@@ -19,7 +19,6 @@ interface ContractFormState {
   contractNumber: string;
   partyAName: string;
   partyBName: string;
-  counterpartyName: string;
   signedDate: string;
   effectiveDate: string;
   expirationDate: string;
@@ -177,7 +176,6 @@ export class ContractDetailComponent implements OnInit {
       contractNumber: dto.contractNumber ?? '',
       partyAName: dto.partyAName ?? '',
       partyBName: dto.partyBName ?? '',
-      counterpartyName: dto.counterpartyName ?? '',
       signedDate: toInputDate(dto.signedDate),
       effectiveDate: toInputDate(dto.effectiveDate),
       expirationDate: toInputDate(dto.expirationDate),
@@ -196,7 +194,6 @@ export class ContractDetailComponent implements OnInit {
       contractNumber: emptyToNull(form.contractNumber),
       partyAName: emptyToNull(form.partyAName),
       partyBName: emptyToNull(form.partyBName),
-      counterpartyName: emptyToNull(form.counterpartyName),
       signedDate: emptyToNull(form.signedDate),
       effectiveDate: emptyToNull(form.effectiveDate),
       expirationDate: emptyToNull(form.expirationDate),
@@ -219,7 +216,6 @@ const EMPTY_FORM: ContractFormState = {
   contractNumber: '',
   partyAName: '',
   partyBName: '',
-  counterpartyName: '',
   signedDate: '',
   effectiveDate: '',
   expirationDate: '',

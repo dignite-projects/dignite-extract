@@ -134,7 +134,7 @@ public class ContractExtractionValidator_Tests
         _validator.Validate(input).IsValid.ShouldBeTrue();
     }
 
-    // ── Rule 5: At least one of Title / PartyAName / PartyBName / CounterpartyName ─
+    // ── Rule 5: At least one of Title / PartyAName / PartyBName ─
 
     [Fact]
     public void All_Name_Fields_Empty_Triggers_Error()
@@ -143,7 +143,6 @@ public class ContractExtractionValidator_Tests
         input.Title = null;
         input.PartyAName = null;
         input.PartyBName = null;
-        input.CounterpartyName = null;
 
         var r = _validator.Validate(input);
 
@@ -152,13 +151,11 @@ public class ContractExtractionValidator_Tests
     }
 
     [Fact]
-    public void Counterparty_Only_Is_Sufficient()
+    public void Title_Only_Is_Sufficient()
     {
         var input = Valid();
-        input.Title = null;
         input.PartyAName = null;
         input.PartyBName = null;
-        input.CounterpartyName = "相手方株式会社";
 
         _validator.Validate(input).IsValid.ShouldBeTrue();
     }

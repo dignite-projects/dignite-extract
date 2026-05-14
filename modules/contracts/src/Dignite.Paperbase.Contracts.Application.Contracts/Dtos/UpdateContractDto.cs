@@ -18,9 +18,6 @@ public class UpdateContractDto
     [DynamicStringLength(typeof(ContractConsts), nameof(ContractConsts.MaxPartyNameLength))]
     public string? PartyBName { get; set; }
 
-    [DynamicStringLength(typeof(ContractConsts), nameof(ContractConsts.MaxPartyNameLength))]
-    public string? CounterpartyName { get; set; }
-
     public DateTime? SignedDate { get; set; }
 
     public DateTime? EffectiveDate { get; set; }

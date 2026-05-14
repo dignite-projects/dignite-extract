@@ -34,17 +34,4 @@ public class EfCoreContractRepository :
             .Where(x => x.ContractNumber == contractNumber)
             .ToListAsync(GetCancellationToken(cancellationToken));
     }
-
-    public virtual async Task<List<Contract>> GetListByPartyNameAsync(
-        string partyName,
-        CancellationToken cancellationToken = default)
-    {
-        var dbSet = await GetDbSetAsync();
-        return await dbSet
-            .Where(x =>
-                x.PartyAName == partyName
-                || x.PartyBName == partyName
-                || x.CounterpartyName == partyName)
-            .ToListAsync(GetCancellationToken(cancellationToken));
-    }
 }

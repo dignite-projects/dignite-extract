@@ -163,15 +163,16 @@ public class ContractExtractionValidator :
         var hasTitle = !string.IsNullOrWhiteSpace(result.Title);
         var hasA = !string.IsNullOrWhiteSpace(result.PartyAName);
         var hasB = !string.IsNullOrWhiteSpace(result.PartyBName);
-        var hasCounterparty = !string.IsNullOrWhiteSpace(result.CounterpartyName);
 
-        if (!hasTitle && !hasA && !hasB && !hasCounterparty)
+        if (!hasTitle && !hasA && !hasB)
         {
             errors.Add(new ExtractionRuleViolation(
                 RuleCodes.AtLeastOneParty,
-                "At least one of Title / PartyAName / PartyBName / CounterpartyName must be present. " +
-                "If the document is a contract, find any identifying name (party, agreement title, or both) " +
-                "and fill the most accurate field."));
+                "At least one of Title / PartyAName / PartyBName must be present. " +
+                "If the document is a contract, find any identifying name (party or agreement title) " +
+                "and fill the most accurate field. If only one company name is recognizable but the " +
+                "Party A / Party B role cannot be inferred from the text, leave both empty — a human " +
+                "reviewer will resolve the assignment downstream."));
         }
     }
 

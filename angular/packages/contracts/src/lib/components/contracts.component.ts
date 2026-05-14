@@ -39,20 +39,6 @@ import {
       </div>
 
       <div class="row g-2 align-items-end mb-3">
-        <div class="col-12 col-md-5 col-lg-4">
-          <label class="form-label" for="counterpartyKeyword">
-            {{ 'Contracts::CounterpartyName' | abpLocalization }}
-          </label>
-          <input
-            id="counterpartyKeyword"
-            class="form-control"
-            type="search"
-            name="counterpartyKeyword"
-            [ngModel]="counterpartyKeyword()"
-            (ngModelChange)="counterpartyKeyword.set($event)"
-            (keyup.enter)="load()"
-          />
-        </div>
         <div class="col-6 col-md-2">
           <label class="form-label" for="expirationDateFrom">
             {{ 'Contracts::ExpirationDateFrom' | abpLocalization }}
@@ -144,7 +130,7 @@ import {
           <thead>
             <tr>
               <th>{{ 'Contracts::Title' | abpLocalization }}</th>
-              <th>{{ 'Contracts::CounterpartyName' | abpLocalization }}</th>
+              <th>{{ 'Contracts::PartyBName' | abpLocalization }}</th>
               <th>{{ 'Contracts::SignedDate' | abpLocalization }}</th>
               <th>{{ 'Contracts::ExpirationDate' | abpLocalization }}</th>
               <th class="text-end">{{ 'Contracts::TotalAmount' | abpLocalization }}</th>
@@ -174,7 +160,7 @@ import {
                   <div class="fw-semibold">{{ contract.title || '-' }}</div>
                   <div class="text-muted small">{{ contract.contractNumber || contract.documentId }}</div>
                 </td>
-                <td>{{ contract.counterpartyName || '-' }}</td>
+                <td>{{ contract.partyBName || '-' }}</td>
                 <td>{{ contract.signedDate | date: 'yyyy-MM-dd' }}</td>
                 <td>{{ contract.expirationDate | date: 'yyyy-MM-dd' }}</td>
                 <td class="text-end">
@@ -221,7 +207,6 @@ export class ContractsComponent implements OnInit {
   // below run outside of any Zone-tracked event handler, so plain field
   // assignments would not trigger change detection on this component.
   protected contracts = signal<ContractDto[]>([]);
-  protected counterpartyKeyword = signal('');
   protected expirationDateFrom = signal('');
   protected expirationDateTo = signal('');
   protected amountMin = signal<number | null>(null);
@@ -235,7 +220,6 @@ export class ContractsComponent implements OnInit {
 
   protected exportCsv(): void {
     const url = this.service.getExportUrl({
-      counterpartyKeyword: this.counterpartyKeyword() || undefined,
       expirationDateFrom: this.expirationDateFrom() || undefined,
       expirationDateTo: this.expirationDateTo() || undefined,
       amountMin: this.amountMin() ?? undefined,
@@ -252,7 +236,6 @@ export class ContractsComponent implements OnInit {
         skipCount: 0,
         maxResultCount: 20,
         sorting: 'expirationDate',
-        counterpartyKeyword: this.counterpartyKeyword() || undefined,
         expirationDateFrom: this.expirationDateFrom() || undefined,
         expirationDateTo: this.expirationDateTo() || undefined,
         amountMin: this.amountMin() ?? undefined,

@@ -19,13 +19,4 @@ public interface IContractRepository : IRepository<Contract, Guid>
     Task<List<Contract>> FindByContractNumberAsync(
         string contractNumber,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Issue #115 L2: 查询当前租户内"甲方 / 乙方 / 对手方"匹配指定名称的所有合同。
-    /// 同一公司可在不同合同里出现在不同位置，所以本方法跨 PartyAName / PartyBName / CounterpartyName
-    /// 三个字段查询。
-    /// </summary>
-    Task<List<Contract>> GetListByPartyNameAsync(
-        string partyName,
-        CancellationToken cancellationToken = default);
 }

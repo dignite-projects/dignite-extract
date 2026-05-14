@@ -108,17 +108,6 @@
                 maxlength="256"
               />
             </div>
-            <div class="col-md-4">
-              <label class="form-label">{{ 'Contracts::CounterpartyName' | abpLocalization }}</label>
-              <input
-                class="form-control"
-                type="text"
-                name="counterpartyName"
-                [ngModel]="form().counterpartyName"
-                (ngModelChange)="patch('counterpartyName', $event)"
-                maxlength="256"
-              />
-            </div>
 
             <div class="col-md-4">
               <label class="form-label">{{ 'Contracts::SignedDate' | abpLocalization }}</label>

@@ -10,7 +10,6 @@
     "Permission:Contracts.Contracts.Update": "契約を更新",
     "Permission:Contracts.Contracts.Confirm": "契約を確認",
     "Title": "タイトル",
-    "CounterpartyName": "相手先",
     "SignedDate": "締結日",
     "ExpirationDate": "満了日",
     "TotalAmount": "金額",

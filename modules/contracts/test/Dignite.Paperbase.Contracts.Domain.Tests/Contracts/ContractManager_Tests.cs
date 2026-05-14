@@ -35,7 +35,7 @@ public class ContractManager_Tests : PaperbaseContractsDomainTestBase<PaperbaseC
         contract.DocumentTypeCode.ShouldBe(PaperbaseContractsDocumentTypes.General);
         contract.Status.ShouldBe(ContractStatus.Draft);
         contract.Title.ShouldBe(fields.Title);
-        contract.CounterpartyName.ShouldBe(fields.CounterpartyName);
+        contract.PartyBName.ShouldBe(fields.PartyBName);
         contract.TotalAmount.ShouldBe(fields.TotalAmount);
         // Fresh AI extraction always lands as pending review.
         contract.NeedsReview.ShouldBeTrue();
@@ -53,7 +53,7 @@ public class ContractManager_Tests : PaperbaseContractsDomainTestBase<PaperbaseC
 
         var updatedFields = CreateFields();
         updatedFields.Title = "秘密保持契約書";
-        updatedFields.CounterpartyName = "株式会社アップデート";
+        updatedFields.PartyBName = "株式会社アップデート";
         updatedFields.TotalAmount = 250000m;
 
         // Act — re-extraction always flips to Pending regardless of prior review state.
@@ -61,7 +61,7 @@ public class ContractManager_Tests : PaperbaseContractsDomainTestBase<PaperbaseC
 
         // Assert
         contract.Title.ShouldBe("秘密保持契約書");
-        contract.CounterpartyName.ShouldBe("株式会社アップデート");
+        contract.PartyBName.ShouldBe("株式会社アップデート");
         contract.TotalAmount.ShouldBe(250000m);
         contract.NeedsReview.ShouldBeTrue();
         contract.ReviewStatus.ShouldBe(ContractReviewStatus.Pending);
@@ -101,7 +101,6 @@ public class ContractManager_Tests : PaperbaseContractsDomainTestBase<PaperbaseC
             ContractNumber = "CNT-2026-001",
             PartyAName = "株式会社ディグナイト",
             PartyBName = "株式会社サンプル",
-            CounterpartyName = "株式会社サンプル",
             SignedDate = new DateTime(2026, 4, 1),
             EffectiveDate = new DateTime(2026, 4, 1),
             ExpirationDate = new DateTime(2027, 3, 31),

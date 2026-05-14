@@ -35,7 +35,7 @@ public class ContractToContractDtoMapper_Tests : PaperbaseContractsApplicationTe
         dto.DocumentId.ShouldBe(documentId);
         dto.DocumentTypeCode.ShouldBe(PaperbaseContractsDocumentTypes.General);
         dto.Title.ShouldBe("業務委託契約書");
-        dto.CounterpartyName.ShouldBe("株式会社サンプル");
+        dto.PartyBName.ShouldBe("株式会社サンプル");
         dto.TotalAmount.ShouldBe(1200000m);
         dto.Currency.ShouldBe("JPY");
         dto.Status.ShouldBe(ContractStatus.Draft);
@@ -52,7 +52,6 @@ public class ContractToContractDtoMapper_Tests : PaperbaseContractsApplicationTe
             ContractNumber = "CNT-2026-001",
             PartyAName = "株式会社ディグナイト",
             PartyBName = "株式会社サンプル",
-            CounterpartyName = "株式会社サンプル",
             SignedDate = new DateTime(2026, 4, 1),
             EffectiveDate = new DateTime(2026, 4, 1),
             ExpirationDate = new DateTime(2027, 3, 31),

@@ -8,9 +8,6 @@ public class GetContractListInput : PagedAndSortedResultRequestDto
 {
     public Guid? DocumentId { get; set; }
 
-    [DynamicStringLength(typeof(ContractConsts), nameof(ContractConsts.MaxCounterpartyKeywordLength))]
-    public string? CounterpartyKeyword { get; set; }
-
     public DateTime? ExpirationDateFrom { get; set; }
 
     public DateTime? ExpirationDateTo { get; set; }

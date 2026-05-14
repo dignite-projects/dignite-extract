@@ -19,7 +19,6 @@ public static class ContractExtractionResultExtensions
             ContractNumber = result.ContractNumber,
             PartyAName = result.PartyAName,
             PartyBName = result.PartyBName,
-            CounterpartyName = result.CounterpartyName,
             SignedDate = ParseDate(result.SignedDate),
             EffectiveDate = ParseDate(result.EffectiveDate),
             ExpirationDate = ParseDate(result.ExpirationDate),

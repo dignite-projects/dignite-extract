@@ -10,7 +10,6 @@ export interface ContractDto {
   contractNumber?: string;
   partyAName?: string;
   partyBName?: string;
-  counterpartyName?: string;
   signedDate?: string;
   effectiveDate?: string;
   expirationDate?: string;
@@ -31,7 +30,6 @@ export interface UpdateContractDto {
   contractNumber?: string | null;
   partyAName?: string | null;
   partyBName?: string | null;
-  counterpartyName?: string | null;
   signedDate?: string | null;
   effectiveDate?: string | null;
   expirationDate?: string | null;
@@ -62,7 +60,6 @@ export interface GetContractListInput {
   maxResultCount?: number;
   sorting?: string;
   documentId?: string;
-  counterpartyKeyword?: string;
   expirationDateFrom?: string;
   expirationDateTo?: string;
   needsReview?: boolean;
@@ -137,7 +134,6 @@ export class ContractsService {
 
   getExportUrl(input?: GetContractListInput): string {
     const params = new URLSearchParams();
-    if (input?.counterpartyKeyword) params.set('counterpartyKeyword', input.counterpartyKeyword);
     if (input?.expirationDateFrom) params.set('expirationDateFrom', input.expirationDateFrom);
     if (input?.expirationDateTo) params.set('expirationDateTo', input.expirationDateTo);
     if (input?.reviewStatus != null) params.set('reviewStatus', String(input.reviewStatus));

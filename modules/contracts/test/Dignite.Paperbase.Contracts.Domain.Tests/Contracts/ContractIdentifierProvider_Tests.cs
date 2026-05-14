@@ -64,15 +64,14 @@ public class ContractIdentifierProvider_Tests
     [Fact]
     public async Task GetIdentifiersAsync_Should_Emit_Only_ContractNumber_When_Present()
     {
-        // Codex review fix [high]: PartyAName / PartyBName / CounterpartyName are
-        // INTENTIONALLY not emitted as L2 identifiers (graph blow-up risk).
+        // Codex review fix [high]: PartyAName / PartyBName are INTENTIONALLY not emitted
+        // as L2 identifiers (graph blow-up risk).
         var documentId = Guid.NewGuid();
         var contract = CreateContract(
             documentId,
             contractNumber: "HT-2026-001",
             partyA: "甲方公司",
-            partyB: "乙方公司",
-            counterparty: "对手方公司");
+            partyB: "乙方公司");
         _contractRepository.FindByDocumentIdAsync(documentId).Returns(contract);
 
         var entries = (await _provider.GetIdentifiersAsync(documentId)).ToList();
@@ -93,8 +92,7 @@ public class ContractIdentifierProvider_Tests
             documentId,
             contractNumber: null,
             partyA: "甲方公司",       // Has parties but no number → no L2 contribution.
-            partyB: "乙方公司",
-            counterparty: "对手方公司");
+            partyB: "乙方公司");
         _contractRepository.FindByDocumentIdAsync(documentId).Returns(contract);
 
         var entries = (await _provider.GetIdentifiersAsync(documentId)).ToList();
@@ -110,8 +108,7 @@ public class ContractIdentifierProvider_Tests
             documentId,
             contractNumber: "  HT-2026-002  ",
             partyA: " 甲方 ",
-            partyB: null,
-            counterparty: null);
+            partyB: null);
         _contractRepository.FindByDocumentIdAsync(documentId).Returns(contract);
 
         var entries = (await _provider.GetIdentifiersAsync(documentId)).ToList();
@@ -146,14 +143,9 @@ public class ContractIdentifierProvider_Tests
     {
         // Codex review fix [high]: PartyName is no longer a supported L2 identifier.
         // Even if a caller (defensively or from a test) passes it in, the provider must
-        // return empty without hitting the repository. Repository's GetListByPartyNameAsync
-        // is intentionally left intact (other code paths might still use it) but is no
-        // longer reachable from the L2 fan-out.
+        // return empty without hitting the repository.
         var result = await _provider.FindDocumentsAsync(DocumentIdentifierTypes.PartyName, "甲方公司");
         result.ShouldBeEmpty();
-
-        await _contractRepository.DidNotReceive().GetListByPartyNameAsync(
-            Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -196,15 +188,13 @@ public class ContractIdentifierProvider_Tests
         Guid documentId,
         string? contractNumber = null,
         string? partyA = null,
-        string? partyB = null,
-        string? counterparty = null)
+        string? partyB = null)
     {
         var fields = new ContractFields
         {
             ContractNumber = contractNumber,
             PartyAName = partyA,
             PartyBName = partyB,
-            CounterpartyName = counterparty,
         };
 
         // ContractManager wraps the internal Contract constructor. Use it from tests

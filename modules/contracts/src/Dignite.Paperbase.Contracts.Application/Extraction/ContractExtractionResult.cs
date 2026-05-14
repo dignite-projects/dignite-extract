@@ -18,9 +18,6 @@ public class ContractExtractionResult
     /// <summary>乙（受託者）の名称（例: 株式会社XYZ）</summary>
     public string? PartyBName { get; set; }
 
-    /// <summary>相手方名（甲乙不明の場合の補完）</summary>
-    public string? CounterpartyName { get; set; }
-
     /// <summary>契約締結日（ISO 8601: yyyy-MM-dd）</summary>
     public string? SignedDate { get; set; }
 
