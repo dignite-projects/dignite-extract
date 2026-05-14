@@ -76,6 +76,36 @@ public static class PaperbaseDbContextModelCreatingExtensions
 
             b.HasIndex(x => x.SourceDocumentId);
             b.HasIndex(x => x.TargetDocumentId);
+
+            // Issue #158 (Y2): defend against duplicate AiSuggested rows when the same Document's
+            // RelationDiscoveryJob is dispatched twice (event-bus duplicate delivery, Hangfire retry).
+            // Filtered unique index — only live rows are unique. R2 dismissal tombstones
+            // (IsDeleted=true) coexist with new live rows for the same pair (user dismiss then
+            // re-create is a legal flow). On concurrent insert race, the second insert throws
+            // DbUpdateException → caught by per-candidate try/catch in SemanticRelationDiscoveryService
+            // → recorded as Error, contained.
+            //
+            // Filter uses unquoted column name (no `[IsDeleted]` / `"IsDeleted"`) for cross-provider
+            // compatibility: SQL Server, PostgreSQL, and SQLite all accept the unquoted form because
+            // `IsDeleted` is not a reserved keyword in any of them. Bracket form would silently fail
+            // on SQLite (filter never matches → effective non-uniqueness).
+            //
+            // <strong>Known limitation — host (single-tenant) deployment</strong>:
+            // SQL standard says NULL is not equal to NULL even within UNIQUE constraints. SQL Server
+            // (pre-2022), PostgreSQL (pre-15), and SQLite all enforce this — two rows with
+            // (TenantId=NULL, SourceDocumentId=X, TargetDocumentId=Y) are treated as distinct and
+            // BOTH inserts succeed. This means: in host (single-tenant) mode where all rows have
+            // TenantId=NULL, the DB-level uniqueness is NOT enforced. Multi-tenant deployments
+            // where every relation has a non-null TenantId are fully protected. The application-
+            // level dedup in L2/L3 (`GetLinkedPeerDocumentIdsAsync(includeDismissed: true)`) is the
+            // only line of defense for host-tenant rows; this catches the common case (serial
+            // re-runs) but not the rare concurrent race. If the host-tenant duplicate rate becomes
+            // a real problem, follow-up options: SQL Server 2022 `NULLS NOT DISTINCT`, PostgreSQL 15
+            // `NULLS NOT DISTINCT`, or a persisted computed column that COALESCEs TenantId to
+            // Guid.Empty for indexing.
+            b.HasIndex(x => new { x.TenantId, x.SourceDocumentId, x.TargetDocumentId })
+                .IsUnique()
+                .HasFilter("IsDeleted = 0");
         });
 
         builder.Entity<ChatConversation>(b =>
