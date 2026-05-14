@@ -1,10 +1,12 @@
-﻿using Volo.Abp.Modularity;
+﻿using Dignite.Paperbase;
+using Volo.Abp.Modularity;
 using Volo.Abp.VirtualFileSystem;
 
 namespace Dignite.Paperbase.Contracts;
 
 [DependsOn(
-    typeof(AbpVirtualFileSystemModule)
+    typeof(AbpVirtualFileSystemModule),
+    typeof(PaperbaseInstallerModule)
     )]
 public class ContractsInstallerModule : AbpModule
 {

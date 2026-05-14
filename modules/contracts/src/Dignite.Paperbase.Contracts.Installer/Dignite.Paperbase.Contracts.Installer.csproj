@@ -14,6 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\core\src\Dignite.Paperbase.Installer\Dignite.Paperbase.Installer.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="..\..\Dignite.Paperbase.Contracts.abpmdl"/>
     <Content Include="..\..\Dignite.Paperbase.Contracts.abpmdl">
       <Pack>true</Pack>

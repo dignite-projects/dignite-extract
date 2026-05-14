@@ -7,8 +7,8 @@
             "names":[
               "CONTRACTS_ROUTES"
             ],
-            "namespace": "@dignite.Paperbase/contracts"
-          } 
+            "namespace": "@dignite/paperbase.contracts"
+          }
         ],
         "routes":[
           "{ path: 'contracts', children: CONTRACTS_ROUTES, canActivate: [authGuard] }"
@@ -20,7 +20,7 @@
             "names":[
               "provideContracts"
             ],
-            "namespace": "@dignite.Paperbase/contracts/config"
+            "namespace": "@dignite/paperbase.contracts/config"
           }
         ],
         "providerNames":[
@@ -29,13 +29,13 @@
       },
       "tsJsonPathRecordConfigurations":[
         {
-          "name": "@dignite.Paperbase/contracts",
+          "name": "@dignite/paperbase.contracts",
           "paths": [
             "angular/projects/contracts/src/public-api.ts"
           ]
         },
         {
-          "name": "@dignite.Paperbase/contracts/config",
+          "name": "@dignite/paperbase.contracts/config",
           "paths": [
             "angular/projects/contracts/config/src/public-api.ts"
           ]
