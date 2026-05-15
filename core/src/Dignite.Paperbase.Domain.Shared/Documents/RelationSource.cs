@@ -7,7 +7,4 @@ public enum RelationSource
 
     /// <summary>AI 推断建议、待人工确认的关系</summary>
     AiSuggested = 2,
-
-    /// <summary>业务模块自动建立的关系</summary>
-    ModuleAuto = 3
 }

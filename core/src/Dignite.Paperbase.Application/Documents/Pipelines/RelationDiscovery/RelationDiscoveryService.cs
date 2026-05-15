@@ -69,7 +69,7 @@ public class RelationDiscoveryService : DomainService
 
     /// <summary>
     /// 对指定源文档运行关系发现。返回新创建的 AiSuggested DocumentRelation 列表（用于 telemetry / 集成测试断言）。
-    /// 已存在的关系（无论 Manual / AiSuggested / ModuleAuto）会被跳过——避免噪音建议覆盖用户已确认的关系。
+    /// 已存在的关系（无论 Manual 或 AiSuggested）会被跳过——避免噪音建议覆盖用户已确认的关系。
     /// </summary>
     public virtual async Task<IReadOnlyList<DocumentRelation>> DiscoverAsync(
         Guid sourceDocumentId,
@@ -140,7 +140,7 @@ public class RelationDiscoveryService : DomainService
             return Array.Empty<DocumentRelation>();
         }
 
-        // Phase 3: skip pairs that already have any relation (Manual/AiSuggested/ModuleAuto),
+        // Phase 3: skip pairs that already have any relation (Manual or AiSuggested),
         // create AiSuggested for the rest. Skipping ALL existing relation kinds protects
         // user-confirmed relations from being re-suggested as if new. R2: also skip dismissed
         // tombstones (IsDeleted=true) so users who reject an AI suggestion don't see it
