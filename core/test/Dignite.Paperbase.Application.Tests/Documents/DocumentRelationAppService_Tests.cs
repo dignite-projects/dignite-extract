@@ -335,24 +335,16 @@ public class DocumentRelationAppService_Tests
         List<Document> documents,
         List<DocumentRelation> relations)
     {
-        // Issue #162: LoadAliveDocumentsAsync 走 GetQueryableAsync + 显式 TenantId 谓词，
-        // 替代原 GetListByIdsAsync。这里返回完整 documents 集合的 IQueryable —— 让产品代码
-        // 的 `Where(d => d.TenantId == tenantId)` + `Where(d => ids.Contains(d.Id))` 真正
+        // Issue #162: LoadVisibleDocumentsAsync 走 GetQueryableAsync + 显式 TenantId 谓词。
+        // 这里返回完整 documents 集合的 IQueryable —— 让产品代码的
+        // `Where(d => d.TenantId == tenantId)` + `Where(d => ids.Contains(d.Id))` 真正
         // 执行；缺谓词的回归会让跨租户测试失败（断言 peer 被 drop）。
         _documentRepository
             .GetQueryableAsync()
             .Returns(_ => documents.AsQueryable());
 
-        // GetListByIdsAsync 保留 mock 防御任何旧路径或其他测试路径残留依赖；
-        // 同样不带租户过滤，依赖被测代码显式申明。
-        _documentRepository
-            .GetListByIdsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
-            .Returns(callInfo =>
-            {
-                var ids = ((IReadOnlyCollection<Guid>)callInfo[0]).ToHashSet();
-                return documents.Where(d => ids.Contains(d.Id)).ToList();
-            });
-
+        // GetAsync mock 不模拟 ambient IMultiTenant 过滤 —— 如未来添加 "root 跨租户" 负向
+        // 测试，被测代码须自带显式租户谓词，不可依赖此 mock 的过滤效果。
         _documentRepository
             .GetAsync(Arg.Any<Guid>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>

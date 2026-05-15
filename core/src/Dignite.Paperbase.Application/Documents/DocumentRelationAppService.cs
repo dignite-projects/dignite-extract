@@ -34,14 +34,14 @@ public class DocumentRelationAppService : PaperbaseAppService, IDocumentRelation
         var relations = await _relationRepository.GetListByDocumentIdAsync(documentId);
 
         // Issue #162: 过滤对端已软删除的关系。Document 软删除不级联到 DocumentRelation，
-        // 由查询时的对端存活性检查实现"软删 Document 在关系视图中隐身"。LoadAliveDocumentsAsync
+        // 由查询时的对端存活性检查实现"软删 Document 在关系视图中隐身"。LoadVisibleDocumentsAsync
         // 走 GetQueryableAsync + 显式 TenantId 谓词（与 DocumentRelationsTool 同一 fail-closed
         // 风格保持一致），ambient ISoftDelete 同时 honor。
         var peerIds = relations
             .Select(r => r.SourceDocumentId == documentId ? r.TargetDocumentId : r.SourceDocumentId)
             .Distinct()
             .ToList();
-        var alivePeerIds = (await LoadAliveDocumentsAsync(peerIds))
+        var alivePeerIds = (await LoadVisibleDocumentsAsync(peerIds))
             .Select(d => d.Id)
             .ToHashSet();
         var visible = relations
@@ -109,9 +109,9 @@ public class DocumentRelationAppService : PaperbaseAppService, IDocumentRelation
             frontier = nextFrontier;
         }
 
-        // Issue #162: 节点的存活性检查走 LoadAliveDocumentsAsync —— GetQueryableAsync + 显式
+        // Issue #162: 节点的存活性检查走 LoadVisibleDocumentsAsync —— GetQueryableAsync + 显式
         // TenantId 谓词，与 DocumentRelationsTool 同一 fail-closed 风格保持一致。
-        var documents = await LoadAliveDocumentsAsync(distances.Keys.ToList());
+        var documents = await LoadVisibleDocumentsAsync(distances.Keys.ToList());
         var documentById = documents.ToDictionary(d => d.Id);
         documentById[rootDocument.Id] = rootDocument;
 
@@ -250,12 +250,18 @@ public class DocumentRelationAppService : PaperbaseAppService, IDocumentRelation
     }
 
     /// <summary>
-    /// Issue #162: 加载存活 Document（未被软删）以驱动关系图的对端可见性过滤。
-    /// 显式 TenantId 谓词 + ambient ISoftDelete 双闸——与 chat 工具
+    /// Issue #162: 加载"对当前调用方可见"的 Document —— 双闸：显式 TenantId 谓词 +
+    /// ambient ISoftDelete（隐式 honor）。"visible" 而非 "alive" 因为可见性同时承载
+    /// 跨租户隔离与软删隔离，命名上不要把多个语义压缩成一个。与 chat 工具
     /// <see cref="Chat.Tools.DocumentRelationsTool"/> 同一 fail-closed 风格保持一致，
     /// 即便 ambient IMultiTenant filter 在某代码路径被 disable 也不漏跨租户 peer。
+    /// <para>
+    /// 目前 AppService-内聚足够；若 GetGraphAsync 引入 BFS 内剪枝（按每跳逐次
+    /// 过滤 frontier）让此 helper 成为热点，再考虑上提到 <c>DocumentRelationDomainService</c>
+    /// 或抽到 <see cref="IDocumentRepository"/> 扩展方法（同 chat 工具共享）。
+    /// </para>
     /// </summary>
-    protected virtual async Task<List<Document>> LoadAliveDocumentsAsync(
+    protected virtual async Task<List<Document>> LoadVisibleDocumentsAsync(
         IReadOnlyCollection<Guid> ids,
         CancellationToken cancellationToken = default)
     {

@@ -47,22 +47,6 @@ public class EfCoreDocumentRepository
         }
     }
 
-    public virtual async Task<List<Document>> GetListByIdsAsync(
-        IReadOnlyCollection<Guid> ids,
-        CancellationToken cancellationToken = default)
-    {
-        if (ids.Count == 0)
-        {
-            return new List<Document>();
-        }
-
-        var distinctIds = ids.Distinct().ToList();
-        var dbSet = await GetDbSetAsync();
-        return await dbSet
-            .Where(d => distinctIds.Contains(d.Id))
-            .ToListAsync(GetCancellationToken(cancellationToken));
-    }
-
     public override async Task<IQueryable<Document>> WithDetailsAsync()
     {
         return (await GetQueryableAsync()).IncludeDetails();
