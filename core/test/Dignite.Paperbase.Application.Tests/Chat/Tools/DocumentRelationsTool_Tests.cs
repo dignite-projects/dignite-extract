@@ -194,15 +194,12 @@ public class DocumentRelationsTool_Tests
         // Seed an edge under TenantB; querying as TenantA must NOT return it.
         // Reverse example C #2: explicit tenant predicate, not ambient DataFilter alone.
         //
-        // Issue #162 强化：peer Document 也显式 stub 为 TenantB —— 即便产品代码的
-        // 关系侧第一闸（行 105）意外失效，peer 侧第二闸（行 138）仍会丢弃 leakedTarget。
-        // 反之若 peer 侧第二闸失效，关系侧第一闸独自工作。两层都漏才会让此测试失败。
+        // 此测试守 relation-side 第一闸（_alivePeerStubs 不必设——第一闸把 relations
+        // 清空后 peerIds 为空，第二闸路径不会被执行）。peer-Document-side 第二闸由
+        // 独立的 Peer_Predicate_Drops_Relations_Whose_Peer_Document_Belongs_To_Other_Tenant
+        // 测试守门。
         var anchor = Guid.NewGuid();
         var leakedTarget = Guid.NewGuid();
-        _alivePeerStubs = new Dictionary<Guid, Guid?>
-        {
-            { leakedTarget, TenantB },   // peer Document 也在 TenantB，匹配关系
-        };
 
         await SeedRelationsAsync(
             CreateRelation(TenantB, source: anchor, target: leakedTarget, kind: RelationSource.Manual));

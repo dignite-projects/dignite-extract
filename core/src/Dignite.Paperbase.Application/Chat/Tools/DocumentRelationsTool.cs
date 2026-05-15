@@ -81,8 +81,8 @@ public class DocumentRelationsTool : ITransientDependency
     /// <remarks>
     /// fail-closed safety contract — see <c>.claude/rules/doc-chat-anti-patterns.md</c>
     /// reverse example C: explicit <see cref="PaperbasePermissions.Documents.Default"/>
-    /// permission check, two explicit tenant predicates (relation-side at line 105 +
-    /// peer-Document-side at line 138; never rely on ambient ABP <c>DataFilter</c>),
+    /// permission check, two explicit tenant predicates (relation-side queryable + peer
+    /// Document queryable below; never rely on ambient ABP <c>DataFilter</c>),
     /// hard <see cref="MaxResultRows"/> upper bound.
     /// </remarks>
     public virtual async Task<string> InvokeAsync(
