@@ -478,8 +478,8 @@ public class PaperbaseHostModule : AbpModule
             .UseLogging();
 
         // Structured-output chat client: shared by every single-shot RunAsync<T> caller
-        // (DocumentClassificationWorkflow, DocumentRerankWorkflow, RelationInferenceAgent,
-        // ContractDocumentHandler.ExtractFieldsAsync). All four are tool-free and their
+        // (DocumentClassificationWorkflow, DocumentRerankWorkflow,
+        // ContractDocumentHandler.ExtractFieldsAsync). All three are tool-free and their
         // prompts are document-content-derived (unique per call), so FunctionInvocation
         // and DistributedCache are pure overhead. OTel + Logging stay so each structured
         // call shows up as a clean chat <model> span (no phantom orchestrate_tools wrap).

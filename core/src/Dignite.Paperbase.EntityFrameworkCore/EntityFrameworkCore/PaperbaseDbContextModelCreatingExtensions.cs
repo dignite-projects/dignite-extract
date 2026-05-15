@@ -82,7 +82,7 @@ public static class PaperbaseDbContextModelCreatingExtensions
             // Filtered unique index — only live rows are unique. R2 dismissal tombstones
             // (IsDeleted=true) coexist with new live rows for the same pair (user dismiss then
             // re-create is a legal flow). On concurrent insert race, the second insert throws
-            // DbUpdateException → caught by per-candidate try/catch in SemanticRelationDiscoveryService
+            // DbUpdateException → caught by the L2 RelationDiscovery per-candidate try/catch
             // → recorded as Error, contained.
             //
             // Filter uses unquoted column name (no `[IsDeleted]` / `"IsDeleted"`) for cross-provider

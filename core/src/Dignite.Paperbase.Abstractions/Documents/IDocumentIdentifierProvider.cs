@@ -19,13 +19,14 @@ namespace Dignite.Paperbase.Documents;
 /// <para>
 /// <strong>Open by design (Issue #159)</strong>: <see cref="SupportedIdentifierTypes"/> is an
 /// open string collection — the core does NOT know which type strings exist in the system.
-/// Business modules can name their types freely; we recommend a <c>"&lt;ModuleName&gt;.&lt;TypeName&gt;"</c>
-/// prefix (e.g. <c>"HR.EmployeeId"</c>) for module-private types to avoid name collisions with
-/// other modules. <see cref="DocumentIdentifierTypes"/> provides constants for types that are
-/// genuinely cross-module (parties, project codes, contract numbers shared between contracts and
-/// invoices); using those constants is opt-in. Adding a new business module requires NO change
-/// to this contract, to <see cref="DocumentIdentifierTypes"/>, or to any core code — only your
-/// own provider implementation registered as <see cref="Volo.Abp.DependencyInjection.ITransientDependency"/>.
+/// Business modules name their types freely and publish their type-string constants from their
+/// own Domain layer (e.g. <c>Dignite.Paperbase.Contracts.ContractIdentifierTypes.ContractNumber</c>).
+/// We recommend a <c>"&lt;ModuleName&gt;.&lt;TypeName&gt;"</c> prefix (e.g. <c>"HR.EmployeeId"</c>)
+/// to avoid name collisions with other modules. Adding a new business module requires NO change
+/// to this contract or to any core code — only your own provider implementation registered as
+/// <see cref="Volo.Abp.DependencyInjection.ITransientDependency"/>, plus a <c>public const string</c>
+/// per type your module owns. See <c>docs/relation-discovery-module-integration.md</c> for the
+/// integration pattern.
 /// </para>
 ///
 /// <para>

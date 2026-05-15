@@ -75,8 +75,8 @@ public class KeyedChatClientRegistration_Tests
             "The audit must find at least one [FromKeyedServices] consumer — otherwise the " +
             "scan is broken (wrong assemblies, attribute changed, etc.). Currently we expect " +
             "ChatAppService, ChatCompactionStrategyFactory, DocumentRerankWorkflow, " +
-            "DocumentClassificationWorkflow, RelationInferenceAgent, " +
-            "DocumentTextExtractionBackgroundJob, ContractDocumentHandler — at minimum.");
+            "DocumentClassificationWorkflow, DocumentTextExtractionBackgroundJob, " +
+            "ContractDocumentHandler — at minimum.");
 
         var orphans = consumers
             .Where(c => !HostRegisteredKeys.Contains(c.Key))

@@ -9,8 +9,7 @@ namespace Dignite.Paperbase.Tests.Vectors;
 // Test double for DocumentChunkCollectionProvider that hands out a shared
 // FakeDocumentChunkCollection instance. Wired into ChatAppServiceTestModule so
 // every consumer (DocumentEmbeddingBackgroundJob, DocumentDeletingEventHandler,
-// SemanticRelationDiscoveryService, DocumentTextSearchAdapter) reads / writes
-// the same in-memory store.
+// DocumentTextSearchAdapter) reads / writes the same in-memory store.
 public sealed class FakeDocumentChunkCollectionProvider : DocumentChunkCollectionProvider
 {
     private readonly FakeDocumentChunkCollection _collection;

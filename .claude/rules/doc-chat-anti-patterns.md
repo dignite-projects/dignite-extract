@@ -116,7 +116,7 @@ public virtual async Task<ChatTurnResultDto> SendMessageAsync(Guid conversationI
 ```
 
 **参照实现**：
-`core/src/Dignite.Paperbase.Application/Documents/Chat/ChatAppService.cs`
+`core/src/Dignite.Paperbase.Application/Chat/ChatAppService.cs`
 
 ---
 
