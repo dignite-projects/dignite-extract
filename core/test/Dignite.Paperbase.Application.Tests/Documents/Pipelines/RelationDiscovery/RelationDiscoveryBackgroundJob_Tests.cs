@@ -1,20 +1,14 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using Dignite.Paperbase.Ai;
 using Dignite.Paperbase.Documents;
 using Dignite.Paperbase.Documents.Pipelines;
 using Dignite.Paperbase.Documents.Pipelines.RelationDiscovery;
-using Dignite.Paperbase.Vectors;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 using Shouldly;
-using Volo.Abp.MultiTenancy;
 using Volo.Abp.Modularity;
 using Xunit;
 
@@ -25,44 +19,18 @@ public class RelationDiscoveryBackgroundJobTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        // R1 decoupling fix verification: tests in this class exercise the wired-up
-        // L2→L3 flow assuming L3 is enabled. Override the production default (false).
-        // The "disabled" path is covered by SemanticRelationDiscoveryService_Tests directly.
-        Configure<PaperbaseAIBehaviorOptions>(opts =>
-        {
-            opts.EnableSemanticRelationDiscovery = true;
-        });
-
         context.Services.AddSingleton(Substitute.For<IDocumentRepository>());
         context.Services.AddSingleton(Substitute.For<IDocumentRelationRepository>());
 
         // Replace RelationDiscoveryService entirely — this test only verifies the JOB's
         // PipelineRun lifecycle wiring, not the discovery logic (covered separately by
         // RelationDiscoveryService_Tests).
-        // Issue #121: L2 ctor now takes IDocumentRepository instead of ICurrentTenant.
         context.Services.AddSingleton(Substitute.For<RelationDiscoveryService>(
             Array.Empty<IDocumentIdentifierProvider>(),
             Array.Empty<IDocumentEntitySignatureProvider>(),
             Substitute.For<IDocumentRelationRepository>(),
             Substitute.For<IDocumentRepository>(),
             new RelationDiscoveryTelemetryRecorder(NullLogger<RelationDiscoveryTelemetryRecorder>.Instance)));
-
-        // Same treatment for L3 — substitute so this test stays focused on the job's lifecycle
-        // and L2 → L3 fallback chaining; L3's own logic is covered by SemanticRelationDiscoveryService_Tests.
-        // L3 ctor takes DocumentChunkCollectionProvider since PR-4; pass a fake provider
-        // wired to a no-op fake collection so the substitute can be constructed.
-        var fakeCollection = new Dignite.Paperbase.Tests.Vectors.FakeDocumentChunkCollection();
-        var fakeProvider = new Dignite.Paperbase.Tests.Vectors.FakeDocumentChunkCollectionProvider(fakeCollection);
-        context.Services.AddSingleton(Substitute.For<SemanticRelationDiscoveryService>(
-            Substitute.For<IDocumentRepository>(),
-            Substitute.For<IDocumentRelationRepository>(),
-            fakeProvider,
-            Substitute.For<IEmbeddingGenerator<string, Embedding<float>>>(),
-            Substitute.For<RelationInferenceAgent>(
-                Substitute.For<IChatClient>(),
-                Options.Create(new PaperbaseAIBehaviorOptions())),
-            new RelationDiscoveryTelemetryRecorder(NullLogger<RelationDiscoveryTelemetryRecorder>.Instance),
-            Options.Create(new PaperbaseAIBehaviorOptions())));
     }
 }
 
@@ -77,20 +45,12 @@ public class RelationDiscoveryBackgroundJob_Tests
     private readonly RelationDiscoveryBackgroundJob _job;
     private readonly IDocumentRepository _documentRepository;
     private readonly RelationDiscoveryService _discoveryService;
-    private readonly SemanticRelationDiscoveryService _semanticDiscoveryService;
 
     public RelationDiscoveryBackgroundJob_Tests()
     {
         _job = GetRequiredService<RelationDiscoveryBackgroundJob>();
         _documentRepository = GetRequiredService<IDocumentRepository>();
         _discoveryService = GetRequiredService<RelationDiscoveryService>();
-        _semanticDiscoveryService = GetRequiredService<SemanticRelationDiscoveryService>();
-
-        // Default: L3 fallback returns empty outcome (most lifecycle tests don't care about L3 results).
-        // Tests exercising the fallback path override this explicitly.
-        _semanticDiscoveryService
-            .DiscoverAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(SemanticDiscoveryOutcome.Empty);
     }
 
     [Fact]
@@ -142,73 +102,6 @@ public class RelationDiscoveryBackgroundJob_Tests
     }
 
     [Fact]
-    public async Task ExecuteAsync_Should_Fall_Back_To_L3_When_L2_Returns_Empty()
-    {
-        // L2 finds nothing → background job invokes L3. L3 returns one relation.
-        var doc = CreateDocument();
-        SetupDocumentRepository(doc);
-
-        _discoveryService
-            .DiscoverAsync(doc.Id, Arg.Any<CancellationToken>())
-            .Returns((IReadOnlyList<DocumentRelation>)new List<DocumentRelation>());
-
-        var l3Relation = new DocumentRelation(
-            Guid.NewGuid(), null,
-            sourceDocumentId: doc.Id,
-            targetDocumentId: Guid.NewGuid(),
-            description: "semantic match",
-            source: RelationSource.AiSuggested,
-            confidence: 0.85);
-
-        _semanticDiscoveryService
-            .DiscoverAsync(doc.Id, Arg.Any<CancellationToken>())
-            .Returns(new SemanticDiscoveryOutcome(
-                new List<DocumentRelation> { l3Relation },
-                CandidatesRecalled: 1,
-                CandidatesEvaluated: 1,
-                CircuitBroken: false));
-
-        await _job.ExecuteAsync(new RelationDiscoveryJobArgs { DocumentId = doc.Id });
-
-        await _semanticDiscoveryService.Received(1).DiscoverAsync(doc.Id, Arg.Any<CancellationToken>());
-        var run = doc.GetLatestRun(PaperbasePipelines.RelationDiscovery);
-        run.ShouldNotBeNull();
-        run.Status.ShouldBe(PipelineRunStatus.Succeeded);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_Should_Invoke_L3_Even_When_L2_Found_Relations()
-    {
-        // R1 decoupling fix: L2 and L3 cover non-overlapping relation kinds.
-        // L2 finding a structured match (same contract number) does NOT imply L3 has nothing
-        // to add — L3 looks for semantically-related documents WITHOUT shared identifiers
-        // (meeting notes referencing a contract, supplement agreements, etc.). The old
-        // "L2 hit → skip L3" gate systematically blinded the system to L3-only relations.
-        var doc = CreateDocument();
-        SetupDocumentRepository(doc);
-
-        var l2Relation = new DocumentRelation(
-            Guid.NewGuid(), null,
-            sourceDocumentId: doc.Id,
-            targetDocumentId: Guid.NewGuid(),
-            description: "structured match",
-            source: RelationSource.AiSuggested,
-            confidence: 0.95);
-
-        _discoveryService
-            .DiscoverAsync(doc.Id, Arg.Any<CancellationToken>())
-            .Returns((IReadOnlyList<DocumentRelation>)new List<DocumentRelation> { l2Relation });
-
-        await _job.ExecuteAsync(new RelationDiscoveryJobArgs { DocumentId = doc.Id });
-
-        // L3 MUST be invoked. Duplicate-pair filtering is the responsibility of
-        // SemanticRelationDiscoveryService.GetAlreadyLinkedAsync (excludes any document
-        // already linked to source by ANY DocumentRelation, including L2's fresh rows).
-        await _semanticDiscoveryService.Received(1).DiscoverAsync(
-            doc.Id, Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task ExecuteAsync_Should_Reuse_Pending_Run_When_PipelineRunId_Provided()
     {
         // The scheduler creates a Pending run before enqueue and passes its id in args.
@@ -245,10 +138,11 @@ public class RelationDiscoveryBackgroundJob_Tests
     private static Document CreateDocument()
     {
         return new Document(
-            Guid.NewGuid(), tenantId: null,
-            $"blobs/{Guid.NewGuid():N}.pdf",
-            SourceType.Digital,
-            new FileOrigin(
+            Guid.NewGuid(),
+            tenantId: null,
+            originalFileBlobName: "blobs/test.pdf",
+            sourceType: SourceType.Digital,
+            fileOrigin: new FileOrigin(
                 uploadedByUserName: "test-user",
                 contentType: "application/pdf",
                 contentHash: $"{Guid.NewGuid():N}{Guid.NewGuid():N}",

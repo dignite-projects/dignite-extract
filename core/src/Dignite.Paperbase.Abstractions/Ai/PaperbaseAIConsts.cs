@@ -36,9 +36,8 @@ public static class PaperbaseAIConsts
     /// <summary>
     /// DI key for the structured-output <see cref="Microsoft.Extensions.AI.IChatClient"/>
     /// shared by all single-shot, tool-free, prompt-unique <c>RunAsync&lt;T&gt;</c> call
-    /// sites: <c>DocumentClassificationWorkflow</c>, <c>DocumentRerankWorkflow</c>,
-    /// <c>RelationInferenceAgent</c>, and business-module field extractors like
-    /// <c>ContractDocumentHandler.ExtractFieldsAsync</c>.
+    /// sites: <c>DocumentClassificationWorkflow</c>, <c>DocumentRerankWorkflow</c>, and
+    /// business-module field extractors like <c>ContractDocumentHandler.ExtractFieldsAsync</c>.
     ///
     /// <para>
     /// Same shape as the summarizer + title-generator clients (no FunctionInvocation,

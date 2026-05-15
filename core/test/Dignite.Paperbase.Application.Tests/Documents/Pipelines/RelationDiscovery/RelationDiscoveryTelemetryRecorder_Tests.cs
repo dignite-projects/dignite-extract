@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
-using System.Linq;
 using Dignite.Paperbase.Documents;
 using Dignite.Paperbase.Documents.Pipelines.RelationDiscovery;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -28,7 +27,7 @@ public class RelationDiscoveryTelemetryRecorder_Tests
         {
             DocumentId = Guid.NewGuid(),
             Result = RelationDiscoveryRunResult.Succeeded,
-            L2CreatedCount = 0,
+            CreatedCount = 0,
             TotalDurationMs = 12.5
         });
 
@@ -38,15 +37,15 @@ public class RelationDiscoveryTelemetryRecorder_Tests
     }
 
     [Fact]
-    public void RecordRun_Should_Record_L2_Created_Histogram_When_Set()
+    public void RecordRun_Should_Record_Created_Histogram_When_Set()
     {
-        using var capture = new MeterCapture("paperbase.relation_discovery.l2.created");
+        using var capture = new MeterCapture("paperbase.relation_discovery.created");
 
         _recorder.RecordRun(new RelationDiscoveryRunMetrics
         {
             DocumentId = Guid.NewGuid(),
             Result = RelationDiscoveryRunResult.Succeeded,
-            L2CreatedCount = 3
+            CreatedCount = 3
         });
 
         capture.Measurements.Count.ShouldBe(1);
@@ -54,46 +53,7 @@ public class RelationDiscoveryTelemetryRecorder_Tests
     }
 
     [Fact]
-    public void RecordRun_Should_Skip_L3_Histogram_When_L3_Not_Invoked()
-    {
-        using var l3InvokedCapture = new MeterCapture("paperbase.relation_discovery.l3.invoked");
-        using var l3CreatedCapture = new MeterCapture("paperbase.relation_discovery.l3.created");
-
-        _recorder.RecordRun(new RelationDiscoveryRunMetrics
-        {
-            DocumentId = Guid.NewGuid(),
-            Result = RelationDiscoveryRunResult.Succeeded,
-            L2CreatedCount = 1,
-            L3Invoked = false
-        });
-
-        l3InvokedCapture.Measurements.ShouldBeEmpty();
-        l3CreatedCapture.Measurements.ShouldBeEmpty();
-    }
-
-    [Fact]
-    public void RecordRun_Should_Emit_L3_Counter_And_Histogram_When_L3_Invoked()
-    {
-        using var l3InvokedCapture = new MeterCapture("paperbase.relation_discovery.l3.invoked");
-        using var l3CreatedCapture = new MeterCapture("paperbase.relation_discovery.l3.created");
-
-        _recorder.RecordRun(new RelationDiscoveryRunMetrics
-        {
-            DocumentId = Guid.NewGuid(),
-            Result = RelationDiscoveryRunResult.Succeeded,
-            L2CreatedCount = 0,
-            L3Invoked = true,
-            L3CreatedCount = 2
-        });
-
-        l3InvokedCapture.Measurements.Count.ShouldBe(1);
-        l3InvokedCapture.Measurements[0].Value.ShouldBe(1L);
-        l3CreatedCapture.Measurements.Count.ShouldBe(1);
-        l3CreatedCapture.Measurements[0].Value.ShouldBe(2L);
-    }
-
-    [Fact]
-    public void RecordRun_Should_Emit_Duration_Histogram_With_Layer_Tags()
+    public void RecordRun_Should_Emit_Duration_Histogram_With_Phase_Tags()
     {
         using var capture = new MeterCapture("paperbase.relation_discovery.duration");
 
@@ -101,76 +61,70 @@ public class RelationDiscoveryTelemetryRecorder_Tests
         {
             DocumentId = Guid.NewGuid(),
             Result = RelationDiscoveryRunResult.Succeeded,
-            L2DurationMs = 5.0,
-            L3DurationMs = 1500.0,
+            DiscoveryDurationMs = 5.0,
             TotalDurationMs = 1505.0,
-            L3Invoked = true
         });
 
-        capture.Measurements.Count.ShouldBe(3);
-        capture.Measurements.ShouldContain(m => (string)m.Tags["layer"] == "l2" && Math.Abs(m.ValueAsDouble - 5.0) < 0.01);
-        capture.Measurements.ShouldContain(m => (string)m.Tags["layer"] == "l3" && Math.Abs(m.ValueAsDouble - 1500.0) < 0.01);
-        capture.Measurements.ShouldContain(m => (string)m.Tags["layer"] == "total" && Math.Abs(m.ValueAsDouble - 1505.0) < 0.01);
+        capture.Measurements.Count.ShouldBe(2);
+        capture.Measurements.ShouldContain(m => (string)m.Tags["phase"] == "discovery" && Math.Abs(m.ValueAsDouble - 5.0) < 0.01);
+        capture.Measurements.ShouldContain(m => (string)m.Tags["phase"] == "total" && Math.Abs(m.ValueAsDouble - 1505.0) < 0.01);
     }
 
     [Fact]
-    public void RecordL3LlmCall_Should_Tag_With_Result()
-    {
-        using var capture = new MeterCapture("paperbase.relation_discovery.l3.llm_calls");
-
-        _recorder.RecordL3LlmCall(RelationDiscoveryL3CallResult.Confirmed);
-        _recorder.RecordL3LlmCall(RelationDiscoveryL3CallResult.Rejected);
-        _recorder.RecordL3LlmCall(RelationDiscoveryL3CallResult.Error);
-
-        capture.Measurements.Count.ShouldBe(3);
-        capture.Measurements.Select(m => (string)m.Tags["result"])
-            .ShouldBe(new[] { "Confirmed", "Rejected", "Error" });
-    }
-
-    [Theory]
-    [InlineData(null, "(none)")]
-    [InlineData(0.5, "<0.7")]
-    [InlineData(0.7, "0.7-0.8")]
-    [InlineData(0.79, "0.7-0.8")]
-    [InlineData(0.8, "0.8-0.9")]
-    [InlineData(0.89, "0.8-0.9")]
-    [InlineData(0.9, "0.9+")]
-    [InlineData(0.95, "0.9+")]
-    [InlineData(1.0, "0.9+")]
-    public void RecordSuggestionConfirmed_Should_Bucket_Confidence(double? confidence, string expectedBucket)
+    public void RecordSuggestionConfirmed_Should_Tag_Source()
     {
         using var capture = new MeterCapture("paperbase.relation.suggestion.confirmed");
 
-        _recorder.RecordSuggestionConfirmed(RelationSource.AiSuggested, confidence);
+        _recorder.RecordSuggestionConfirmed(RelationSource.AiSuggested);
 
         capture.Measurements.Count.ShouldBe(1);
-        capture.Measurements[0].Tags["confidence_bucket"].ShouldBe(expectedBucket);
         capture.Measurements[0].Tags["source"].ShouldBe("AiSuggested");
     }
 
     [Fact]
-    public void RecordSuggestionRejected_Should_Tag_Source_And_Confidence_Bucket()
+    public void RecordSuggestionRejected_Should_Tag_Source()
     {
         using var capture = new MeterCapture("paperbase.relation.suggestion.rejected");
 
-        _recorder.RecordSuggestionRejected(RelationSource.AiSuggested, 0.85);
+        _recorder.RecordSuggestionRejected(RelationSource.AiSuggested);
 
         capture.Measurements.Count.ShouldBe(1);
         capture.Measurements[0].Tags["source"].ShouldBe("AiSuggested");
-        capture.Measurements[0].Tags["confidence_bucket"].ShouldBe("0.8-0.9");
     }
 
     [Fact]
-    public void RecordSuggestionConfirmed_Should_Handle_Null_Confidence_For_Manual_Source()
+    public void RecordIdentifiersByProvider_Should_Tag_Provider()
     {
-        // Manual relations carry null Confidence by domain invariant. Recorder must accept this.
-        using var capture = new MeterCapture("paperbase.relation.suggestion.confirmed");
+        using var capture = new MeterCapture("paperbase.relation_discovery.identifiers_by_provider");
 
-        _recorder.RecordSuggestionConfirmed(RelationSource.Manual, confidence: null);
+        _recorder.RecordIdentifiersByProvider("ContractIdentifierProvider", 3);
 
         capture.Measurements.Count.ShouldBe(1);
-        capture.Measurements[0].Tags["source"].ShouldBe("Manual");
-        capture.Measurements[0].Tags["confidence_bucket"].ShouldBe("(none)");
+        capture.Measurements[0].Value.ShouldBe(3L);
+        capture.Measurements[0].Tags["provider"].ShouldBe("ContractIdentifierProvider");
+    }
+
+    [Fact]
+    public void RecordOrphanDocument_Should_Increment_Counter()
+    {
+        using var capture = new MeterCapture("paperbase.relation_discovery.orphan_documents");
+
+        _recorder.RecordOrphanDocument();
+
+        capture.Measurements.Count.ShouldBe(1);
+        capture.Measurements[0].Value.ShouldBe(1L);
+    }
+
+    [Fact]
+    public void RecordHighAmbiguityIdentifier_Should_Tag_Type()
+    {
+        using var capture = new MeterCapture("paperbase.relation_discovery.high_ambiguity_identifiers");
+
+        _recorder.RecordHighAmbiguityIdentifier("ContractNumber", "HT2024001", peerCount: 42);
+
+        capture.Measurements.Count.ShouldBe(1);
+        capture.Measurements[0].Value.ShouldBe(1L);
+        capture.Measurements[0].Tags["type"].ShouldBe("ContractNumber");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

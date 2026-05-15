@@ -22,7 +22,6 @@ tools: Read, Grep, Glob, Bash
 
 - `core/src/Dignite.Paperbase.Application/Documents/Pipelines/Classification/DocumentClassificationWorkflow.cs`（分类，结构化输出）
 - `core/src/Dignite.Paperbase.Application/Documents/Pipelines/Embedding/DocumentEmbeddingWorkflow.cs`（向量化，无 LLM）
-- `core/src/Dignite.Paperbase.Application/Documents/Pipelines/RelationDiscovery/RelationInferenceAgent.cs`（L3 关系推断 LLM agent，结构化输出）
 - `core/src/Dignite.Paperbase.Application/Chat/Search/DocumentRerankWorkflow.cs`（Chat 检索精排，结构化输出 + 优雅降级，重点见 § 2.11）
 - `core/src/Dignite.Paperbase.Application/Chat/ChatAppService.cs`（在线 Chat 路径，重点见 § 2.10）
 - `core/src/Dignite.Paperbase.Application/Chat/Search/DocumentTextSearchAdapter.cs`（Chat 检索桥接）
@@ -54,16 +53,11 @@ tools: Read, Grep, Glob, Bash
   - 当前所有四个 workflow 都没做这件事——是已知的 🔴 项
 - 🟡 **system prompt 与 user prompt 的语言不一致**——
   - `DocumentClassificationWorkflow.SystemInstructions` 是英文，user prompt 末尾追加 `Respond in: {{_options.DefaultLanguage}}`（默认 `ja`）
-  - `RelationInferenceAgent.SystemInstructions` 是**写死的中文**，不使用 `DefaultLanguage`
   - `DefaultPromptProvider.GetQaPrompt`（被 `ChatAppService` 装入 system instructions）是英文，但说"Answer in the same language as the question"
 
-  这种不一致会导致：
-  - 关系推断永远输出中文，不管租户语言
-  - 切换 `DefaultLanguage` 时部分 workflow 不跟随
-  - 审查时如果发现 prompt 改动，要标注语言策略是否一致
+  审查时如果发现 prompt 改动，要标注语言策略是否一致；不一致的 workflow 切换 `DefaultLanguage` 时不会跟随。
 
 - 🟡 **system prompt 写死为 `const string`**——既不能 i18n，也不能在不同租户/客户场景下覆盖。建议长期方案：通过 `PaperbaseAIBehaviorOptions` 或专门的 `IPromptProvider` 注入；短期至少抽出到 `ResX`/JSON 中。
-- 🟡 **示例（few-shot）写死在 prompt 里**——`RelationInferenceAgent` 的示例（"补充了主合同第 3 条…"）是中文合同语境的，对其他文档类型（发票、证照）不适用。要么按 typeCode 分组提供示例，要么交给业务模块自己提供。
 
 ### 2.3 文本截断
 
@@ -71,16 +65,16 @@ tools: Read, Grep, Glob, Bash
   - 切到中间会破坏语义（句子被截断）
   - 与 chunking workflow 的 `ChunkSize=800` + `ChunkOverlap=100` 不一致，互不感知
   - **关键风险**：如果合同/发票的关键字段恰好在 8000 字之后，分类/字段提取会静默漏掉。建议至少 log warning。
-- 🟡 **截断后没有给模型信号**——`DocumentClassificationWorkflow` 与 `RelationInferenceAgent` 直接切，模型不知道后面被砍了；如果将来再引入需要把整篇文本喂入 prompt 的路径，记得加 `[... document truncated ...]` 类提示。
+- 🟡 **截断后没有给模型信号**——`DocumentClassificationWorkflow` 直接切，模型不知道后面被砍了；如果将来再引入需要把整篇文本喂入 prompt 的路径，记得加 `[... document truncated ...]` 类提示。
 
 ### 2.4 错误与降级路径
 
 - 🔴 **Workflow 抛异常时聚合根状态不一致**——所有 Workflow 都不 try/catch，异常会冒泡到 BackgroundJob。审查时要检查：
   - BackgroundJob 是否捕获并把对应 PipelineRun 标为 Failed
   - 失败是否触发 `Document.RequestClassificationReview`（分类 workflow）等降级路径
-  - 部分成功（比如关系推断返回了 5 条但其中 2 条 GUID parse 失败）是否被识别和上报
+  - 部分成功（多项输出中只有部分能解析）是否被识别和上报
 - 🟡 **关键值非常规范围未拒绝**——`Confidence` 字段没有 `Check.Range(0, 1)`。如果 LLM 返回 `1.5` 或 `-0.3`，会原样写入 `Document.ClassificationConfidence`，破坏不变量（Document 构造时是 0..1 的 `Check.Range`，但 workflow 输出绕过了它）。
-- 🟡 **`response.Result` 为 null 时的兜底**——`DocumentClassificationWorkflow` 返回 `null` typeCode + 0 confidence，会触发 `RequestClassificationReview`，OK；但 `RelationInferenceAgent` 返回 `[]`，悄无声息。审查时确认这种"全失败"情形上游是否有可观测性。
+- 🟡 **`response.Result` 为 null 时的兜底**——`DocumentClassificationWorkflow` 返回 `null` typeCode + 0 confidence，会触发 `RequestClassificationReview`，OK；但其他 workflow 静默兜底（返回空集合 / 默认值）时审查要确认上游有可观测性，不要让"全失败"无声无息。
 
 ### 2.5 不变量与边界
 
@@ -90,7 +84,7 @@ tools: Read, Grep, Glob, Bash
 ### 2.6 成本与缓存
 
 - 🟡 **未使用 prompt caching**——四个 workflow 的 system prompt 都是稳定字符串，user prompt 每次只在末尾不同（候选类型清单 + 文本）。这是 prompt caching 的典型场景。当前 `ChatClientAgent` 构造时没有传 cache 配置；Microsoft.Extensions.AI / OpenAI provider 是否支持需要查 SDK，但**至少应该在审查报告里点出"这是可优化的成本点"**。
-- 🟡 **未配置 `effort` / `thinking` 等参数**——分类、关系推断这种结构化任务，模型默认 effort 可能过高（带来 latency 和成本）。审查时建议根据任务难度评估：分类任务大概率应当 `low`/`medium`，复杂关系推断可能 `high`。
+- 🟡 **未配置 `effort` / `thinking` 等参数**——分类这种结构化任务，模型默认 effort 可能过高（带来 latency 和成本）。审查时建议根据任务难度评估：分类任务大概率应当 `low`/`medium`。
 - 🟡 **截断阈值与模型上下文窗口不匹配**——`MaxTextLengthPerExtraction = 8000` 字符对应大致 ~3-6K tokens（CJK），现代模型轻松支撑 200K+ context。这个阈值是出于成本考虑还是历史包袱？审查时建议评估是否可以放宽。
 
 ### 2.7 ChatClientAgent 生命周期
@@ -100,7 +94,7 @@ tools: Read, Grep, Glob, Bash
 
 ### 2.8 可观测性
 
-- 🟡 **缺少 `Logger`**——`DocumentClassificationWorkflow` 没有注入 logger。`RelationInferenceAgent` 注入了但代码里没看到使用。审查时建议至少 log：
+- 🟡 **缺少 `Logger`**——`DocumentClassificationWorkflow` 没有注入 logger。审查时建议至少 log：
   - 输入候选数 / 输入文本长度
   - LLM 响应 confidence 分布（用于离线分析模型漂移）
   - 解析失败/范围越界的次数

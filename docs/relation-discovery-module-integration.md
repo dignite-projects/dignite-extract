@@ -9,7 +9,7 @@ This page is the integration contract. It covers what the core layer guarantees,
 what your module must guarantee, and how cross-module interoperability works **without**
 any central vocabulary maintained by the core.
 
-For operators (how to enable L3, read telemetry, tune thresholds) see
+For operators (how to read telemetry, tune trigger delay) see
 [relation-discovery.md](relation-discovery.md). For the high-level architecture
 rationale see Issue #115.
 
@@ -20,10 +20,8 @@ rationale see Issue #115.
 Your module's typed records (e.g. `Contract`, `Invoice`) become **first-class participants**
 in the relation graph:
 
-- L2 (structured) RelationDiscovery automatically connects documents that share an
-  identifier value emitted by your provider.
-- L3 (semantic) RelationDiscovery doesn't need anything from you; it operates on
-  `Document.Markdown` directly.
+- RelationDiscovery automatically connects documents that share an identifier value or
+  multi-field signature emitted by your provider.
 - Manual relations a user draws in the UI go through the same `DocumentRelation`
   aggregate.
 - Chat agent's `search_paperbase_documents` and `get_document_relations` tools surface

@@ -8,7 +8,7 @@ This page covers what hosts need to configure to run vector search in production
 
 Earlier iterations of Paperbase shipped a project-owned `Dignite.Paperbase.KnowledgeIndex` interface plus a Qdrant provider. That layer was deleted once MEVD's `VectorStore` / `VectorStoreCollection<TKey,TRecord>` reached GA — there's no reason to maintain a parallel abstraction over Microsoft's official building block.
 
-Consumers (`DocumentEmbeddingBackgroundJob`, `DocumentTextSearchAdapter`, `SemanticRelationDiscoveryService`, `DocumentDeletingEventHandler`) talk directly to `VectorStoreCollection<Guid, DocumentChunkRecord>` via `DocumentChunkCollectionProvider`. Swapping Qdrant for another MEVD-supported backend (Azure AI Search, Postgres+pgvector, SQL Server, Cosmos DB, Redis, etc.) is a host-level package swap with no Application changes.
+Consumers (`DocumentEmbeddingBackgroundJob`, `DocumentTextSearchAdapter`, `DocumentDeletingEventHandler`) talk directly to `VectorStoreCollection<Guid, DocumentChunkRecord>` via `DocumentChunkCollectionProvider`. Swapping Qdrant for another MEVD-supported backend (Azure AI Search, Postgres+pgvector, SQL Server, Cosmos DB, Redis, etc.) is a host-level package swap with no Application changes.
 
 ## Configuration
 
@@ -106,5 +106,4 @@ Before adding any enhancement, build a small query/expected-result benchmark cor
 
 - [Embedding pipeline](embedding.md) — what writes into the vector store
 - [Document chat](chat.md) — primary reader
-- [Relation discovery](relation-discovery.md) — L3 semantic relation discovery also queries the vector store
 - [Microsoft.Extensions.VectorData overview](https://learn.microsoft.com/dotnet/ai/vector-stores/overview) — upstream abstraction

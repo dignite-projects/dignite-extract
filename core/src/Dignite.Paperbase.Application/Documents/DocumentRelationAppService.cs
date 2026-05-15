@@ -129,13 +129,13 @@ public class DocumentRelationAppService : PaperbaseAppService, IDocumentRelation
     [Authorize(PaperbasePermissions.DocumentRelations.Delete)]
     public virtual async Task DeleteAsync(Guid id)
     {
-        // Issue #123: capture pre-delete source/confidence so the funnel metric reflects the
-        // ORIGINAL relation kind (a deleted AiSuggested = "user rejected the suggestion";
-        // a deleted Manual = "user undid their own confirmation" — different signals).
+        // Issue #123: capture pre-delete source so the funnel metric reflects the ORIGINAL
+        // relation kind (a deleted AiSuggested = "user rejected the suggestion"; a deleted
+        // Manual = "user undid their own confirmation" — different signals).
         //
         // R2 dismissal tombstone: DocumentRelation is FullAuditedAggregateRoot which implements
         // ISoftDelete — DeleteAsync sets IsDeleted=true rather than physically removing the row.
-        // L2/L3 RelationDiscovery's GetLinkedPeerDocumentIdsAsync(includeDismissed: true) reads
+        // RelationDiscoveryService.GetLinkedPeerDocumentIdsAsync(includeDismissed: true) reads
         // dismissed rows back so the same pair never gets re-suggested. User-facing queries
         // (GetListAsync, GetGraphAsync) honor the ambient soft-delete filter and exclude them.
         var existing = await _relationRepository.FindAsync(id);
@@ -143,7 +143,7 @@ public class DocumentRelationAppService : PaperbaseAppService, IDocumentRelation
 
         if (existing != null)
         {
-            _telemetry.RecordSuggestionRejected(existing.Source, existing.Confidence);
+            _telemetry.RecordSuggestionRejected(existing.Source);
         }
     }
 
@@ -151,15 +151,14 @@ public class DocumentRelationAppService : PaperbaseAppService, IDocumentRelation
     public virtual async Task<DocumentRelationDto> ConfirmAsync(Guid id)
     {
         var relation = await _relationRepository.GetAsync(id);
-        // Issue #123: capture pre-confirm source/confidence; relation.Confirm() flips both fields
-        // (Source → Manual, Confidence → null), so the metric needs to be tagged BEFORE the flip.
+        // Capture pre-confirm source; relation.Confirm() flips it to Manual, so the metric
+        // needs to be tagged BEFORE the flip.
         var originalSource = relation.Source;
-        var originalConfidence = relation.Confidence;
 
         relation.Confirm();
         await _relationRepository.UpdateAsync(relation);
 
-        _telemetry.RecordSuggestionConfirmed(originalSource, originalConfidence);
+        _telemetry.RecordSuggestionConfirmed(originalSource);
         return ObjectMapper.Map<DocumentRelation, DocumentRelationDto>(relation);
     }
 

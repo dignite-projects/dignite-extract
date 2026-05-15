@@ -128,47 +128,4 @@ public class PaperbaseAIBehaviorOptions
     /// </para>
     /// </summary>
     public int RelationDiscoveryDelaySeconds { get; set; } = 30;
-
-    /// <summary>
-    /// Issue #115 L3: 启用基于"向量召回 + LLM 评判"的语义关系发现作为 L2 兜底。
-    /// 默认 <c>false</c>——LLM 调用按文档数线性增长，操作员需明确开启并自行控制成本。
-    /// 关闭时 L2 找不到关系的文档保持无 AiSuggested 状态，等待用户手动建立。
-    /// </summary>
-    public bool EnableSemanticRelationDiscovery { get; set; } = false;
-
-    /// <summary>
-    /// L3 向量召回 top-K——LLM 评判前的候选数量上限。
-    /// 越大召回越宽，但 LLM 调用成本线性增长。建议 5–10。
-    /// </summary>
-    public int SemanticRelationDiscoveryTopK { get; set; } = 5;
-
-    /// <summary>
-    /// L3 向量召回最低分数。低于此分数的候选直接淘汰，不送 LLM。
-    /// 高于普通 chat RAG 的 <see cref="ChatMinScore"/>——L3 只关心强语义匹配，弱匹配是噪音。
-    /// </summary>
-    public double SemanticRelationDiscoveryMinScore { get; set; } = 0.65;
-
-    /// <summary>
-    /// L3 LLM 评判的 confidence 下限。LLM 输出 <see cref="RelationInferenceResult.Confidence"/>
-    /// 低于此值的候选不创建 AiSuggested 关系。建议 0.7+。
-    /// </summary>
-    public double SemanticRelationDiscoveryConfidenceThreshold { get; set; } = 0.7;
-
-    /// <summary>
-    /// L3 单次 LLM 评判调用的硬超时（秒）。默认 20s——比 LLM provider 自身的默认 timeout
-    /// 短得多（OpenAI/Azure 默认通常 100s），避免单候选耗尽整个后台 worker 的可用时间。
-    ///
-    /// <para>
-    /// 配合 <see cref="SemanticRelationDiscoveryConsecutiveFailureCutoff"/>：连续 N 个候选
-    /// 超时/异常 → 视为 provider 不可用 → 跳过本文档剩余候选 → 让 PipelineRun 进 Failed
-    /// 而非把 Hangfire worker 堆在 L3 上拖垮其他 pipeline（classification / embedding 共享 worker pool）。
-    /// </para>
-    /// </summary>
-    public int SemanticRelationDiscoveryPerCallTimeoutSeconds { get; set; } = 20;
-
-    /// <summary>
-    /// L3 连续候选失败短路阈值。foreach 循环里连续 ≥N 个候选抛异常（含超时）即跳出，
-    /// 不再尝试本文档剩余候选。默认 2——单点抖动允许，连环故障即断电。
-    /// </summary>
-    public int SemanticRelationDiscoveryConsecutiveFailureCutoff { get; set; } = 2;
 }
