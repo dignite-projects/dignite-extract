@@ -48,6 +48,7 @@ Paperbase 采用**三层分离**的模块化架构：
   - **使用 MAF `ChatClientAgent` + 结构化输出**自实现领域专属的字段提取（不再有通用的 `IFieldExtractor` 抽象）
   - 持久化自己的领域聚合根，提供业务 API 和 UI
   - 在自己的聚合根上维护业务查询字段，**不得回写到 Document 聚合根**（判断依据：如果一个字段的含义只有在特定业务场景下才成立，它就不属于 `Document`）
+  - 聚合根上**必须**有 `public Guid DocumentId { get; private set; }` 字段（非可空），作为指向源文档的唯一关联键；**不引入** `IHasDocumentId` 等标记接口——当前无运行时多态需求，约束通过本文件 + 结构测试双重守护
 - **非耦合实现**：业务模块之间无依赖；业务模块与核心通过事件解耦通信
 - **业务记录是 Document 投影，无独立删除入口**：业务模块聚合根（如 `Contract`）的初始字段全部派生自 `Document.Markdown`，可以叠加**人工修正**（"人在回路"模式：Update API + `ReviewStatus.Corrected` 状态）。Document 仍是 truth source 的源头，业务记录是它的"派生 + 修正叠加"投影。因此：
   - 业务模块**不提供**自身的 `DeleteAsync` / `PermanentDeleteAsync` API，也**不在自己的 UI 上**暴露删除/恢复/彻底删除按钮
