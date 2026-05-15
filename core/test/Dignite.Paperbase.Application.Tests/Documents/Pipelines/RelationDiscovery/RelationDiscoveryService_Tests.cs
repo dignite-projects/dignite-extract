@@ -37,6 +37,11 @@ public class RelationDiscoveryServiceTestModule : AbpModule
         context.Services.AddSingleton<IDocumentIdentifierProvider>(sp => sp.GetRequiredService<FakeContractProvider>());
         context.Services.AddSingleton<IDocumentIdentifierProvider>(sp => sp.GetRequiredService<FakeInvoiceProvider>());
 
+        // 硬伤二 (L2 Phase 3): fake signature provider exercising multi-field entity-signature
+        // fan-out alongside the identifier path.
+        context.Services.AddSingleton<FakeSignatureProvider>();
+        context.Services.AddSingleton<IDocumentEntitySignatureProvider>(sp => sp.GetRequiredService<FakeSignatureProvider>());
+
         // 硬伤三 substitute — tests can verify which telemetry events L2 emitted (per-provider
         // contribution, orphan documents, high-ambiguity warnings).
         context.Services.AddSingleton(Substitute.For<RelationDiscoveryTelemetryRecorder>(
@@ -52,6 +57,7 @@ public class RelationDiscoveryService_Tests
     private readonly IDocumentRepository _documentRepository;
     private readonly FakeContractProvider _contractProvider;
     private readonly FakeInvoiceProvider _invoiceProvider;
+    private readonly FakeSignatureProvider _signatureProvider;
     private readonly RelationDiscoveryTelemetryRecorder _telemetry;
 
     public RelationDiscoveryService_Tests()
@@ -63,6 +69,7 @@ public class RelationDiscoveryService_Tests
         // through IEnumerable<IDocumentIdentifierProvider> by the service.
         _contractProvider = GetRequiredService<FakeContractProvider>();
         _invoiceProvider = GetRequiredService<FakeInvoiceProvider>();
+        _signatureProvider = GetRequiredService<FakeSignatureProvider>();
         _telemetry = GetRequiredService<RelationDiscoveryTelemetryRecorder>();
 
         // Default: any document id resolves to a tenantless Document. Tests that exercise
@@ -433,6 +440,112 @@ public class RelationDiscoveryService_Tests
     }
 
     [Fact]
+    public async Task DiscoverAsync_Should_Discover_Peer_Via_Entity_Signature()
+    {
+        // 硬伤二 (L2 Phase 3) end-to-end: source has no shared single identifier, but its
+        // multi-field signature matches a peer's. L2 must surface the relationship with the
+        // signature's inherent confidence (NOT the structural-match 0.95).
+        var sourceDocId = Guid.NewGuid();
+        var peerDocId = Guid.NewGuid();
+        SetupSource(sourceDocId);
+        // No identifiers — exercise pure signature path.
+
+        var signature = new DocumentEntitySignature(
+            FakeSignatureProvider.TestSignatureKind,
+            new Dictionary<string, string>
+            {
+                ["PartyA"] = "上海某某科技有限公司",
+                ["PartyB"] = "北京贝塔信息技术有限公司",
+                ["Year"] = "2024",
+            },
+            InherentConfidence: 0.80);
+        _signatureProvider.Signatures[sourceDocId] = new[] { signature };
+        _signatureProvider.Lookup[FakeSignatureProvider.FingerprintOf(signature)] = new[] { peerDocId };
+
+        _relationRepository.GetLinkedPeerDocumentIdsAsync(
+                sourceDocId, Arg.Any<Guid?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Guid>());
+
+        var created = await _service.DiscoverAsync(sourceDocId);
+
+        var relation = created.ShouldHaveSingleItem();
+        relation.TargetDocumentId.ShouldBe(peerDocId);
+        relation.Source.ShouldBe(RelationSource.AiSuggested);
+        relation.Confidence.ShouldBe(0.80);                              // signature's inherent confidence
+        relation.Description.ShouldContain("Test.Signature");
+        relation.Description.ShouldContain("PartyA=上海某某科技有限公司");
+        relation.Description.ShouldContain("Year=2024");
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_Identifier_Match_Wins_Over_Signature_Match_When_Same_Peer()
+    {
+        // 硬伤二 dedup contract: if a peer is found via BOTH identifier and signature paths
+        // (deterministic and statistical evidence), the identifier path's higher-confidence
+        // relation is what gets persisted — single source of truth per (source, peer) pair.
+        var sourceDocId = Guid.NewGuid();
+        var peerDocId = Guid.NewGuid();
+        SetupSource(sourceDocId);
+
+        _contractProvider.Identifiers[sourceDocId] = new[]
+        {
+            new DocumentIdentifierEntry(DocumentIdentifierTypes.ContractNumber, "HT-2024-009"),
+        };
+        _invoiceProvider.Lookup[(DocumentIdentifierTypes.ContractNumber, "HT-2024-009")] = new[] { peerDocId };
+
+        // Same peer also matches a signature.
+        var signature = new DocumentEntitySignature(
+            FakeSignatureProvider.TestSignatureKind,
+            new Dictionary<string, string> { ["X"] = "y" },
+            InherentConfidence: 0.70);
+        _signatureProvider.Signatures[sourceDocId] = new[] { signature };
+        _signatureProvider.Lookup[FakeSignatureProvider.FingerprintOf(signature)] = new[] { peerDocId };
+
+        _relationRepository.GetLinkedPeerDocumentIdsAsync(
+                sourceDocId, Arg.Any<Guid?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Guid>());
+
+        var created = await _service.DiscoverAsync(sourceDocId);
+
+        var relation = created.ShouldHaveSingleItem();
+        // Confidence is the IDENTIFIER path's 0.95 — not the signature's 0.70.
+        relation.Confidence.ShouldBe(RelationDiscoveryService.StructuralMatchConfidence);
+        relation.Description.ShouldContain("Identifier match");
+        relation.Description.ShouldNotContain("Entity signature");
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_Should_Record_Orphan_When_Neither_Identifiers_Nor_Signatures()
+    {
+        // 硬伤二 + 硬伤三 interaction: a source with no identifiers AND no signatures is the
+        // true "orphan" — operators see this on the orphan metric. A source with signatures
+        // but no identifiers is NOT an orphan (it owns its semantic record).
+        var sourceDocId = Guid.NewGuid();
+        SetupSource(sourceDocId);
+        // No identifiers, no signatures.
+
+        await _service.DiscoverAsync(sourceDocId);
+
+        _telemetry.Received(1).RecordOrphanDocument();
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_Should_Not_Record_Orphan_When_Only_Signatures_Present()
+    {
+        var sourceDocId = Guid.NewGuid();
+        SetupSource(sourceDocId);
+        _signatureProvider.Signatures[sourceDocId] = new[]
+        {
+            new DocumentEntitySignature(FakeSignatureProvider.TestSignatureKind,
+                new Dictionary<string, string> { ["X"] = "y" }, 0.8),
+        };
+
+        await _service.DiscoverAsync(sourceDocId);
+
+        _telemetry.DidNotReceive().RecordOrphanDocument();
+    }
+
+    [Fact]
     public async Task DiscoverAsync_Should_Flag_High_Ambiguity_Identifier_When_Many_Peers_Match()
     {
         // 硬伤三 regression guard: an identifier that matches more than HighAmbiguityPeerThreshold
@@ -476,6 +589,44 @@ public class RelationDiscoveryService_Tests
 }
 
 // ─── Test doubles ──────────────────────────────────────────────────────────────
+
+/// <summary>
+/// 硬伤二 (L2 Phase 3) test double: a signature provider that L2 fan-outs alongside the
+/// single-field identifier providers. Tests register expected signatures via
+/// <see cref="Signatures"/> and expected lookup hits via <see cref="Lookup"/>.
+/// </summary>
+internal sealed class FakeSignatureProvider : IDocumentEntitySignatureProvider
+{
+    public const string TestSignatureKind = "Test.Signature";
+
+    public IReadOnlyCollection<string> SupportedSignatureKinds { get; } = new[] { TestSignatureKind };
+
+    public Dictionary<Guid, IReadOnlyList<DocumentEntitySignature>> Signatures { get; } = new();
+
+    /// <summary>
+    /// Maps a "fields fingerprint" (canonical ordered string of key=value pairs) → peer doc ids.
+    /// Tests use <see cref="FingerprintOf"/> to compute the key consistently.
+    /// </summary>
+    public Dictionary<string, IReadOnlyList<Guid>> Lookup { get; } = new();
+
+    public List<DocumentEntitySignature> FindCalls { get; } = new();
+
+    public Task<IReadOnlyList<DocumentEntitySignature>> GetSignaturesAsync(Guid documentId, CancellationToken cancellationToken = default)
+        => Task.FromResult(Signatures.TryGetValue(documentId, out var v) ? v : (IReadOnlyList<DocumentEntitySignature>)Array.Empty<DocumentEntitySignature>());
+
+    public Task<IReadOnlyList<Guid>> FindDocumentsBySignatureAsync(DocumentEntitySignature signature, CancellationToken cancellationToken = default)
+    {
+        FindCalls.Add(signature);
+        var key = FingerprintOf(signature);
+        return Task.FromResult(Lookup.TryGetValue(key, out var v) ? v : (IReadOnlyList<Guid>)Array.Empty<Guid>());
+    }
+
+    public static string FingerprintOf(DocumentEntitySignature signature)
+    {
+        var ordered = signature.Fields.OrderBy(kv => kv.Key, StringComparer.Ordinal);
+        return signature.Kind + "|" + string.Join("|", ordered.Select(kv => kv.Key + "=" + kv.Value));
+    }
+}
 
 /// <summary>
 /// Tests put raw (un-normalized) values in <see cref="Lookup"/>; lookups happen on

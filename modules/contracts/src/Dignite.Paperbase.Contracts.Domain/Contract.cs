@@ -30,7 +30,21 @@ public class Contract : AuditedAggregateRoot<Guid>, IMultiTenant
 
     public virtual string? PartyAName { get; private set; }
 
+    /// <summary>
+    /// 硬伤二 (L2 Phase 3): comparison key for <see cref="PartyAName"/> — derived via
+    /// <see cref="DocumentIdentifierNormalization.NormalizeEntityName"/>. Maintained in
+    /// lockstep with <see cref="PartyAName"/>. Used by <c>ContractEntitySignatureProvider</c>
+    /// to find related contracts via the multi-field <c>(PartyA, PartyB, year)</c> signature.
+    /// </summary>
+    public virtual string? NormalizedPartyAName { get; private set; }
+
     public virtual string? PartyBName { get; private set; }
+
+    /// <summary>
+    /// 硬伤二 (L2 Phase 3): comparison key for <see cref="PartyBName"/>. See
+    /// <see cref="NormalizedPartyAName"/>.
+    /// </summary>
+    public virtual string? NormalizedPartyBName { get; private set; }
 
     public virtual DateTime? SignedDate { get; private set; }
 
@@ -113,8 +127,18 @@ public class Contract : AuditedAggregateRoot<Guid>, IMultiTenant
             NormalizedContractNumber = NormalizeContractNumber(fields.ContractNumber);
             changed = true;
         }
-        if (PartyAName != fields.PartyAName) { PartyAName = fields.PartyAName; changed = true; }
-        if (PartyBName != fields.PartyBName) { PartyBName = fields.PartyBName; changed = true; }
+        if (PartyAName != fields.PartyAName)
+        {
+            PartyAName = fields.PartyAName;
+            NormalizedPartyAName = NormalizePartyName(fields.PartyAName);
+            changed = true;
+        }
+        if (PartyBName != fields.PartyBName)
+        {
+            PartyBName = fields.PartyBName;
+            NormalizedPartyBName = NormalizePartyName(fields.PartyBName);
+            changed = true;
+        }
         if (SignedDate != fields.SignedDate) { SignedDate = fields.SignedDate; changed = true; }
         if (EffectiveDate != fields.EffectiveDate) { EffectiveDate = fields.EffectiveDate; changed = true; }
         if (ExpirationDate != fields.ExpirationDate) { ExpirationDate = fields.ExpirationDate; changed = true; }
@@ -158,7 +182,9 @@ public class Contract : AuditedAggregateRoot<Guid>, IMultiTenant
         ContractNumber = fields.ContractNumber;
         NormalizedContractNumber = NormalizeContractNumber(fields.ContractNumber);
         PartyAName = fields.PartyAName;
+        NormalizedPartyAName = NormalizePartyName(fields.PartyAName);
         PartyBName = fields.PartyBName;
+        NormalizedPartyBName = NormalizePartyName(fields.PartyBName);
         SignedDate = fields.SignedDate;
         EffectiveDate = fields.EffectiveDate;
         ExpirationDate = fields.ExpirationDate;
@@ -221,6 +247,19 @@ public class Contract : AuditedAggregateRoot<Guid>, IMultiTenant
     {
         if (string.IsNullOrWhiteSpace(rawContractNumber)) return null;
         var normalized = DocumentIdentifierNormalization.NormalizeIdentifierCode(rawContractNumber);
+        return string.IsNullOrEmpty(normalized) ? null : normalized;
+    }
+
+    /// <summary>
+    /// 硬伤二 (L2 Phase 3) helper: keep <see cref="NormalizedPartyAName"/> /
+    /// <see cref="NormalizedPartyBName"/> in lockstep with their raw counterparts. Empty
+    /// or whitespace-only input → null (so the signature provider sees "missing field"
+    /// and refuses to emit an incomplete signature).
+    /// </summary>
+    protected static string? NormalizePartyName(string? rawPartyName)
+    {
+        if (string.IsNullOrWhiteSpace(rawPartyName)) return null;
+        var normalized = DocumentIdentifierNormalization.NormalizeEntityName(rawPartyName);
         return string.IsNullOrEmpty(normalized) ? null : normalized;
     }
 }

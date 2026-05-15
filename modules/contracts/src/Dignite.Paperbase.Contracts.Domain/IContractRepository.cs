@@ -28,4 +28,18 @@ public interface IContractRepository : IRepository<Contract, Guid>
     Task<List<Contract>> FindByContractNumberAsync(
         string contractNumber,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 硬伤二 (L2 Phase 3): joint-field lookup for <c>ContractEntitySignatureProvider</c>'s
+    /// <c>"Contracts.PartiesAndYear"</c> signature. Returns contracts where BOTH normalized
+    /// party names match AND the signed year matches. Caller supplies ALREADY-normalized
+    /// party names (see <see cref="Dignite.Paperbase.Documents.DocumentIdentifierNormalization.NormalizeEntityName"/>).
+    /// Year matching uses <see cref="Contract.SignedDate"/>'s <c>.Year</c>; contracts with
+    /// null SignedDate cannot match.
+    /// </summary>
+    Task<List<Contract>> FindByPartiesAndYearAsync(
+        string normalizedPartyAName,
+        string normalizedPartyBName,
+        int year,
+        CancellationToken cancellationToken = default);
 }

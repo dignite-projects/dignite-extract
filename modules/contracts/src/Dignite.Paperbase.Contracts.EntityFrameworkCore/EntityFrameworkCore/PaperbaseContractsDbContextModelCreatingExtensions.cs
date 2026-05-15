@@ -28,12 +28,23 @@ public static class PaperbaseContractsDbContextModelCreatingExtensions
             b.HasIndex(x => x.NormalizedContractNumber)
                 .HasFilter("NormalizedContractNumber IS NOT NULL");
 
+            // 硬伤二 (L2 Phase 3) composite lookup index for ContractEntitySignatureProvider's
+            // PartiesAndYear signature: WHERE NormalizedPartyAName = ? AND NormalizedPartyBName = ?
+            // followed by client-side SignedDate.Year filter. Filtered to non-null because the
+            // signature requires both parties populated. Year intentionally omitted from the
+            // index — adding it would force `YEAR(SignedDate)` translation which is dialect-
+            // specific; the (A, B) prefix is selective enough to keep candidate sets small.
+            b.HasIndex(x => new { x.NormalizedPartyAName, x.NormalizedPartyBName })
+                .HasFilter("NormalizedPartyAName IS NOT NULL AND NormalizedPartyBName IS NOT NULL");
+
             b.Property(x => x.DocumentTypeCode).HasMaxLength(ContractConsts.MaxDocumentTypeCodeLength).IsRequired();
             b.Property(x => x.Title).HasMaxLength(ContractConsts.MaxTitleLength);
             b.Property(x => x.ContractNumber).HasMaxLength(ContractConsts.MaxContractNumberLength);
             b.Property(x => x.NormalizedContractNumber).HasMaxLength(ContractConsts.MaxContractNumberLength);
             b.Property(x => x.PartyAName).HasMaxLength(ContractConsts.MaxPartyNameLength);
+            b.Property(x => x.NormalizedPartyAName).HasMaxLength(ContractConsts.MaxPartyNameLength);
             b.Property(x => x.PartyBName).HasMaxLength(ContractConsts.MaxPartyNameLength);
+            b.Property(x => x.NormalizedPartyBName).HasMaxLength(ContractConsts.MaxPartyNameLength);
             b.Property(x => x.Currency).HasMaxLength(ContractConsts.MaxCurrencyLength);
             b.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
             b.Property(x => x.GoverningLaw).HasMaxLength(ContractConsts.MaxGoverningLawLength);

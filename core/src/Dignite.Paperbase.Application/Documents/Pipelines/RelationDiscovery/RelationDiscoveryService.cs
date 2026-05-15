@@ -44,6 +44,7 @@ public class RelationDiscoveryService : DomainService
     public const double StructuralMatchConfidence = 0.95;
 
     private readonly IEnumerable<IDocumentIdentifierProvider> _providers;
+    private readonly IEnumerable<IDocumentEntitySignatureProvider> _signatureProviders;
     private readonly IDocumentRelationRepository _relationRepository;
     private readonly IDocumentRepository _documentRepository;
     private readonly RelationDiscoveryTelemetryRecorder _telemetry;
@@ -54,11 +55,13 @@ public class RelationDiscoveryService : DomainService
     // Hangfire-safe and matches L3's strategy in SemanticRelationDiscoveryService.
     public RelationDiscoveryService(
         IEnumerable<IDocumentIdentifierProvider> providers,
+        IEnumerable<IDocumentEntitySignatureProvider> signatureProviders,
         IDocumentRelationRepository relationRepository,
         IDocumentRepository documentRepository,
         RelationDiscoveryTelemetryRecorder telemetry)
     {
         _providers = providers;
+        _signatureProviders = signatureProviders;
         _relationRepository = relationRepository;
         _documentRepository = documentRepository;
         _telemetry = telemetry;
@@ -94,20 +97,44 @@ public class RelationDiscoveryService : DomainService
         // recognize) and normalized (硬伤一 — what L2 uses for matching across casing /
         // separator / width variants).
         var sourceIdentifiers = await CollectSourceIdentifiersAsync(sourceDocumentId, cancellationToken);
-        if (sourceIdentifiers.Count == 0)
+
+        // Phase 1b (硬伤二 L2 Phase 3): collect multi-field entity signatures. Modules emit
+        // these for relationships that don't share a single identifier (e.g. main contract
+        // and its supplement, where each has its own ContractNumber but they share parties +
+        // year). Lower inherent confidence than single-identifier matches (0.80 vs 0.95).
+        var sourceSignatures = await CollectSourceSignaturesAsync(sourceDocumentId, cancellationToken);
+
+        if (sourceIdentifiers.Count == 0 && sourceSignatures.Count == 0)
         {
-            // No identifiers extracted yet — either business modules haven't finished extraction,
-            // or this document isn't owned by any module. 硬伤三 visibility: tag this as an
-            // orphan-document event so operators can spot extraction regressions.
+            // No identifiers AND no signatures — either business modules haven't finished
+            // extraction, or this document isn't owned by any module. 硬伤三 visibility:
+            // orphan-document signal lets operators spot extraction regressions.
             _telemetry.RecordOrphanDocument();
             Logger.LogInformation(
-                "L2 RelationDiscovery: no identifiers found for {DocumentId}; skipping (no business module owns it, or extraction pending)",
+                "L2 RelationDiscovery: no identifiers or signatures found for {DocumentId}; skipping " +
+                "(no business module owns it, or extraction pending)",
                 sourceDocumentId);
             return Array.Empty<DocumentRelation>();
         }
 
-        // Phase 2: for each identifier, fan out across providers that support its type to find peers.
+        // Phase 2: fan out across both single-identifier providers and multi-field signature
+        // providers. Each producer returns peer candidates carrying their own confidence
+        // (0.95 deterministic for identifier, lower statistical confidence for signature)
+        // and a human-readable description used directly on the DocumentRelation.
+        // Identifier path runs FIRST so its higher-confidence description wins when a peer
+        // is matched both ways (single-identifier match is essentially deterministic).
         var peers = await FindPeerDocumentsAsync(sourceDocumentId, sourceIdentifiers, cancellationToken);
+        var signaturePeers = await FindPeerDocumentsBySignatureAsync(sourceDocumentId, sourceSignatures, cancellationToken);
+
+        // Merge: signature path peers only added when not already discovered via identifier
+        // path (first-match-wins on description + confidence; identifier path is the stronger
+        // signal so it takes precedence).
+        var seenInBoth = new HashSet<Guid>(peers.Select(p => p.PeerDocumentId));
+        foreach (var sp in signaturePeers)
+        {
+            if (seenInBoth.Add(sp.PeerDocumentId)) peers.Add(sp);
+        }
+
         if (peers.Count == 0)
         {
             return Array.Empty<DocumentRelation>();
@@ -125,7 +152,6 @@ public class RelationDiscoveryService : DomainService
         {
             if (alreadyLinked.Contains(peer.PeerDocumentId)) continue;
 
-            var description = $"Identifier match: {peer.IdentifierType} = {peer.IdentifierValue}";
             // TenantId from source.TenantId (Hangfire-safe, Issue #121). Source and peers
             // must be in the same tenant: providers query through ABP's IMultiTenant filter
             // which scopes by ambient or by source — peers never cross tenant by design.
@@ -134,21 +160,21 @@ public class RelationDiscoveryService : DomainService
                 sourceTenantId,
                 sourceDocumentId: sourceDocumentId,
                 targetDocumentId: peer.PeerDocumentId,
-                description: description,
+                description: peer.Description,
                 source: RelationSource.AiSuggested,
-                confidence: StructuralMatchConfidence);
+                confidence: peer.Confidence);
 
             await _relationRepository.InsertAsync(relation, autoSave: false, cancellationToken);
             created.Add(relation);
 
-            // Add to alreadyLinked so multiple identifier matches against the same peer
-            // create only one DocumentRelation (e.g. peer shares both ContractNumber and PartyName).
+            // Add to alreadyLinked so multiple matches against the same peer create only one
+            // DocumentRelation (e.g. peer shares both ContractNumber and the PartiesAndYear signature).
             alreadyLinked.Add(peer.PeerDocumentId);
         }
 
         Logger.LogInformation(
-            "L2 RelationDiscovery: source={DocumentId} identifiers={IdentifierCount} peers={PeerCount} created={CreatedCount}",
-            sourceDocumentId, sourceIdentifiers.Count, peers.Count, created.Count);
+            "L2 RelationDiscovery: source={DocumentId} identifiers={IdentifierCount} signatures={SignatureCount} peers={PeerCount} created={CreatedCount}",
+            sourceDocumentId, sourceIdentifiers.Count, sourceSignatures.Count, peers.Count, created.Count);
 
         return created;
     }
@@ -201,7 +227,7 @@ public class RelationDiscoveryService : DomainService
             .ToList();
     }
 
-    protected virtual async Task<IReadOnlyList<PeerCandidate>> FindPeerDocumentsAsync(
+    protected virtual async Task<List<PeerCandidate>> FindPeerDocumentsAsync(
         Guid sourceDocumentId,
         IReadOnlyList<CollectedIdentifier> sourceIdentifiers,
         CancellationToken ct)
@@ -246,9 +272,12 @@ public class RelationDiscoveryService : DomainService
 
                     if (!seen.Add(peerId)) continue;                   // Already a peer via another identifier
 
-                    // RawValue for description (user-recognizable form); NormalizedValue for any
-                    // future provenance / debugging.
-                    peers.Add(new PeerCandidate(peerId, identifier.Type, identifier.RawValue));
+                    // Description uses RawValue (user-recognizable form, e.g. "HT-2024-001");
+                    // confidence is the fixed structural-match value.
+                    peers.Add(new PeerCandidate(
+                        PeerDocumentId: peerId,
+                        Description: $"Identifier match: {identifier.Type} = {identifier.RawValue}",
+                        Confidence: StructuralMatchConfidence));
                 }
             }
 
@@ -260,6 +289,104 @@ public class RelationDiscoveryService : DomainService
         }
 
         return peers;
+    }
+
+    /// <summary>
+    /// 硬伤二 (L2 Phase 3): collect multi-field entity signatures from all signature providers.
+    /// Same per-provider exception isolation pattern as identifiers.
+    /// </summary>
+    protected virtual async Task<IReadOnlyList<DocumentEntitySignature>> CollectSourceSignaturesAsync(
+        Guid documentId,
+        CancellationToken ct)
+    {
+        var signatures = new List<DocumentEntitySignature>();
+        foreach (var provider in _signatureProviders)
+        {
+            try
+            {
+                var fromProvider = await provider.GetSignaturesAsync(documentId, ct);
+                signatures.AddRange(fromProvider);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Logger.LogError(ex,
+                    "L2 RelationDiscovery: signature provider {Provider} threw in GetSignaturesAsync({DocumentId}); skipping",
+                    provider.GetType().FullName, documentId);
+            }
+        }
+        return signatures;
+    }
+
+    /// <summary>
+    /// 硬伤二 (L2 Phase 3): for each collected signature, fan out across providers that declare
+    /// the same Kind and collect their FindDocumentsBySignatureAsync results. Same self/empty
+    /// guards and high-ambiguity detection as the identifier path.
+    /// </summary>
+    protected virtual async Task<IReadOnlyList<PeerCandidate>> FindPeerDocumentsBySignatureAsync(
+        Guid sourceDocumentId,
+        IReadOnlyList<DocumentEntitySignature> sourceSignatures,
+        CancellationToken ct)
+    {
+        var seen = new HashSet<Guid>();
+        var peers = new List<PeerCandidate>();
+
+        foreach (var signature in sourceSignatures)
+        {
+            var supportingProviders = _signatureProviders
+                .Where(p => p.SupportedSignatureKinds.Contains(signature.Kind));
+
+            var distinctPeersForSignature = new HashSet<Guid>();
+
+            foreach (var provider in supportingProviders)
+            {
+                IReadOnlyList<Guid> found;
+                try
+                {
+                    found = await provider.FindDocumentsBySignatureAsync(signature, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    Logger.LogError(ex,
+                        "L2 RelationDiscovery: signature provider {Provider} threw in FindDocumentsBySignatureAsync({Kind}); skipping",
+                        provider.GetType().FullName, signature.Kind);
+                    continue;
+                }
+
+                foreach (var peerId in found)
+                {
+                    if (peerId == sourceDocumentId) continue;
+                    if (peerId == Guid.Empty) continue;
+
+                    distinctPeersForSignature.Add(peerId);
+
+                    if (!seen.Add(peerId)) continue;
+
+                    peers.Add(new PeerCandidate(
+                        PeerDocumentId: peerId,
+                        Description: BuildSignatureDescription(signature),
+                        Confidence: signature.InherentConfidence));
+                }
+            }
+
+            if (distinctPeersForSignature.Count >= RelationDiscoveryTelemetryRecorder.HighAmbiguityPeerThreshold)
+            {
+                _telemetry.RecordHighAmbiguityIdentifier(
+                    signature.Kind, BuildSignatureDescription(signature), distinctPeersForSignature.Count);
+            }
+        }
+
+        return peers;
+    }
+
+    /// <summary>
+    /// Build a human-readable description for an entity signature match: e.g.
+    /// <c>"Entity signature: Contracts.PartiesAndYear (PartyA=ACME, PartyB=BetaCorp, Year=2024)"</c>.
+    /// Field order is dictionary order — providers should keep field names stable.
+    /// </summary>
+    protected virtual string BuildSignatureDescription(DocumentEntitySignature signature)
+    {
+        var fieldList = string.Join(", ", signature.Fields.Select(kv => $"{kv.Key}={kv.Value}"));
+        return $"Entity signature: {signature.Kind} ({fieldList})";
     }
 
     protected virtual async Task<HashSet<Guid>> GetAlreadyLinkedPeersAsync(
@@ -280,12 +407,12 @@ public class RelationDiscoveryService : DomainService
     }
 
     /// <summary>
-    /// 中间数据：一个对端文档候选 + 触发本次匹配的 (type, value)。
-    /// 当多个标识符同时命中同一对端时，第一个命中决定 Description（避免一对文档建多条关系）。
-    /// IdentifierValue 是 RAW 形式（user-recognizable，例如 "HT-2024-001"），用于 description；
-    /// L2 lookup 时已通过 normalized 形式完成匹配（硬伤一 Phase 1）。
+    /// 中间数据：一个对端文档候选 + 该匹配的描述 + 置信度。当多个匹配同时命中同一对端时，
+    /// 第一个命中决定保留的 PeerCandidate（避免一对文档建多条关系）。
+    /// 硬伤二 (L2 Phase 3): identifier path 用 <see cref="StructuralMatchConfidence"/> = 0.95；
+    /// signature path 用各自 signature 的 <see cref="DocumentEntitySignature.InherentConfidence"/>。
     /// </summary>
-    protected sealed record PeerCandidate(Guid PeerDocumentId, string IdentifierType, string IdentifierValue);
+    protected sealed record PeerCandidate(Guid PeerDocumentId, string Description, double Confidence);
 
     /// <summary>
     /// 内部传递结构：source document 持有的一个标识符的 raw + normalized 双形式。

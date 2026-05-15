@@ -42,6 +42,7 @@ public class RelationDiscoveryBackgroundJobTestModule : AbpModule
         // Issue #121: L2 ctor now takes IDocumentRepository instead of ICurrentTenant.
         context.Services.AddSingleton(Substitute.For<RelationDiscoveryService>(
             Array.Empty<IDocumentIdentifierProvider>(),
+            Array.Empty<IDocumentEntitySignatureProvider>(),
             Substitute.For<IDocumentRelationRepository>(),
             Substitute.For<IDocumentRepository>(),
             new RelationDiscoveryTelemetryRecorder(NullLogger<RelationDiscoveryTelemetryRecorder>.Instance)));

@@ -48,4 +48,30 @@ public class EfCoreContractRepository :
             .Where(x => x.NormalizedContractNumber == contractNumber)
             .ToListAsync(GetCancellationToken(cancellationToken));
     }
+
+    /// <summary>
+    /// 硬伤二 (L2 Phase 3): composite-key lookup for the PartiesAndYear signature. Index
+    /// `IX_PaperbaseContracts_NormalizedPartyAName_NormalizedPartyBName` carries the
+    /// selective prefix; `SignedDate.Value.Year` is evaluated server-side via EF Core's
+    /// translation to <c>YEAR(...)</c> / <c>strftime(...)</c> depending on provider.
+    /// </summary>
+    public virtual async Task<List<Contract>> FindByPartiesAndYearAsync(
+        string normalizedPartyAName,
+        string normalizedPartyBName,
+        int year,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedPartyAName) || string.IsNullOrWhiteSpace(normalizedPartyBName))
+        {
+            return new List<Contract>();
+        }
+
+        var dbSet = await GetDbSetAsync();
+        return await dbSet
+            .Where(x => x.NormalizedPartyAName == normalizedPartyAName
+                     && x.NormalizedPartyBName == normalizedPartyBName
+                     && x.SignedDate != null
+                     && x.SignedDate.Value.Year == year)
+            .ToListAsync(GetCancellationToken(cancellationToken));
+    }
 }
