@@ -15,7 +15,7 @@ public static class PaperbaseDbContextModelCreatingExtensions
     // （会抛 "could not be mapped to the database type 'json'" 异常）。用 ValueConverter
     // 显式把 Dictionary 序列化为 JSON 字符串，存储到 native json 列上——数据 round-trip 工作；
     // LINQ 翻译能力受限（动态键查询要走 EF.Functions.JsonValue / JsonContains 而非
-    // d.ExtractedFields["x"]），与 plans/synthetic-leaping-kite.md 5.5.1 PoC #179 验证结果一致。
+    // d.ExtractedFields["x"]）——动态字典与 LINQ 翻译模型互斥，不是 EF Core 版本能解决的限制。
     private static readonly ValueConverter<Dictionary<string, JsonElement>?, string?> ExtractedFieldsConverter =
         new(
             v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
