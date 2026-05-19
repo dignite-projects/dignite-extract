@@ -31,7 +31,7 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
     {
         // 当前层文档类型（Host admin 看 TenantId IS NULL 行；租户 admin 看自己租户行）。
         // 解读 X + 没有继承关系：不做 Host ∪ Tenant union。
-        var list = await _repository.GetByTenantAsync(CurrentTenant.Id);
+        var list = await _repository.GetByTenantAsync();
         return ObjectMapper.Map<List<DocumentType>, List<DocumentTypeDto>>(list);
     }
 
@@ -61,7 +61,7 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
         DocumentType? existing;
         using (DataFilter.Disable<ISoftDelete>())
         {
-            existing = await _repository.FindByTypeCodeAsync(CurrentTenant.Id, input.TypeCode);
+            existing = await _repository.FindByTypeCodeAsync(input.TypeCode);
         }
         if (existing != null)
         {
@@ -119,8 +119,7 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
 
         // 级联软删除：同 (TenantId, TypeCode) 下的 FieldDefinition 随 DocumentType 一并下线，
         // 否则会留下孤儿字段定义且未来重建同 TypeCode 时无法复用同名字段。
-        var fields = await _fieldDefinitionRepository.GetByDocumentTypeAsync(
-            entity.TenantId, entity.TypeCode);
+        var fields = await _fieldDefinitionRepository.GetByDocumentTypeAsync(entity.TypeCode);
         if (fields.Count > 0)
         {
             await _fieldDefinitionRepository.DeleteManyAsync(fields);

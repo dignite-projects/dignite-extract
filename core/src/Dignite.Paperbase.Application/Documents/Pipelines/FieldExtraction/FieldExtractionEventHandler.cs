@@ -20,8 +20,9 @@ namespace Dignite.Paperbase.Documents.Pipelines.FieldExtraction;
 /// <c>Document.ExtractedFields</c>（单一 Dictionary，源由 Document.TenantId 决定，
 /// 不分桶不存在跨层命名冲突）。统一发布 <see cref="FieldsExtractedEto"/>。
 /// <para>
-/// 安全约束（CLAUDE.md "## 安全约定"）：显式恢复事件携带的 TenantId 上下文；显式 TenantId 谓词查询；
-/// 跨租户断言（防 ambient filter 被 disable）；reclassify race 断言（防 stale 事件用旧 schema 污染）。
+/// 安全约束（CLAUDE.md "## 安全约定"）：显式 <see cref="ICurrentTenant.Change"/> 恢复事件携带的
+/// TenantId 上下文，让 ABP <c>IMultiTenant</c> filter 自动按目标层隔离仓储查询；跨租户断言
+/// （防 ambient filter 被 disable）；reclassify race 断言（防 stale 事件用旧 schema 污染）。
 /// </para>
 /// <para>
 /// UoW 三段式（<c>.claude/rules/background-jobs.md</c>）：handler 上 <c>[UnitOfWork(IsDisabled = true)]</c>
@@ -80,7 +81,7 @@ public class FieldExtractionEventHandler
             using (var readUow = _unitOfWorkManager.Begin(requiresNew: true))
             {
                 definitions = await _fieldDefinitionRepository.GetForExtractionAsync(
-                    eventData.TenantId, eventData.DocumentTypeCode);
+                    eventData.DocumentTypeCode);
                 await readUow.CompleteAsync();
             }
 

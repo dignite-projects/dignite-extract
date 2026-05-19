@@ -82,7 +82,7 @@ public class DocumentClassificationBackgroundJob
         List<DocumentType> candidates;
         using (_currentTenant.Change(document.TenantId))
         {
-            var visible = await _documentTypeRepository.GetByTenantAsync(document.TenantId);
+            var visible = await _documentTypeRepository.GetByTenantAsync();
             candidates = visible
                 .Take(_aiOptions.MaxDocumentTypesInClassificationPrompt)
                 .ToList();
@@ -169,7 +169,7 @@ public class DocumentClassificationBackgroundJob
         {
             using (_currentTenant.Change(document.TenantId))
             {
-                typeDef = await _documentTypeRepository.FindByTypeCodeAsync(document.TenantId, outcome.TypeCode);
+                typeDef = await _documentTypeRepository.FindByTypeCodeAsync(outcome.TypeCode);
             }
         }
 

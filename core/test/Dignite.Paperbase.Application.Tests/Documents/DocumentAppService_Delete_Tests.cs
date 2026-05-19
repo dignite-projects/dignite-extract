@@ -49,7 +49,7 @@ public class DocumentAppService_Delete_Tests
 
         // UploadAsync 的前置 fail-fast 检查（当前层至少有一个 DocumentType）—— 测试默认走"已配置"路径，
         // 让重复 / 回收站检查能跑到。专门测试"未配置 → NoDocumentTypesConfigured"应在另外的 fact 里覆盖空 list。
-        _documentTypeRepository.GetByTenantAsync(Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        _documentTypeRepository.GetByTenantAsync(Arg.Any<CancellationToken>())
             .Returns(new System.Collections.Generic.List<DocumentType>
             {
                 new(Guid.NewGuid(), null, "host.general", "General", 0.7, 0)
@@ -116,7 +116,7 @@ public class DocumentAppService_Delete_Tests
     {
         // 覆盖 fail-fast：删除 Host 启动期 seed 后，新部署 / 新租户首次上传必须先建至少一个 DocumentType。
         // 不做这个检查的话，文档会上传成功 → 分类候选集为空 → 永远卡 PendingReview。
-        _documentTypeRepository.GetByTenantAsync(Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        _documentTypeRepository.GetByTenantAsync(Arg.Any<CancellationToken>())
             .Returns(new System.Collections.Generic.List<DocumentType>());
 
         var exception = await Should.ThrowAsync<BusinessException>(async () =>

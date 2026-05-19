@@ -38,11 +38,11 @@ public class DocumentClassificationJobTestModule : AbpModule
             priority: 0);
 
         var typeRepo = Substitute.For<IDocumentTypeRepository>();
-        typeRepo.GetByTenantAsync(Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        typeRepo.GetByTenantAsync(Arg.Any<CancellationToken>())
             .Returns(new List<DocumentType> { contractType });
-        typeRepo.FindByTypeCodeAsync(Arg.Any<Guid?>(), "contract.general", Arg.Any<CancellationToken>())
+        typeRepo.FindByTypeCodeAsync("contract.general", Arg.Any<CancellationToken>())
             .Returns(contractType);
-        typeRepo.FindByTypeCodeAsync(Arg.Any<Guid?>(), Arg.Is<string>(s => s != "contract.general"), Arg.Any<CancellationToken>())
+        typeRepo.FindByTypeCodeAsync(Arg.Is<string>(s => s != "contract.general"), Arg.Any<CancellationToken>())
             .Returns((DocumentType?)null);
         context.Services.AddSingleton(typeRepo);
 

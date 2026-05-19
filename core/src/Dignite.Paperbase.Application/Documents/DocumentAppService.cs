@@ -100,7 +100,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         // Host 启动期 seed 入口已删除（HostDocumentTypeDataSeedContributor / DocumentTypeOptions），
         // DocumentType 现在只能通过 IDocumentTypeAppService 运行时创建——所以新部署 / 新租户必须先建类型才能上传。
         // 不做这个 fail-fast 检查的话，上传成功 → 分类候选集为空 → 文档永远卡 PendingReview。
-        var hasType = (await _documentTypeRepository.GetByTenantAsync(CurrentTenant.Id)).Any();
+        var hasType = (await _documentTypeRepository.GetByTenantAsync()).Any();
         if (!hasType)
         {
             throw new BusinessException(PaperbaseErrorCodes.NoDocumentTypesConfigured);
@@ -406,7 +406,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         // typeCode 校验责任在 AppService（不再走 manager 内部 EnsureRegisteredTypeCodeAsync）：
         // 按 Document.TenantId 精确单层匹配（CLAUDE.md "两层 mutually exclusive"）；
         // 不存在则 fail-fast，避免写入"业务模块订阅者认不出的 typeCode"。
-        var typeDef = await _documentTypeRepository.FindByTypeCodeAsync(document.TenantId, documentTypeCode);
+        var typeDef = await _documentTypeRepository.FindByTypeCodeAsync(documentTypeCode);
         if (typeDef == null)
         {
             throw new BusinessException(PaperbaseErrorCodes.InvalidDocumentTypeCode)

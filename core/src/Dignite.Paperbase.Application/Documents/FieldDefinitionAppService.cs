@@ -27,7 +27,7 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
     {
         // 仅当前租户层字段（CLAUDE.md "两层 mutually exclusive 不混"）——
         // 字段抽取由 Document.TenantId 决定唯一一层，不混合 Host + tenant。
-        var list = await _repository.GetByDocumentTypeAsync(CurrentTenant.Id, documentTypeCode);
+        var list = await _repository.GetByDocumentTypeAsync(documentTypeCode);
         return ObjectMapper.Map<List<FieldDefinition>, List<FieldDefinitionDto>>(list);
     }
 
@@ -57,7 +57,7 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
         FieldDefinition? existing;
         using (DataFilter.Disable<ISoftDelete>())
         {
-            existing = await _repository.FindByNameAsync(CurrentTenant.Id, input.DocumentTypeCode, input.Name);
+            existing = await _repository.FindByNameAsync(input.DocumentTypeCode, input.Name);
         }
         if (existing != null)
         {
