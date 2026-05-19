@@ -6,8 +6,12 @@ public class PaperbaseSettingDefinitionProvider : SettingDefinitionProvider
 {
     public override void Define(ISettingDefinitionContext context)
     {
-        /* Define module settings here.
-         * Use names from PaperbaseSettings class.
-         */
+        context.Add(
+            new SettingDefinition(
+                PaperbaseSettings.OcrConfidenceThreshold,
+                defaultValue: "0.85",
+                isVisibleToClients: false,
+                isInherited: true,
+                isEncrypted: false));
     }
 }

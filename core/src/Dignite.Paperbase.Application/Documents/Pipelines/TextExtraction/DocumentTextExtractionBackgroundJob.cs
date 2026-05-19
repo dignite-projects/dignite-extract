@@ -7,6 +7,7 @@ using Dignite.Paperbase.Abstractions.Documents;
 using Dignite.Paperbase.Abstractions.TextExtraction;
 using Dignite.Paperbase.Ai;
 using Dignite.Paperbase.Documents;
+using Dignite.Paperbase.Settings;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -34,7 +35,6 @@ public class DocumentTextExtractionBackgroundJob
     private readonly IUnitOfWorkManager _unitOfWorkManager;
     private readonly IDistributedEventBus _distributedEventBus;
     private readonly IClock _clock;
-    private readonly PaperbaseOcrOptions _ocrOptions;
     private readonly ISettingProvider _settingProvider;
     /// <summary>
     /// Document-title generation is single-shot, tool-free, prompt-unique. Reuses the
@@ -56,7 +56,6 @@ public class DocumentTextExtractionBackgroundJob
         IUnitOfWorkManager unitOfWorkManager,
         IDistributedEventBus distributedEventBus,
         IClock clock,
-        IOptions<PaperbaseOcrOptions> ocrOptions,
         ISettingProvider settingProvider,
         [FromKeyedServices(PaperbaseAIConsts.TitleGeneratorChatClientKey)] IChatClient titleGeneratorChatClient,
         IPromptProvider promptProvider,
@@ -71,7 +70,6 @@ public class DocumentTextExtractionBackgroundJob
         _unitOfWorkManager = unitOfWorkManager;
         _distributedEventBus = distributedEventBus;
         _clock = clock;
-        _ocrOptions = ocrOptions.Value;
         _settingProvider = settingProvider;
         _titleGeneratorChatClient = titleGeneratorChatClient;
         _promptProvider = promptProvider;
@@ -154,7 +152,7 @@ public class DocumentTextExtractionBackgroundJob
 
         // OCR 置信度门槛检查（只对 UsedOcr=true 且有 confidence 值的路径有意义；
         // 数字版抽取 Confidence 为 null，不会触发）。
-        var threshold = await ResolveOcrThresholdAsync(document.TenantId);
+        var threshold = await ResolveOcrThresholdAsync();
         if (result.UsedOcr && result.Confidence is { } confidence && confidence < threshold)
         {
             var reason = $"OCR confidence {confidence:0.00} below threshold {threshold:0.00}";
@@ -173,17 +171,11 @@ public class DocumentTextExtractionBackgroundJob
         await uow.CompleteAsync();
     }
 
-    private async Task<double> ResolveOcrThresholdAsync(Guid? tenantId)
+    private async Task<double> ResolveOcrThresholdAsync()
     {
-        // per-tenant 覆盖（ABP Setting Management）优先；回落到部署级默认值。
-        // ABP ISettingProvider 自动按 CurrentTenant 解析——即使 tenantId 显式传入也只用于
-        // 日志/审计；ambient 上下文已经在调用方设置好。
-        var settingValue = await _settingProvider.GetOrNullAsync(PaperbaseOcrOptions.ConfidenceThresholdSettingName);
-        if (double.TryParse(settingValue, out var tenantThreshold))
-        {
-            return tenantThreshold;
-        }
-        return _ocrOptions.DefaultConfidenceThreshold;
+        // ABP Setting 系统按 User → Tenant → Global → Configuration → Default 链路解析，
+        // ambient CurrentTenant 上下文已由调用方设置；默认值在 PaperbaseSettingDefinitionProvider 注册。
+        return await _settingProvider.GetAsync<double>(PaperbaseSettings.OcrConfidenceThreshold);
     }
 
     private async Task<string?> TryGenerateTitleAsync(string markdown, CancellationToken cancellationToken = default)
