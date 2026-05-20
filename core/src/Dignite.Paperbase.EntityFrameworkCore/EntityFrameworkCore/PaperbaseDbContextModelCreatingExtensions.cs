@@ -60,15 +60,6 @@ public static class PaperbaseDbContextModelCreatingExtensions
             // 字段架构 v2：系统通用字段平铺顶层 typed columns —— 真 pipeline 自动产物
             b.Property(x => x.Language).HasMaxLength(DocumentConsts.MaxLanguageLength);
             b.Property(x => x.OcrConfidence);
-            b.Property(x => x.RequestedOcrProfileCode).HasMaxLength(DocumentConsts.MaxOcrProfileCodeLength);
-            b.Property(x => x.EffectiveOcrProfileCode).HasMaxLength(DocumentConsts.MaxOcrProfileCodeLength);
-            b.Property(x => x.OcrProfileResolutionReason).HasMaxLength(DocumentConsts.MaxOcrProfileResolutionReasonLength);
-            b.Property(x => x.OcrProviderName).HasMaxLength(DocumentConsts.MaxOcrProviderNameLength);
-            b.Property(x => x.OcrProviderModelName).HasMaxLength(DocumentConsts.MaxOcrProviderModelNameLength);
-            b.Property(x => x.OcrProviderVersion).HasMaxLength(DocumentConsts.MaxOcrProviderVersionLength);
-            b.Property(x => x.OcrQualitySignals)
-                .HasColumnType("json")
-                .HasConversion(OcrQualitySignalsConverter, OcrQualitySignalsComparer);
 
             // 字段架构 v2：ExtractedFields 是动态 schema (Dictionary<string, JsonElement>)。
             // ValueConverter 序列化为 JSON 字符串，存到 SQL Server 2025 native json 列；
@@ -91,6 +82,34 @@ public static class PaperbaseDbContextModelCreatingExtensions
                 fo.Property(x => x.ContentHash)
                     .IsRequired()
                     .HasMaxLength(FileOriginConsts.MaxContentHashLength);
+            });
+
+            // OCR 元数据值对象（OwnsOne）。HasColumnName 锁定 #191 已建的原列名，
+            // 使本次形态重构（顶层标量 → 值对象）对 DB schema 零变更——纯 C# 侧收拢，不触发列 rename。
+            b.OwnsOne(x => x.OcrMetadata, om =>
+            {
+                om.Property(x => x.RequestedProfileCode)
+                    .HasColumnName("RequestedOcrProfileCode")
+                    .HasMaxLength(DocumentConsts.MaxOcrProfileCodeLength);
+                om.Property(x => x.EffectiveProfileCode)
+                    .HasColumnName("EffectiveOcrProfileCode")
+                    .HasMaxLength(DocumentConsts.MaxOcrProfileCodeLength);
+                om.Property(x => x.ResolutionReason)
+                    .HasColumnName("OcrProfileResolutionReason")
+                    .HasMaxLength(DocumentConsts.MaxOcrProfileResolutionReasonLength);
+                om.Property(x => x.ProviderName)
+                    .HasColumnName("OcrProviderName")
+                    .HasMaxLength(DocumentConsts.MaxOcrProviderNameLength);
+                om.Property(x => x.ProviderModelName)
+                    .HasColumnName("OcrProviderModelName")
+                    .HasMaxLength(DocumentConsts.MaxOcrProviderModelNameLength);
+                om.Property(x => x.ProviderVersion)
+                    .HasColumnName("OcrProviderVersion")
+                    .HasMaxLength(DocumentConsts.MaxOcrProviderVersionLength);
+                om.Property(x => x.QualitySignals)
+                    .HasColumnName("OcrQualitySignals")
+                    .HasColumnType("json")
+                    .HasConversion(OcrQualitySignalsConverter, OcrQualitySignalsComparer);
             });
 
             b.HasMany(x => x.PipelineRuns)

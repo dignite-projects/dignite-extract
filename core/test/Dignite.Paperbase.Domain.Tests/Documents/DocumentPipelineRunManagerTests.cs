@@ -309,14 +309,15 @@ public class DocumentPipelineRunManagerTests : PaperbaseDomainTestBase<Paperbase
                 }
             });
 
-        doc.RequestedOcrProfileCode.ShouldBe("auto");
-        doc.EffectiveOcrProfileCode.ShouldBe("table-heavy");
-        doc.OcrProfileResolutionReason.ShouldBe("Auto resolved from table signals.");
-        doc.OcrProviderName.ShouldBe("TestProvider");
-        doc.OcrProviderModelName.ShouldBe("TestModel");
-        doc.OcrProviderVersion.ShouldBe("1.0");
-        doc.OcrQualitySignals.ShouldNotBeNull();
-        doc.OcrQualitySignals.TableMarkerCount.ShouldBe(3);
+        doc.OcrMetadata.ShouldNotBeNull();
+        doc.OcrMetadata.RequestedProfileCode.ShouldBe("auto");
+        doc.OcrMetadata.EffectiveProfileCode.ShouldBe("table-heavy");
+        doc.OcrMetadata.ResolutionReason.ShouldBe("Auto resolved from table signals.");
+        doc.OcrMetadata.ProviderName.ShouldBe("TestProvider");
+        doc.OcrMetadata.ProviderModelName.ShouldBe("TestModel");
+        doc.OcrMetadata.ProviderVersion.ShouldBe("1.0");
+        doc.OcrMetadata.QualitySignals.ShouldNotBeNull();
+        doc.OcrMetadata.QualitySignals.TableMarkerCount.ShouldBe(3);
     }
 
     [Fact]

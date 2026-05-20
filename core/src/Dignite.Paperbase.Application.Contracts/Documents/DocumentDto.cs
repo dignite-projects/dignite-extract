@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Dignite.Paperbase.Abstractions.TextExtraction;
 using Dignite.Paperbase.Documents;
 using Volo.Abp.Application.Dtos;
 
@@ -17,13 +16,7 @@ public class DocumentDto : EntityDto<Guid>
     public DocumentReviewStatus ReviewStatus { get; set; }
     public double ClassificationConfidence { get; set; }
     public string? ClassificationReason { get; set; }
-    public string? RequestedOcrProfileCode { get; set; }
-    public string? EffectiveOcrProfileCode { get; set; }
-    public string? OcrProfileResolutionReason { get; set; }
-    public string? OcrProviderName { get; set; }
-    public string? OcrProviderModelName { get; set; }
-    public string? OcrProviderVersion { get; set; }
-    public OcrQualitySignalSnapshot? OcrQualitySignals { get; set; }
+    public DocumentOcrMetadataDto? OcrMetadata { get; set; }
 
     /// <summary>
     /// 展示标题（文本提取流水线 Run 成功后写入）。
