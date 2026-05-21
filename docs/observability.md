@@ -6,11 +6,11 @@ Paperbase emits OpenTelemetry traces and metrics from the MAF + `Microsoft.Exten
 
 | Source | Type | Highlights |
 |---|---|---|
-| **`Microsoft.Agents.AI`** | Traces, Metrics | MAF's built-in `CompactionTelemetry` (`compaction.compact`, `compaction.summarize` spans with `Strategy / Triggered / BeforeTokens / AfterTokens / DurationMs` tags), `compaction.provider.invoke` lifecycle, plus token-usage / tool-call metrics. |
-| **`Microsoft.Extensions.AI`** | Traces, Metrics | `chat-client.GetResponseAsync` and `execute_tool {tool_name}` spans with GenAI semantic-convention tags (model id, prompt / completion tokens, finish reason). Emitted automatically by the `.UseOpenTelemetry()` decorators wired on every chat client in `PaperbaseHostModule.ConfigureAI`. |
-| **`Dignite.Paperbase.*`** | Metrics (reserved) | Wildcard reservation only — Paperbase Core does **not** register custom Meters today (every LLM stage is internal: classification / field extraction / title generation, all observable through the `Microsoft.Extensions.AI` instrumentation above). The wildcard is a future-proof entry point so downstream business modules that name their Meter `Dignite.Paperbase.<module-name>` get picked up automatically without host-side changes. |
+| **`Microsoft.Agents.AI`** | Traces, Metrics | MAF agent-invocation spans + token-usage / tool-call metrics for the `ChatClientAgent` runs (today: document classification via `RunAsync<T>`). MAF also defines `CompactionTelemetry` (`compaction.*` spans) but those only fire when chat-history compaction is configured — Paperbase's agent runs are single-shot and tool-free, so no `compaction.*` spans are emitted. |
+| **`Microsoft.Extensions.AI`** | Traces, Metrics | `chat-client.GetResponseAsync` spans with GenAI semantic-convention tags (model id, prompt / completion tokens, finish reason). Emitted automatically by the `.UseOpenTelemetry()` decorators wired on every chat client in `PaperbaseHostModule.ConfigureAI`. |
+| **`Dignite.Paperbase.*`** | Traces, Metrics (reserved) | Wildcard reservation only — **nothing emits under it today**. Paperbase Core registers no custom `ActivitySource` / `Meter` (every LLM stage — classification / field extraction / title generation — is observable through the `Microsoft.Extensions.AI` + `Microsoft.Agents.AI` instrumentation above). The wildcard is a forward hook for **Paperbase Core's own future pipeline metrics** (e.g. classification-confidence histograms, OCR-duration counters) to land in the pipeline without host-side changes. It is **not** an integration point for downstream business modules — those are out of scope and run in their own host with their own OTel pipeline. |
 
-A new business module that adds its own Meter automatically lands in the pipeline as long as the Meter name starts with `Dignite.Paperbase.` — the host registers a wildcard `AddMeter("Dignite.Paperbase.*")`.
+If Paperbase Core later adds a Meter or ActivitySource named `Dignite.Paperbase.<name>`, it lands in the pipeline automatically — the host registers wildcard `AddSource("Dignite.Paperbase.*")` / `AddMeter("Dignite.Paperbase.*")`.
 
 ## Host pipeline configuration
 
@@ -82,30 +82,19 @@ start http://localhost:18888
 
 Expected sightings:
 
-- **Traces** tab — an ASP.NET Core request span containing nested `chat-client.GetResponseAsync` spans (for classification / field extraction / title generation) and any `execute_tool {tool_name}` children.
-- **Metrics** tab — MAF + `Microsoft.Extensions.AI` token-usage / tool-call counters tick on each LLM invocation; `compaction.*` spans appear if MAF compaction triggers.
+- **Traces** tab — an ASP.NET Core request span (or background-job activity) containing nested `chat-client.GetResponseAsync` spans for classification / field extraction / title generation. No `execute_tool` children — all LLM calls are tool-free.
+- **Metrics** tab — MAF + `Microsoft.Extensions.AI` token-usage counters tick on each LLM invocation.
 - **Structured Logs** tab — Serilog logs with `TraceId` correlations to the spans on the left.
 
 ### First-start delay
 
 aspire-dashboard takes 30–60 seconds to become reachable after `Up` status. If `http://localhost:18888` refuses, wait and retry — or check `docker compose logs aspire-dashboard | tail` for `Now listening on:`.
 
-### Gotcha: `gen_ai.usage.*` is unreliable in streaming mode on some providers
+### Note: `gen_ai.usage.*` token counts are trustworthy here (no streaming)
 
-The `Experimental.Microsoft.Extensions.AI` ChatClient emits `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` on every `chat <model>` span. **These numbers cannot be trusted as cost-tracking ground truth.** Verified mismatch on SiliconFlow (`api.siliconflow.cn`) with DeepSeek-V3 in streaming mode:
+All Paperbase LLM calls (classification / field extraction / title generation) are **non-streaming** `GetResponseAsync`, so `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` reflect the provider-reported totals for the turn and are safe to use for cost tracking.
 
-| Source | Input tokens | Output tokens |
-|---|---:|---:|
-| OTel `gen_ai.usage.*` for one chat turn | 401,278 | 5,884 |
-| SiliconFlow billing CSV for the whole day | **5,997** | **145** |
-
-Inflation factor ~67× input / ~40× output. Root cause: `Microsoft.Extensions.AI` 10.5.x's `OpenTelemetryChatClient` accumulates usage per streamed chunk, but some OpenAI-compatible gateways report **cumulative-so-far** usage on each chunk rather than per-chunk deltas. The SDK adds them all up, multiplying the real total by the chunk count.
-
-**For cost monitoring**, treat the provider's billing dashboard / CSV as authoritative, not OTel. The `gen_ai.usage.*` values are still useful for *relative* comparisons within a single turn (e.g. "the synthesis call used much more than the routing call") but not for absolute totals.
-
-**For provider compatibility** when this matters: OpenAI's native API and Azure OpenAI report per-chunk delta usage correctly; SiliconFlow, some Anthropic-via-OpenAI shims, and unverified third-party gateways may not. Disable streaming (`ChatOptions.Stream = false`) for a side-by-side comparison if you suspect inflation, or check the provider's billing dashboard for ground truth.
-
-Tracking: [#145](https://github.com/dignite-projects/dignite-paperbase/issues/145).
+This only becomes a caveat if a future code path introduces *streaming* (`GetStreamingResponseAsync`): `Microsoft.Extensions.AI`'s `OpenTelemetryChatClient` accumulates usage per streamed chunk, and some OpenAI-compatible gateways report **cumulative-so-far** usage on each chunk rather than per-chunk deltas — the SDK then sums them, inflating the total by the chunk count (observed ~40–70× on SiliconFlow + DeepSeek-V3). If streaming is ever added, verify token numbers against the provider's billing dashboard before trusting OTel for absolute cost.
 
 ### Gotcha: the `Experimental.*` source-name prefix
 
@@ -142,14 +131,14 @@ Production deployments should set the endpoint via env var or Kubernetes ConfigM
 
 ## Tagging policy and cardinality
 
-Downstream modules that introduce Meters under `Dignite.Paperbase.*` should follow the same rule: **tags are low-cardinality enums or bounded sets**.
+Any Paperbase Core Meter introduced under `Dignite.Paperbase.*` should follow the same rule: **tags are low-cardinality enums or bounded sets**.
 
 | Allowed as tag | Not allowed as tag |
 |---|---|
 | `document_type_code` (bounded by tenant-scoped `DocumentType` rows) | `tenant_id` (multi-tenant cardinality blowup) |
 | `success` (`true` / `false`) | `user_id` |
 | `pipeline_code` (one of the static `PaperbasePipelines.*`) | `document_id` |
-| `stage` / `strategy` (MAF compaction layer names) | Free-text from the model or user |
+| `stage` (one of the static pipeline stage names) | Free-text from the model or user |
 
 Per-tenant / per-user drill-down belongs in traces and structured logs — those are sampled, while metrics are aggregated by tag and would explode storage and dashboard latency.
 
@@ -159,18 +148,20 @@ When adding a new tag to an existing metric, audit the cardinality first. A tag 
 
 A test must not register the production OTel pipeline. The `PaperbaseHostModule.ConfigureOpenTelemetry` short-circuits when `Enabled = false` (the default), so test hosts that don't set `OpenTelemetry:Enabled = true` skip the export entirely. Tests that need to *capture* metric emissions instead use `System.Diagnostics.Metrics.MeterListener` directly — subscribe to the specific Meter name in test setup, drain measurements in assertions.
 
-## Adding a Meter from a new module
+## Adding a Meter in Paperbase Core
+
+The `Dignite.Paperbase.*` wildcard exists so Paperbase Core can add its own pipeline metrics later (e.g. classification-confidence histogram, OCR-duration counter) without touching the host. Pattern:
 
 ```csharp
-// In your module's Domain layer
-public class MyModuleTelemetryRecorder : ISingletonDependency
+// In Paperbase Core (Domain or Application layer)
+public class PipelineTelemetryRecorder : ISingletonDependency
 {
-    public const string MeterName = "Dignite.Paperbase.MyModule";
+    public const string MeterName = "Dignite.Paperbase.Pipeline";
 
     private static readonly Meter Meter = new(MeterName);
 
     private static readonly Counter<long> SomeCounter = Meter.CreateCounter<long>(
-        "paperbase.my_module.something.total",
+        "paperbase.pipeline.something.total",
         description: "...");
 
     public virtual void RecordSomething(string tagValue)
@@ -180,6 +171,6 @@ public class MyModuleTelemetryRecorder : ISingletonDependency
 }
 ```
 
-No host-side change required. The `AddMeter("Dignite.Paperbase.*")` wildcard in `ConfigureOpenTelemetry` picks it up automatically when the host is rebuilt with the new module.
+No host-side change required: the `AddMeter("Dignite.Paperbase.*")` / `AddSource("Dignite.Paperbase.*")` wildcards in `ConfigureOpenTelemetry` pick up any Core-defined Meter or ActivitySource under that prefix on the next host rebuild.
 
-For ActivitySource-based traces, the wildcard `AddSource("Dignite.Paperbase.*")` registration covers the same naming convention.
+Downstream business modules are out of scope (they run in their own host with their own OTel pipeline), so this wildcard is **not** an integration seam for them.
