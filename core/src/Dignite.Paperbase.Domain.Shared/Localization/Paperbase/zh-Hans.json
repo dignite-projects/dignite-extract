@@ -24,6 +24,7 @@
     "Paperbase:PipelineNeverRan": "流水线 '{PipelineCode}' 尚未运行。",
     "Paperbase:PipelineRetryInProgress": "流水线 '{PipelineCode}' 已有进行中的尝试。",
     "Paperbase:PipelineNotRetryable": "流水线 '{PipelineCode}' 当前状态为 '{Status}'，无法重试。",
+    "Document:PendingReviewMessage": "文档需要人工审核。请根据下方原因选择或创建合适的文档类型，或重新上传更合适的源文件。",
     "Permission:Paperbase": "Paperbase",
     "Permission:Documents": "文档",
     "Permission:Documents.Upload": "上传文档",

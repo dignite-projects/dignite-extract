@@ -145,6 +145,8 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
   );
 
   isProcessing = computed(() => {
+    if (this.needsReview()) return false;
+
     const status = this.document()?.lifecycleStatus;
     return status === DocumentLifecycleStatus.Uploaded ||
            status === DocumentLifecycleStatus.Processing;
@@ -272,6 +274,14 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  getDocumentStatusBadgeClass(doc: DocumentDto): string {
+    if (doc.reviewStatus === DocumentReviewStatus.PendingReview) {
+      return 'badge bg-warning text-dark';
+    }
+
+    return this.getStatusBadgeClass(doc.lifecycleStatus);
+  }
+
   getStatusLabel(status: DocumentLifecycleStatus): string {
     switch (status) {
       case DocumentLifecycleStatus.Uploaded:   return '::Document:Status:Uploaded';
@@ -280,6 +290,14 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
       case DocumentLifecycleStatus.Failed:     return '::Document:Status:Failed';
       default:                                 return '::Document:Status:Unknown';
     }
+  }
+
+  getDocumentStatusLabel(doc: DocumentDto): string {
+    if (doc.reviewStatus === DocumentReviewStatus.PendingReview) {
+      return '::DocumentReviewStatus:PendingReview';
+    }
+
+    return this.getStatusLabel(doc.lifecycleStatus);
   }
 
   getRunStatusBadgeClass(status: PipelineRunStatus | undefined): string {

@@ -199,6 +199,12 @@ export class DocumentListComponent implements OnInit {
     return doc.reviewStatus === DocumentReviewStatus.PendingReview;
   }
 
+  isProcessingDocument(doc: DocumentDto): boolean {
+    return doc.reviewStatus !== DocumentReviewStatus.PendingReview &&
+      (doc.lifecycleStatus === DocumentLifecycleStatus.Processing ||
+       doc.lifecycleStatus === DocumentLifecycleStatus.Uploaded);
+  }
+
   getCandidates(doc: DocumentDto): PipelineRunCandidate[] {
     const run = this.getLatestClassificationRun(doc);
     const fromRun = run?.candidates;
@@ -258,6 +264,14 @@ export class DocumentListComponent implements OnInit {
     }
   }
 
+  getDocumentStatusBadgeClass(doc: DocumentDto): string {
+    if (doc.reviewStatus === DocumentReviewStatus.PendingReview) {
+      return 'badge bg-warning text-dark';
+    }
+
+    return this.getStatusBadgeClass(doc.lifecycleStatus);
+  }
+
   getStatusLabel(status: DocumentLifecycleStatus): string {
     switch (status) {
       case DocumentLifecycleStatus.Uploaded:
@@ -271,6 +285,14 @@ export class DocumentListComponent implements OnInit {
       default:
         return '::Document:Status:Unknown';
     }
+  }
+
+  getDocumentStatusLabel(doc: DocumentDto): string {
+    if (doc.reviewStatus === DocumentReviewStatus.PendingReview) {
+      return '::DocumentReviewStatus:PendingReview';
+    }
+
+    return this.getStatusLabel(doc.lifecycleStatus);
   }
 
   isImage(doc: DocumentDto): boolean {

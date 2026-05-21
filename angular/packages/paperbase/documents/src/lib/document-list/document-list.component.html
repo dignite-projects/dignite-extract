@@ -129,12 +129,11 @@
                   }
                 </td>
                 <td>
-                  <span [class]="getStatusBadgeClass(doc.lifecycleStatus)">
-                    @if (doc.lifecycleStatus === DocumentLifecycleStatus.Processing ||
-                         doc.lifecycleStatus === DocumentLifecycleStatus.Uploaded) {
+                  <span [class]="getDocumentStatusBadgeClass(doc)">
+                    @if (isProcessingDocument(doc)) {
                       <span class="spinner-border spinner-border-sm me-1" role="status"></span>
                     }
-                    {{ getStatusLabel(doc.lifecycleStatus) | abpLocalization }}
+                    {{ getDocumentStatusLabel(doc) | abpLocalization }}
                   </span>
                 </td>
                 <td class="text-muted small">{{ formatFileSize(doc.fileOrigin?.fileSize ?? 0) }}</td>

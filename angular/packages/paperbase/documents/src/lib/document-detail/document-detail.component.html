@@ -13,11 +13,11 @@
       <span class="ms-2 fw-semibold text-truncate" style="max-width: 480px;" [title]="document()!.title || document()!.fileOrigin?.originalFileName">
         {{ document()!.title || document()!.fileOrigin?.originalFileName || document()!.originalFileBlobName }}
       </span>
-      <span [class]="getStatusBadgeClass(document()!.lifecycleStatus)" class="ms-2">
+      <span [class]="getDocumentStatusBadgeClass(document()!)" class="ms-2">
         @if (isProcessing()) {
           <span class="spinner-border spinner-border-sm me-1" role="status"></span>
         }
-        {{ getStatusLabel(document()!.lifecycleStatus) | abpLocalization }}
+        {{ getDocumentStatusLabel(document()!) | abpLocalization }}
       </span>
     }
     <div class="ms-auto d-flex gap-2">
@@ -50,8 +50,13 @@
   }
 
   @if (document()) {
-    <!-- Processing banner -->
-    @if (isProcessing()) {
+    <!-- Review / processing banner -->
+    @if (needsReview()) {
+      <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
+        <i class="fas fa-user-edit me-2"></i>
+        <span>{{ '::Document:PendingReviewMessage' | abpLocalization }}</span>
+      </div>
+    } @else if (isProcessing()) {
       <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
         <div class="spinner-border spinner-border-sm me-2" role="status"></div>
         <span>{{ '::Document:ProcessingMessage' | abpLocalization }}</span>
