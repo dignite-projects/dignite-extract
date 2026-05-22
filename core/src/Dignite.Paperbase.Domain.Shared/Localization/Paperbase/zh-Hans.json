@@ -24,6 +24,8 @@
     "Paperbase:PipelineNeverRan": "流水线 '{PipelineCode}' 尚未运行。",
     "Paperbase:PipelineRetryInProgress": "流水线 '{PipelineCode}' 已有进行中的尝试。",
     "Paperbase:PipelineNotRetryable": "流水线 '{PipelineCode}' 当前状态为 '{Status}'，无法重试。",
+    "Paperbase:DocumentNotClassified": "该文档尚无文档类型。请先完成分类再编辑抽取字段。",
+    "Paperbase:UnknownExtractedField": "字段 '{FieldName}' 未在文档类型 '{DocumentTypeCode}' 下定义。",
     "Document:PendingReviewMessage": "文档需要人工审核。请根据下方原因选择或创建合适的文档类型，或重新上传更合适的源文件。",
     "Permission:Paperbase": "Paperbase",
     "Permission:Documents": "文档",
@@ -62,6 +64,9 @@
     "Document:AreYouSureToRestore": "确定恢复此文档吗？",
     "Document:AreYouSureToPermanentlyDelete": "此操作不可恢复。文档、附件，以及由此派生的所有业务记录（含其上的人工修正）都将被永久删除，是否继续？",
     "Document:ExtractedFields": "抽取字段",
+    "Document:FieldsUpdated": "字段已更新。",
+    "Document:UpdateFailed": "更新字段失败。",
+    "Document:NoFieldValues": "暂无字段值。点击编辑填写。",
 
     "Refresh": "刷新",
     "Cancel": "取消",

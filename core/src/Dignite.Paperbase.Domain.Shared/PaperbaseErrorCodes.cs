@@ -27,4 +27,6 @@ public static class PaperbaseErrorCodes
     public const string PipelineRetryInProgress = "Paperbase:PipelineRetryInProgress";
     public const string PipelineNeverRan = "Paperbase:PipelineNeverRan";
     public const string UnknownPipelineCode = "Paperbase:UnknownPipelineCode";
+    public const string DocumentNotClassified = "Paperbase:DocumentNotClassified";
+    public const string UnknownExtractedField = "Paperbase:UnknownExtractedField";
 }

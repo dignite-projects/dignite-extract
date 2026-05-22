@@ -75,6 +75,18 @@ export class DocumentService {
       { apiName: this.apiName }
     );
 
+  // Operator manual correction of extracted field values. Whole-replace:
+  // pass the document's current field values (key = FieldDefinition.Name).
+  updateExtractedFields = (id: string, fields: Record<string, unknown>): Observable<DocumentDto> =>
+    this.rest.request<{ fields: Record<string, unknown> }, DocumentDto>(
+      {
+        method: 'POST',
+        url: `${this.basePath}/${id}/extracted-fields`,
+        body: { fields },
+      },
+      { apiName: this.apiName }
+    );
+
   upload = (file: File): Observable<DocumentDto> => {
     const formData = new FormData();
     formData.append('File', file, file.name);

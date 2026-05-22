@@ -11,6 +11,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { LocalizationPipe, PermissionService } from '@abp/ng.core';
 import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
 import {
@@ -19,6 +20,9 @@ import {
   DocumentPipelineRunDto,
   DocumentReviewStatus,
   DocumentService,
+  FieldDataType,
+  FieldDefinitionDto,
+  FieldDefinitionService,
   PAPERBASE_PERMISSIONS,
   PipelineRunStatus,
 } from '@dignite/paperbase';
@@ -50,13 +54,14 @@ const KNOWN_PIPELINE_CODES = [
   selector: 'lib-document-detail',
   templateUrl: './document-detail.component.html',
   styleUrls: ['./document-detail.component.scss'],
-  imports: [CommonModule, RouterModule, LocalizationPipe],
+  imports: [CommonModule, RouterModule, FormsModule, LocalizationPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DocumentDetailComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly documentService = inject(DocumentService);
+  private readonly fieldDefinitionService = inject(FieldDefinitionService);
   private readonly toaster = inject(ToasterService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly permissionService = inject(PermissionService);
@@ -64,6 +69,9 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
 
   readonly canDelete = this.permissionService.getGrantedPolicy(
     PAPERBASE_PERMISSIONS.Documents.Delete,
+  );
+  readonly canEditFields = this.permissionService.getGrantedPolicy(
+    PAPERBASE_PERMISSIONS.Documents.ConfirmClassification,
   );
 
   document = signal<DocumentDto | null>(null);
@@ -73,6 +81,10 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
   retryingPipeline = signal<string | null>(null);
   blobUrl = signal<string | null>(null);
   isBlobLoading = signal(false);
+  isEditingFields = signal(false);
+  editedFields = signal<Record<string, string>>({});
+  isSavingFields = signal(false);
+  fieldDefinitions = signal<FieldDefinitionDto[]>([]);
 
   readonly DocumentLifecycleStatus = DocumentLifecycleStatus;
   readonly DocumentReviewStatus = DocumentReviewStatus;
@@ -162,6 +174,12 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
       .map(key => ({ key, value: this.formatFieldValue(fields[key]) }));
   });
 
+  // 字段卡片显示条件：已有抽取值（只读展示），或可编辑且该类型有字段定义（支持补全空字段）。
+  showFieldsCard = computed(() =>
+    this.extractedFieldEntries().length > 0 ||
+    (this.canEditFields && this.fieldDefinitions().length > 0)
+  );
+
   private documentId!: string;
 
   ngOnInit(): void {
@@ -185,11 +203,25 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
         if (doc.fileOrigin?.contentType?.startsWith('image/')) {
           this.loadBlob();
         }
+        // 编辑字段需要该类型的字段定义（含 LLM 漏抽的空字段）以支持补全。
+        // getByDocumentType 需 ConfirmClassification 权限，仅在可编辑时拉取避免 403。
+        if (this.canEditFields && doc.documentTypeCode) {
+          this.loadFieldDefinitions(doc.documentTypeCode);
+        }
       },
       error: () => {
         this.isLoading.set(false);
       },
     });
+  }
+
+  private loadFieldDefinitions(typeCode: string): void {
+    this.fieldDefinitionService.getByDocumentType(typeCode)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: defs => this.fieldDefinitions.set(defs),
+        error: () => this.fieldDefinitions.set([]),
+      });
   }
 
   private loadBlob(): void {
@@ -360,6 +392,76 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
     if (value === null || value === undefined) return '—';
     if (typeof value === 'object') return JSON.stringify(value);
     return String(value);
+  }
+
+  startEditFields(): void {
+    const fields = this.document()?.extractedFields ?? {};
+    const init: Record<string, string> = {};
+    // 基于字段定义遍历——包含 LLM 漏抽的空字段，让操作员补全。
+    for (const def of this.fieldDefinitions()) {
+      const v = fields[def.name];
+      init[def.name] = v === null || v === undefined ? '' : this.formatFieldValue(v);
+    }
+    this.editedFields.set(init);
+    this.isEditingFields.set(true);
+  }
+
+  updateField(key: string, value: string): void {
+    this.editedFields.update(f => ({ ...f, [key]: value }));
+  }
+
+  cancelEditFields(): void {
+    this.isEditingFields.set(false);
+    this.editedFields.set({});
+  }
+
+  saveFields(): void {
+    const doc = this.document();
+    if (!doc) return;
+    this.isSavingFields.set(true);
+    const edited = this.editedFields();
+    const fields: Record<string, unknown> = {};
+    for (const key of Object.keys(edited)) {
+      // 空 = 不写该字段（整体替换语义下即从 ExtractedFields 移除）。
+      if (edited[key].trim() === '') continue;
+      fields[key] = this.coerceValue(key, edited[key]);
+    }
+    this.documentService.updateExtractedFields(doc.id, fields)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: updated => {
+          this.document.set(updated);
+          this.isSavingFields.set(false);
+          this.isEditingFields.set(false);
+          this.editedFields.set({});
+          this.toaster.success('::Document:FieldsUpdated', '::Success');
+        },
+        error: () => {
+          this.isSavingFields.set(false);
+          this.toaster.error('::Document:UpdateFailed', '::Error');
+        },
+      });
+  }
+
+  // 按字段 DataType 把文本输入转成对应 JSON 类型——补全的空字段原值为空，
+  // 不能只看原值类型。Date/DateTime/String 一律存字符串。
+  private coerceValue(name: string, raw: string): unknown {
+    const def = this.fieldDefinitions().find(d => d.name === name);
+    switch (def?.dataType) {
+      case FieldDataType.Integer:
+      case FieldDataType.Decimal: {
+        const n = Number(raw);
+        return raw.trim() !== '' && !Number.isNaN(n) ? n : raw;
+      }
+      case FieldDataType.Boolean:
+        return raw === 'true' || raw === '1';
+      default:
+        return raw;
+    }
+  }
+
+  fieldDataTypeLabel(dataType: FieldDataType): string {
+    return FieldDataType[dataType] ?? '';
   }
 
   formatElapsed(run: DocumentPipelineRunDto): string {

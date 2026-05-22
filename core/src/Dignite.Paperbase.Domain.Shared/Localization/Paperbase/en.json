@@ -112,6 +112,9 @@
     "Document:Filter:AllTypes": "All Types",
     "Document:SearchPlaceholder": "Search title / file name / content...",
     "Document:ExtractedFields": "Extracted Fields",
+    "Document:FieldsUpdated": "Fields updated.",
+    "Document:UpdateFailed": "Failed to update fields.",
+    "Document:NoFieldValues": "No field values yet. Click Edit to fill them in.",
 
     "Edit": "Edit",
     "Save": "Save",
@@ -191,6 +194,8 @@
     "Paperbase:UnknownPipelineCode": "Pipeline '{PipelineCode}' is not retryable.",
     "Paperbase:PipelineNeverRan": "Pipeline '{PipelineCode}' has not started yet.",
     "Paperbase:PipelineRetryInProgress": "Pipeline '{PipelineCode}' already has an attempt in progress.",
-    "Paperbase:PipelineNotRetryable": "Pipeline '{PipelineCode}' is in '{Status}' state and cannot be retried."
+    "Paperbase:PipelineNotRetryable": "Pipeline '{PipelineCode}' is in '{Status}' state and cannot be retried.",
+    "Paperbase:DocumentNotClassified": "This document has no document type yet. Classify it before editing extracted fields.",
+    "Paperbase:UnknownExtractedField": "Field '{FieldName}' is not defined on document type '{DocumentTypeCode}'."
   }
 }

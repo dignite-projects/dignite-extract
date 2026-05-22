@@ -58,4 +58,13 @@ public interface IDocumentAppService : IApplicationService
     Task<DocumentDto> RejectReviewAsync(Guid id, RejectReviewInput input);
 
     Task RetryPipelineAsync(Guid id, RetryPipelineInput input);
+
+    /// <summary>
+    /// 操作员手改类型绑定字段抽取结果（个别纠错）。整体替换 <c>Document.ExtractedFields</c>；
+    /// 每个 key 必须是该文档所属层、该 DocumentType 下已定义的 <see cref="FieldDefinition.Name"/>。
+    /// 完成后复用 <see cref="Abstractions.Documents.FieldsExtractedEto"/> 重发，下游按
+    /// <c>(DocumentId, EventType, EventTime)</c> 幂等吸收、回拉最新字段值。
+    /// 大面积错误应走重跑 text-extraction / 重新上传，而非本路径批量修补。
+    /// </summary>
+    Task<DocumentDto> UpdateExtractedFieldsAsync(Guid id, UpdateExtractedFieldsInput input);
 }
