@@ -47,11 +47,6 @@
             "bundleName": "fontawesome-v4-shims.min"
           },
           {
-            "input": "node_modules/ng-zorro-antd/tree/style/index.min.css",
-            "inject": false,
-            "bundleName": "ng-zorro-antd-tree"
-          },
-          {
             "input": "node_modules/@volo/ngx-lepton-x.lite/assets/css/bootstrap-dim.css",
             "inject": false,
             "bundleName": "bootstrap-dim"
