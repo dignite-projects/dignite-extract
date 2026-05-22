@@ -135,7 +135,24 @@
           </div>
           <div class="modal-body">
             <div class="mb-3">
-              <label class="form-label">{{ '::DocumentType:TypeCode' | abpLocalization }}</label>
+              <label class="form-label">{{ '::DocumentType:DisplayName' | abpLocalization }}</label>
+              <input
+                type="text"
+                class="form-control"
+                formControlName="displayName"
+                [class.is-invalid]="form.controls.displayName.touched && form.controls.displayName.invalid"
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label d-flex align-items-center gap-2">
+                <span>{{ '::DocumentType:TypeCode' | abpLocalization }}</span>
+                @if (isSuggesting()) {
+                  <span class="text-muted small fw-normal">
+                    <span class="spinner-border spinner-border-sm me-1" style="width:.75rem;height:.75rem;"></span>
+                    {{ '::DocumentType:TypeCodeSuggesting' | abpLocalization }}
+                  </span>
+                }
+              </label>
               <input
                 type="text"
                 class="form-control"
@@ -147,15 +164,6 @@
               @if (form.controls.typeCode.touched && form.controls.typeCode.invalid) {
                 <div class="invalid-feedback d-block">{{ '::DocumentType:TypeCodeInvalid' | abpLocalization }}</div>
               }
-            </div>
-            <div class="mb-3">
-              <label class="form-label">{{ '::DocumentType:DisplayName' | abpLocalization }}</label>
-              <input
-                type="text"
-                class="form-control"
-                formControlName="displayName"
-                [class.is-invalid]="form.controls.displayName.touched && form.controls.displayName.invalid"
-              />
             </div>
             <div class="row g-3">
               <div class="col-6">

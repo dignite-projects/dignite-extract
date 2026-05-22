@@ -5,4 +5,5 @@ export * from './field-data-type.enum';
 export * from './field-definition.models';
 export * from './models';
 export * from './pipeline-run-status.enum';
+export * from './slug-suggestion.models';
 export * from './source-type.enum';

@@ -9,8 +9,9 @@ namespace Dignite.Paperbase.Documents;
 /// 字段定义管理（字段架构 v2 统一 API）。
 /// <para>
 /// 所有路径强制当前租户上下文（CurrentTenant.Id 绑定）；不允许跨租户读写。
-/// Host 字段（TenantId IS NULL 行）通过 IDataSeedContributor 在启动时种子化，
-/// 不通过此 AppService 修改（HostAdmin 路径未来单独提供）。
+/// 按所属层精确匹配单层、不跨层混合：Host admin（CurrentTenant.Id IS NULL）增删改 Host 字段
+/// （TenantId IS NULL 行），租户 admin 增删改自己租户字段。两层都通过此 AppService CRUD 自管——
+/// 不存在 seed contributor / Module 启动注册路径。
 /// </para>
 /// </summary>
 public interface IFieldDefinitionAppService : IApplicationService

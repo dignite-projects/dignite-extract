@@ -144,7 +144,24 @@
           <div class="modal-body">
             <div class="row g-3">
               <div class="col-md-6">
-                <label class="form-label">{{ '::FieldDefinition:Name' | abpLocalization }}</label>
+                <label class="form-label">{{ '::FieldDefinition:DisplayName' | abpLocalization }}</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  formControlName="displayName"
+                  [class.is-invalid]="form.controls.displayName.touched && form.controls.displayName.invalid"
+                />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label d-flex align-items-center gap-2">
+                  <span>{{ '::FieldDefinition:Name' | abpLocalization }}</span>
+                  @if (isSuggesting()) {
+                    <span class="text-muted small fw-normal">
+                      <span class="spinner-border spinner-border-sm me-1" style="width:.75rem;height:.75rem;"></span>
+                      {{ '::FieldDefinition:NameSuggesting' | abpLocalization }}
+                    </span>
+                  }
+                </label>
                 <input
                   type="text"
                   class="form-control"
@@ -156,15 +173,6 @@
                 @if (form.controls.name.touched && form.controls.name.invalid) {
                   <div class="invalid-feedback d-block">{{ '::FieldDefinition:NameInvalid' | abpLocalization }}</div>
                 }
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">{{ '::FieldDefinition:DisplayName' | abpLocalization }}</label>
-                <input
-                  type="text"
-                  class="form-control"
-                  formControlName="displayName"
-                  [class.is-invalid]="form.controls.displayName.touched && form.controls.displayName.invalid"
-                />
               </div>
             </div>
 

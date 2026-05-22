@@ -12,6 +12,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { LocalizationPipe, PermissionService } from '@abp/ng.core';
 import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
+import { map } from 'rxjs';
 import {
   CreateFieldDefinitionDto,
   FieldDataType,
@@ -19,7 +20,9 @@ import {
   FieldDefinitionService,
   fieldDataTypeOptions,
   PAPERBASE_PERMISSIONS,
+  SlugSuggestionService,
 } from '@dignite/paperbase';
+import { SlugSuggestionHandle, wireSlugSuggestion } from '../slug-suggestion';
 
 // Mirrors FieldDefinitionConsts (Domain.Shared): Name whitelist + length caps.
 const NAME_PATTERN = /^[A-Za-z0-9_\-]{1,64}$/;
@@ -38,6 +41,7 @@ export class FieldDefinitionListComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly service = inject(FieldDefinitionService);
+  private readonly slugService = inject(SlugSuggestionService);
   private readonly fb = inject(FormBuilder);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toaster = inject(ToasterService);
@@ -57,6 +61,9 @@ export class FieldDefinitionListComponent implements OnInit {
 
   editing = signal<FieldDefinitionDto | 'create' | null>(null);
   isSubmitting = signal(false);
+  isSuggesting = signal(false);
+
+  private slugHandle?: SlugSuggestionHandle;
 
   readonly form = this.fb.nonNullable.group({
     name: [
@@ -72,7 +79,23 @@ export class FieldDefinitionListComponent implements OnInit {
 
   ngOnInit(): void {
     this.documentTypeCode = this.route.snapshot.paramMap.get('typeCode') ?? '';
+    this.slugHandle = wireSlugSuggestion({
+      displayName: this.form.controls.displayName,
+      target: this.form.controls.name,
+      suggest: text => this.slugService.suggest({ displayName: text }).pipe(map(r => r.slug)),
+      fallback: () => this.nextFieldSlug(),
+      destroyRef: this.destroyRef,
+      onPending: pending => this.isSuggesting.set(pending),
+    });
     this.load();
+  }
+
+  // LLM 不可用 / 未翻译时的本地回退：取与现有字段名不冲突的最小 field_{n}。
+  private nextFieldSlug(): string {
+    const existing = new Set(this.fields().map(f => f.name));
+    let i = 1;
+    while (existing.has(`field_${i}`)) i++;
+    return `field_${i}`;
   }
 
   refresh(): void {
@@ -113,10 +136,17 @@ export class FieldDefinitionListComponent implements OnInit {
       isRequired: false,
     });
     this.form.controls.name.enable();
+    // 必须在 form.reset()/enable() 之后调用：二者触发的 valueChanges 会误标"手动编辑"，
+    // reset() 清掉该标记并复位建议状态（含 spinner）。
+    this.slugHandle?.reset();
     this.editing.set('create');
   }
 
   openEdit(field: FieldDefinitionDto): void {
+    // Name is immutable after creation (UpdateFieldDefinitionDto omits it).
+    // 先 disable 再 reset：让 slug 自动建议在编辑态 reset 期间识别为非创建态，
+    // 不会把既有 name 当"过期键"清空（见 wireSlugSuggestion 注释）。
+    this.form.controls.name.disable();
     this.form.reset({
       name: field.name,
       displayName: field.displayName,
@@ -125,8 +155,6 @@ export class FieldDefinitionListComponent implements OnInit {
       displayOrder: field.displayOrder,
       isRequired: field.isRequired,
     });
-    // Name is immutable after creation (UpdateFieldDefinitionDto omits it).
-    this.form.controls.name.disable();
     this.editing.set(field);
   }
 

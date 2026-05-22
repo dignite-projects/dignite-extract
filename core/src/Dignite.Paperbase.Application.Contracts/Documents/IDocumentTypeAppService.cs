@@ -8,9 +8,10 @@ namespace Dignite.Paperbase.Documents;
 /// <summary>
 /// 文档类型管理（字段架构 v2）。
 /// <para>
-/// 返回的列表是当前租户可见的合集（Host 类型 ∪ 当前租户私有类型）；
-/// 创建 / 修改 / 删除只作用于当前租户私有类型（TenantId == CurrentTenant.Id）。
-/// Host 类型（TenantId IS NULL）通过 IDataSeedContributor 维护，不通过此 AppService 改。
+/// 按所属层精确匹配单层、不做 Host ∪ Tenant union：GetVisible 返回调用方所在层
+/// （Host admin 看 Host 类型，租户 admin 看自己租户类型）；创建 / 修改 / 删除作用于
+/// 调用方所在层（CurrentTenant.Id 绑定）。两层都通过此 AppService CRUD 自管——
+/// 不存在 seed contributor / Module 启动注册路径。
 /// </para>
 /// </summary>
 public interface IDocumentTypeAppService : IApplicationService
@@ -18,8 +19,8 @@ public interface IDocumentTypeAppService : IApplicationService
     Task<List<DocumentTypeDto>> GetVisibleAsync();
 
     /// <summary>
-    /// 当前租户已软删除的私有文档类型列表（回收站视图）。
-    /// 不含 Host 类型——Host 类型由 IDataSeedContributor 维护，不参与租户级回收站。
+    /// 调用方所在层已软删除的文档类型列表（回收站视图）：
+    /// Host admin（CurrentTenant.Id IS NULL）看 Host 层，租户 admin 看自己租户层。
     /// </summary>
     Task<List<DocumentTypeDto>> GetDeletedAsync();
 
