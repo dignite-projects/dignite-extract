@@ -47,15 +47,6 @@ export class DocumentService {
       { apiName: this.apiName }
     );
 
-  // Approve a PendingReview document. On the backend this is a no-op when the
-  // document has no DocumentTypeCode yet (the operator must confirm/reclassify
-  // a type first), so callers gate this action on documentTypeCode presence.
-  approveReview = (id: string): Observable<DocumentDto> =>
-    this.rest.request<void, DocumentDto>(
-      { method: 'POST', url: `${this.basePath}/${id}/review/approve` },
-      { apiName: this.apiName }
-    );
-
   rejectReview = (id: string, reason?: string): Observable<DocumentDto> =>
     this.rest.request<{ reason?: string }, DocumentDto>(
       {

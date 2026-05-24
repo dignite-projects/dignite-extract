@@ -84,16 +84,6 @@
                 <td class="text-muted small">{{ doc.creationTime | date:'yyyy-MM-dd HH:mm' }}</td>
                 <td (click)="$event.stopPropagation()">
                   <div class="d-flex gap-1 justify-content-end">
-                    @if (doc.documentTypeCode) {
-                      <button
-                        class="btn btn-sm btn-success"
-                        (click)="approve(doc, $event)"
-                        [disabled]="isSubmitting()"
-                        title="{{ '::Document:Review:Approve' | abpLocalization }}"
-                      >
-                        <i class="fas fa-check-double"></i>
-                      </button>
-                    }
                     <button
                       class="btn btn-sm btn-warning"
                       (click)="openClassifyDialog(doc, $event)"

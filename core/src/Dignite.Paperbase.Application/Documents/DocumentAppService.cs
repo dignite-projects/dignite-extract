@@ -442,52 +442,6 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
     }
 
     [Authorize(PaperbasePermissions.Documents.ConfirmClassification)]
-    public virtual async Task<DocumentDto> ApproveReviewAsync(Guid id)
-    {
-        var document = await _documentRepository.GetAsync(id, includeDetails: true);
-
-        if (document.ReviewStatus != DocumentReviewStatus.PendingReview)
-        {
-            // 幂等：不在 PendingReview 状态下返回当前快照，不抛
-            return ObjectMapper.Map<Document, DocumentDto>(document);
-        }
-
-        // 兑现 CLAUDE.md "OCR 置信度门槛" 承诺："操作员手动确认通过 → 触发 DocumentReadyEto"。
-        // 两类待审核场景：
-        //   (a) OCR confidence 不达标 → classification 尚未跑：schedule classification pipeline，
-        //       让它正常推进，完成后由 DeriveLifecycle 跃到 Ready 自动发 DocumentReadyEto。
-        //   (b) classification 已跑且有 DocumentTypeCode：直接 RecomputeLifecycle 让它进 Ready。
-        //       分类已跑但 DocumentTypeCode 仍为空时，当前后台 pipeline 已经停在
-        //       "没有已确认类型" 的审核结论上；不要抛客户端错误，也不要把它改成 Reviewed。
-        //       保持 PendingReview + ClassificationReason，让操作员创建 DocumentType 后
-        //       Reclassify，或重新上传更合适的源文件。
-        var hasClassificationRun = document.GetLatestRun(PaperbasePipelines.Classification) != null;
-        if (hasClassificationRun && string.IsNullOrWhiteSpace(document.DocumentTypeCode))
-        {
-            return ObjectMapper.Map<Document, DocumentDto>(document);
-        }
-
-        document.ApproveReview();
-
-        if (!hasClassificationRun)
-        {
-            // QueueAsync 内已 _documentRepository.UpdateAsync(document, autoSave: true)，
-            // 同一 document 实例的 ApproveReview() 状态变更随 scheduler 内的 save 一起落库；
-            // 此分支无需再写一次。
-            await _pipelineJobScheduler.QueueAsync(document, PaperbasePipelines.Classification);
-        }
-        else
-        {
-            // RecomputeLifecycleAsync 仅修改 document 状态（in-memory），不写 DB——
-            // 必须在这里显式 UpdateAsync 才能把 ApproveReview + RecomputeLifecycle 的变更落库。
-            await _pipelineRunManager.RecomputeLifecycleAsync(document);
-            await _documentRepository.UpdateAsync(document, autoSave: true);
-        }
-
-        return ObjectMapper.Map<Document, DocumentDto>(document);
-    }
-
-    [Authorize(PaperbasePermissions.Documents.ConfirmClassification)]
     public virtual async Task<DocumentDto> RejectReviewAsync(Guid id, RejectReviewInput input)
     {
         var document = await _documentRepository.GetAsync(id, includeDetails: true);

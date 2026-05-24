@@ -7,7 +7,6 @@ using Dignite.Paperbase.Abstractions.Documents;
 using Dignite.Paperbase.Abstractions.TextExtraction;
 using Dignite.Paperbase.Ai;
 using Dignite.Paperbase.Documents;
-using Dignite.Paperbase.Settings;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -16,7 +15,6 @@ using Volo.Abp.BackgroundJobs;
 using Volo.Abp.BlobStoring;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.EventBus.Distributed;
-using Volo.Abp.Settings;
 using Volo.Abp.Timing;
 using Volo.Abp.Uow;
 
@@ -35,7 +33,6 @@ public class DocumentTextExtractionBackgroundJob
     private readonly IUnitOfWorkManager _unitOfWorkManager;
     private readonly IDistributedEventBus _distributedEventBus;
     private readonly IClock _clock;
-    private readonly ISettingProvider _settingProvider;
     /// <summary>
     /// Document-title generation is single-shot, tool-free, prompt-unique. Reuses the
     /// host-registered <see cref="PaperbaseAIConsts.TitleGeneratorChatClientKey"/> client
@@ -56,7 +53,6 @@ public class DocumentTextExtractionBackgroundJob
         IUnitOfWorkManager unitOfWorkManager,
         IDistributedEventBus distributedEventBus,
         IClock clock,
-        ISettingProvider settingProvider,
         [FromKeyedServices(PaperbaseAIConsts.TitleGeneratorChatClientKey)] IChatClient titleGeneratorChatClient,
         IPromptProvider promptProvider,
         IOptions<PaperbaseAIBehaviorOptions> behaviorOptions)
@@ -70,7 +66,6 @@ public class DocumentTextExtractionBackgroundJob
         _unitOfWorkManager = unitOfWorkManager;
         _distributedEventBus = distributedEventBus;
         _clock = clock;
-        _settingProvider = settingProvider;
         _titleGeneratorChatClient = titleGeneratorChatClient;
         _promptProvider = promptProvider;
         _behaviorOptions = behaviorOptions.Value;
@@ -150,32 +145,11 @@ public class DocumentTextExtractionBackgroundJob
                 UsedOcr = result.UsedOcr
             });
 
-        // OCR 置信度门槛检查（只对 UsedOcr=true 且有 confidence 值的路径有意义；
-        // 数字版抽取 Confidence 为 null，不会触发）。
-        var threshold = await ResolveOcrThresholdAsync();
-        if (result.UsedOcr && result.Confidence is { } confidence && confidence < threshold)
-        {
-            var reason = $"OCR confidence {confidence:0.00} below threshold {threshold:0.00}";
-            document.MarkPendingOcrReview(reason);
-            await _documentRepository.UpdateAsync(document, autoSave: true);
-
-            Logger.LogInformation(
-                "Document {DocumentId} OCR confidence {Confidence:0.00} below threshold {Threshold:0.00}; routed to PendingReview.",
-                document.Id, confidence, threshold);
-        }
-        else
-        {
-            await _pipelineJobScheduler.QueueAsync(document, PaperbasePipelines.Classification);
-        }
+        // 文本提取完成即推进分类——OcrConfidence 仅作 informational 质量指标，不再做事前门控
+        // （#196：OCR 平均置信度预测不了真实质量；质量问题由分类审核 + 操作员重跑/重传事后处理）。
+        await _pipelineJobScheduler.QueueAsync(document, PaperbasePipelines.Classification);
 
         await uow.CompleteAsync();
-    }
-
-    private async Task<double> ResolveOcrThresholdAsync()
-    {
-        // ABP Setting 系统按 User → Tenant → Global → Configuration → Default 链路解析，
-        // ambient CurrentTenant 上下文已由调用方设置；默认值在 PaperbaseSettingDefinitionProvider 注册。
-        return await _settingProvider.GetAsync<double>(PaperbaseSettings.OcrConfidenceThreshold);
     }
 
     private async Task<string?> TryGenerateTitleAsync(string markdown, CancellationToken cancellationToken = default)

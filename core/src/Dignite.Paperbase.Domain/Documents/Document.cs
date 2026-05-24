@@ -83,7 +83,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// <summary>文档语言（ISO 639-1 / IETF tag）。OCR / 抽取阶段检测；影响下游 prompt 语言选择。</summary>
     public virtual string? Language { get; private set; }
 
-    /// <summary>OCR 平均置信度（0..1）。OCR 完成后填充；CLAUDE.md "OCR 置信度门槛"依赖此值决定 <c>DocumentReadyEto</c> 是否发布。</summary>
+    /// <summary>OCR 平均置信度（0..1）。OCR 完成后填充；informational 质量指标，随出口事件透出，不参与 Ready 门控（#196）。</summary>
     public virtual double? OcrConfidence { get; private set; }
 
     /// <summary>
@@ -231,37 +231,9 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// OCR 置信度低于门槛时调用——文档进待人工审核队列，下游流水线暂停推进。
-    /// ClassificationReason 复用为通用 review 原因字段（OCR 不达标 / LLM 分类失败均可写入）。
-    /// <para>
-    /// 原子状态变更，无需经 DomainService 中转（与 <see cref="SetMarkdown"/> 等
-    /// 必须与 pipeline 完成事务组合调用的 internal setter 不同）。
-    /// </para>
-    /// </summary>
-    public void MarkPendingOcrReview(string reason)
-    {
-        ReviewStatus = DocumentReviewStatus.PendingReview;
-        ClassificationReason = reason;
-    }
-
-    /// <summary>
-    /// 操作员通过审核——清除 PendingReview 标记。下游 pipeline 推进 / lifecycle 重新派生
-    /// 由 AppService 编排（参见 <see cref="DocumentPipelineRunManager.RecomputeLifecycleAsync"/>）。
-    /// <para>
-    /// 原子状态变更，无需经 DomainService 中转（与 <see cref="SetMarkdown"/> 等
-    /// 必须与 pipeline 完成事务组合调用的 internal setter 不同）。
-    /// </para>
-    /// </summary>
-    public void ApproveReview()
-    {
-        ReviewStatus = DocumentReviewStatus.Reviewed;
-        ClassificationReason = null;
-    }
-
-    /// <summary>
     /// 操作员拒绝审核——文档落到 Failed 生命周期状态；ReviewStatus 保留以便审计。
-    /// OCR 不可用是当前数字化结果的终态结论；保留原文件、Markdown、OCR confidence 和拒绝原因，
-    /// 不在同一 Document 上做源文件替换或普通 OCR 重跑。
+    /// 拒绝是"当前数字化结果不可用 / 无法归类"的终态结论：保留原文件、Markdown、OCR confidence 和拒绝原因，
+    /// 不在同一 Document 上做源文件替换或重跑；需要重试由操作员重新上传。
     /// <para>
     /// <b>lifecycle 派生规则的合法例外</b>：通常 <see cref="LifecycleStatus"/> 由
     /// <see cref="DocumentPipelineRunManager"/> 从 pipeline run 状态派生（见类首注释 line 32-35），
