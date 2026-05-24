@@ -59,7 +59,7 @@ The prompt language follows `PaperbaseAIBehavior:DefaultLanguage` (see [ai-provi
 |---|---|---|
 | LLM result, confidence ≥ threshold | `DocumentPipelineRun` completes | `DocumentClassifiedEto` published; Host & tenant field extraction enqueued; downstream `DistributedEventBus` subscribers (in their own repos) receive the event |
 | LLM result, confidence < threshold | `PendingReview` | `PipelineRunExtraPropertyNames.ClassificationCandidates` is populated for the UI ([pipeline-runs.md](pipeline-runs.md)) |
-| No suitable `DocumentType` / `DocumentTypeCode == null` | `PendingReview` | `ApproveReviewAsync` returns the current document without throwing or advancing the pipeline; the UI should show `ClassificationReason` and let the operator create a matching `DocumentType` then reclassify, or re-upload a better source document |
+| No suitable `DocumentType` / `DocumentTypeCode == null` | `PendingReview` | The UI shows `ClassificationReason`; the operator creates a matching `DocumentType` then reclassifies (`ReclassifyAsync`), rejects (`RejectReviewAsync`), or re-uploads a better source document |
 | LLM unreachable (transient) | `Failed`, exception rethrown | ABP retries the job per `BackgroundJobOptions.JobTypes` `MaxTryCount`. Next attempt does a fresh LLM classification once the provider recovers. |
 | LLM returned malformed JSON | `PendingReview` | No retry — a human resolves the type code in the UI |
 
