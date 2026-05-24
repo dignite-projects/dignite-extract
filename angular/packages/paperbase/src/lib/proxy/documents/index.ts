@@ -6,3 +6,6 @@ export * from './field-definition.models';
 export * from './models';
 export * from './pipeline-run-status.enum';
 export * from './source-type.enum';
+export * from './export-format.enum';
+export * from './export-column-source-kind.enum';
+export * from './export-template.models';

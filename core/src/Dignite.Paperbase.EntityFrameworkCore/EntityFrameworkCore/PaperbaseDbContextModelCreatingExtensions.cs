@@ -27,6 +27,22 @@ public static class PaperbaseDbContextModelCreatingExtensions
             v => v == null ? 0 : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null).GetHashCode(),
             v => v == null ? null : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(JsonSerializer.Serialize(v, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null));
 
+    // ExportTemplate.Columns 是有序列定义数组，整体读写（无单列查询需求），同 ExtractedFields
+    // 走 ValueConverter 序列化进 native json 列。ExportColumn 为 get-only 值对象，
+    // System.Text.Json 用其唯一带参构造函数反序列化（参数名匹配属性名）。
+    private static readonly ValueConverter<IReadOnlyList<ExportColumn>, string> ExportColumnsConverter =
+        new(
+            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+            v => string.IsNullOrEmpty(v)
+                ? new List<ExportColumn>()
+                : (JsonSerializer.Deserialize<List<ExportColumn>>(v, (JsonSerializerOptions?)null) ?? new List<ExportColumn>()));
+
+    private static readonly ValueComparer<IReadOnlyList<ExportColumn>> ExportColumnsComparer =
+        new(
+            (a, b) => JsonSerializer.Serialize(a, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(b, (JsonSerializerOptions?)null),
+            v => v == null ? 0 : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null).GetHashCode(),
+            v => JsonSerializer.Deserialize<List<ExportColumn>>(JsonSerializer.Serialize(v, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null) ?? new List<ExportColumn>());
+
     public static void ConfigurePaperbase(this ModelBuilder builder)
     {
         Check.NotNull(builder, nameof(builder));
@@ -128,6 +144,26 @@ public static class PaperbaseDbContextModelCreatingExtensions
                 .HasFilter("IsDeleted = 0");
 
             b.HasIndex(x => new { x.TenantId, x.DocumentTypeCode });
+        });
+
+        builder.Entity<ExportTemplate>(b =>
+        {
+            b.ToTable(PaperbaseDbProperties.DbTablePrefix + "ExportTemplates", PaperbaseDbProperties.DbSchema);
+            b.ConfigureByConvention();
+
+            b.Property(x => x.Name).IsRequired().HasMaxLength(ExportTemplateConsts.MaxNameLength);
+            b.Property(x => x.Format).IsRequired();
+            b.Property(x => x.DocumentTypeCode).HasMaxLength(DocumentTypeConsts.MaxTypeCodeLength);
+
+            // Columns 序列化进 native json 列（同 Document.ExtractedFields 模式）。
+            b.Property(x => x.Columns)
+                .HasColumnType("json")
+                .HasConversion(ExportColumnsConverter, ExportColumnsComparer);
+
+            // 唯一约束：(TenantId, Name)；跨层同名是合法的两行。软删过滤。
+            b.HasIndex(x => new { x.TenantId, x.Name })
+                .IsUnique()
+                .HasFilter("IsDeleted = 0");
         });
     }
 }

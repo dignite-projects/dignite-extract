@@ -11,5 +11,11 @@ export const PAPERBASE_PERMISSIONS = {
       Default: 'Paperbase.Documents.Pipelines',
       Retry: 'Paperbase.Documents.Pipelines.Retry',
     },
+    Templates: {
+      Default: 'Paperbase.Documents.Templates',
+      Create: 'Paperbase.Documents.Templates.Create',
+      Update: 'Paperbase.Documents.Templates.Update',
+      Delete: 'Paperbase.Documents.Templates.Delete',
+    },
   },
 } as const;

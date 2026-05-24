@@ -21,6 +21,14 @@ public class PaperbasePermissions
             public const string Default = Documents.Default + ".Pipelines";
             public const string Retry = Default + ".Retry";
         }
+
+        public static class Templates
+        {
+            public const string Default = Documents.Default + ".Templates";
+            public const string Create = Default + ".Create";
+            public const string Update = Default + ".Update";
+            public const string Delete = Default + ".Delete";
+        }
     }
 
     public static string[] GetAll()

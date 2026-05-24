@@ -1,0 +1,237 @@
+<div class="container-fluid py-4">
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">
+      <i class="fas fa-file-export me-2"></i>
+      {{ '::ExportTemplate:Title' | abpLocalization }}
+    </h4>
+    <div class="d-flex gap-2">
+      <button
+        class="btn btn-outline-secondary"
+        (click)="refresh()"
+        [disabled]="isLoading()"
+        title="{{ '::Refresh' | abpLocalization }}"
+      >
+        <i class="fas fa-sync-alt" [class.fa-spin]="isLoading()"></i>
+      </button>
+      @if (canManage) {
+        <button class="btn btn-primary" (click)="openCreate()">
+          <i class="fas fa-plus me-1"></i>
+          {{ '::ExportTemplate:New' | abpLocalization }}
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (isLoading()) {
+    <div class="text-center py-5">
+      <div class="spinner-border text-primary" role="status"></div>
+    </div>
+  }
+
+  @if (!isLoading() && templates().length === 0) {
+    <div class="card shadow-sm">
+      <div class="card-body text-center py-5">
+        <i class="fas fa-file-export fa-3x text-muted mb-3 d-block"></i>
+        <p class="text-muted mb-0">{{ '::ExportTemplate:Empty' | abpLocalization }}</p>
+      </div>
+    </div>
+  }
+
+  @if (!isLoading() && templates().length > 0) {
+    <div class="card shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>{{ '::ExportTemplate:Name' | abpLocalization }}</th>
+              <th>{{ '::ExportTemplate:Format' | abpLocalization }}</th>
+              <th>{{ '::ExportTemplate:DocumentType' | abpLocalization }}</th>
+              <th>{{ '::ExportTemplate:Columns' | abpLocalization }}</th>
+              <th style="width: 160px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of templates(); track t.id) {
+              <tr>
+                <td class="fw-semibold">{{ t.name }}</td>
+                <td><span class="badge bg-secondary">{{ formatLabel(t.format) }}</span></td>
+                <td>
+                  @if (t.documentTypeCode) {
+                    <span class="badge bg-info text-dark">{{ t.documentTypeCode }}</span>
+                  } @else {
+                    <span class="text-muted">{{ '::ExportTemplate:AllTypes' | abpLocalization }}</span>
+                  }
+                </td>
+                <td class="text-muted">{{ t.columns.length }}</td>
+                <td class="text-end">
+                  <div class="d-flex gap-1 justify-content-end">
+                    @if (canExport) {
+                      <button
+                        class="btn btn-sm btn-outline-success"
+                        (click)="exportTemplate(t)"
+                        [disabled]="exportingId() === t.id"
+                        title="{{ '::ExportTemplate:Export' | abpLocalization }}"
+                      >
+                        @if (exportingId() === t.id) {
+                          <span class="spinner-border spinner-border-sm"></span>
+                        } @else {
+                          <i class="fas fa-download"></i>
+                        }
+                      </button>
+                    }
+                    @if (canManage) {
+                      <button
+                        class="btn btn-sm btn-outline-secondary"
+                        (click)="openEdit(t)"
+                        title="{{ '::Edit' | abpLocalization }}"
+                      >
+                        <i class="fas fa-pen"></i>
+                      </button>
+                      <button
+                        class="btn btn-sm btn-outline-danger"
+                        (click)="delete(t)"
+                        title="{{ '::Delete' | abpLocalization }}"
+                      >
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</div>
+
+<!-- Create / Edit modal -->
+@if (editing(); as mode) {
+  <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);" (click)="closeModal()">
+    <div class="modal-dialog modal-dialog-centered modal-lg" (click)="$event.stopPropagation()">
+      <div class="modal-content">
+        <form [formGroup]="form" (ngSubmit)="submit()">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-file-export me-2"></i>
+              {{ (mode === 'create' ? '::ExportTemplate:New' : '::ExportTemplate:Edit') | abpLocalization }}
+            </h5>
+            <button type="button" class="btn-close" (click)="closeModal()"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-3 mb-3">
+              <div class="col-md-5">
+                <label class="form-label">{{ '::ExportTemplate:Name' | abpLocalization }}</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  formControlName="name"
+                  [class.is-invalid]="form.controls.name.touched && form.controls.name.invalid"
+                />
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">{{ '::ExportTemplate:Format' | abpLocalization }}</label>
+                <select class="form-select" formControlName="format">
+                  @for (opt of formatOptions; track opt.value) {
+                    <option [ngValue]="opt.value">{{ opt.key }}</option>
+                  }
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">{{ '::ExportTemplate:DocumentType' | abpLocalization }}</label>
+                <select class="form-select" formControlName="documentTypeCode">
+                  <option value="">{{ '::ExportTemplate:AllTypes' | abpLocalization }}</option>
+                  @for (dt of documentTypes(); track dt.id) {
+                    <option [value]="dt.typeCode">{{ dt.displayName }} ({{ dt.typeCode }})</option>
+                  }
+                </select>
+              </div>
+            </div>
+
+            <label class="form-label d-flex justify-content-between align-items-center">
+              <span>{{ '::ExportTemplate:Columns' | abpLocalization }}</span>
+              <button type="button" class="btn btn-sm btn-outline-primary" (click)="addColumn()">
+                <i class="fas fa-plus me-1"></i>{{ '::ExportTemplate:AddColumn' | abpLocalization }}
+              </button>
+            </label>
+
+            @if (columns.length === 0) {
+              <p class="text-muted small">{{ '::ExportTemplate:NoColumns' | abpLocalization }}</p>
+            }
+
+            <div formArrayName="columns">
+              <div class="row g-2 mb-1 text-muted small d-none d-md-flex">
+                <div class="col-md-3">{{ '::ExportTemplate:ColumnSource' | abpLocalization }}</div>
+                <div class="col-md-4">{{ '::ExportTemplate:ColumnKey' | abpLocalization }}</div>
+                <div class="col-md-4">{{ '::ExportTemplate:ColumnName' | abpLocalization }}</div>
+                <div class="col-md-1"></div>
+              </div>
+              @for (col of columns.controls; track $index) {
+                <div class="row g-2 mb-2 align-items-center" [formGroupName]="$index">
+                  <div class="col-md-3">
+                    <select class="form-select form-select-sm" formControlName="sourceKind">
+                      @for (opt of sourceKindOptions; track opt.value) {
+                        <option [ngValue]="opt.value">{{ opt.key }}</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    @if (col.value.sourceKind === ExportColumnSourceKind.System) {
+                      <select class="form-select form-select-sm" formControlName="key">
+                        @for (k of systemFieldKeys; track k) {
+                          <option [ngValue]="k">{{ k }}</option>
+                        }
+                      </select>
+                    } @else {
+                      <input
+                        type="text"
+                        class="form-control form-control-sm"
+                        formControlName="key"
+                        placeholder="field_name"
+                      />
+                    }
+                  </div>
+                  <div class="col-md-4">
+                    <input
+                      type="text"
+                      class="form-control form-control-sm"
+                      formControlName="columnName"
+                      placeholder="{{ '::ExportTemplate:ColumnName' | abpLocalization }}"
+                    />
+                  </div>
+                  <div class="col-md-1 text-end">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-danger"
+                      (click)="removeColumn($index)"
+                      title="{{ '::Delete' | abpLocalization }}"
+                    >
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeModal()">
+              {{ '::Cancel' | abpLocalization }}
+            </button>
+            <button
+              type="submit"
+              class="btn btn-primary"
+              [disabled]="form.invalid || columns.length === 0 || isSubmitting()"
+            >
+              @if (isSubmitting()) {
+                <span class="spinner-border spinner-border-sm me-1"></span>
+              }
+              {{ '::Save' | abpLocalization }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+}

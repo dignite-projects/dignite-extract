@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Globalization;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Dignite.Paperbase.Abstractions.Documents;
@@ -267,17 +266,49 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         }
     }
 
+    /// <summary>
+    /// 快速导出文档管理清单（固定列 CSV：ID / 类型 / 生命周期 / 文件名 / 内容类型 / 创建时间）——运维视角，零配置。
+    /// 与模板驱动的业务数据导出（<see cref="IExportTemplateAppService.ExportAsync"/>）受众不同：此处导"我系统里有哪些文档"，
+    /// 后者导"按业务格式抽取的字段值"。复用 <see cref="ExportFileBuilder"/> 统一 CSV 转义 / 公式注入中和 / UTF-8 BOM。
+    /// </summary>
     [Authorize(PaperbasePermissions.Documents.Export)]
     public virtual async Task<IRemoteStreamContent> GetExportAsync(GetDocumentListInput input)
     {
-        var query = await _documentRepository.GetQueryableAsync();
+        // 显式租户谓词 — fail closed，不依赖 ambient DataFilter（CLAUDE.md "## 安全约定"）。
+        var tenantId = CurrentTenant.Id;
+        var query = (await _documentRepository.GetQueryableAsync())
+            .Where(d => d.TenantId == tenantId);
         query = ApplyFilter(query, input);
         query = ApplySorting(query, input.Sorting);
 
-        var documents = await AsyncExecuter.ToListAsync(query);
-        var csv = BuildDocumentCsv(documents);
-        var bytes = Encoding.UTF8.GetBytes(csv);
+        // 投影到匿名行（不物化 Markdown 大字段、不进 change tracker）+ 结果集硬上限（截断即可，
+        // 不同于模板导出对凭证完整性的 fail-fast 要求）。
+        var rows = await AsyncExecuter.ToListAsync(
+            query.Take(ExportTemplateConsts.MaxExportDocumentCount)
+                 .Select(d => new
+                 {
+                     d.Id,
+                     d.DocumentTypeCode,
+                     d.LifecycleStatus,
+                     d.FileOrigin.OriginalFileName,
+                     d.FileOrigin.ContentType,
+                     d.CreationTime
+                 }));
 
+        var headers = new[] { "Id", "DocumentTypeCode", "LifecycleStatus", "OriginalFileName", "ContentType", "CreationTime" };
+        var dataRows = rows
+            .Select(r => new string?[]
+            {
+                r.Id.ToString(),
+                r.DocumentTypeCode,
+                r.LifecycleStatus.ToString(),
+                r.OriginalFileName,
+                r.ContentType,
+                r.CreationTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+            })
+            .ToList();
+
+        var bytes = ExportFileBuilder.Build(ExportFormat.Csv, headers, dataRows);
         return new RemoteStreamContent(new MemoryStream(bytes), "documents.csv", "text/csv");
     }
 
@@ -535,16 +566,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
             }
         }
 
-        // Keyword 子串匹配（Title / 原始文件名 / Markdown 全文）。当前用 LIKE '%kw%'，
-        // 文档量大时是顺序扫描；规模化后可在 Markdown 上建 SQL Server 全文索引替换。
-        if (!input.Keyword.IsNullOrWhiteSpace())
-        {
-            var keyword = input.Keyword!.Trim();
-            query = query.Where(d =>
-                (d.Title != null && d.Title.Contains(keyword)) ||
-                (d.FileOrigin.OriginalFileName != null && d.FileOrigin.OriginalFileName.Contains(keyword)) ||
-                (d.Markdown != null && d.Markdown.Contains(keyword)));
-        }
+        query = DocumentQueryFilters.WhereKeyword(query, input.Keyword);
 
         return query;
     }
@@ -556,33 +578,6 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
             "creationTime" => query.OrderBy(x => x.CreationTime),
             _ => query.OrderByDescending(x => x.CreationTime)
         };
-    }
-
-    private static string BuildDocumentCsv(List<Document> documents)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("Id,DocumentTypeCode,LifecycleStatus,OriginalFileName,ContentType,CreationTime");
-
-        foreach (var d in documents)
-        {
-            sb.AppendLine(string.Join(",",
-                d.Id,
-                EscapeCsv(d.DocumentTypeCode),
-                d.LifecycleStatus.ToString(),
-                EscapeCsv(d.FileOrigin.OriginalFileName),
-                EscapeCsv(d.FileOrigin.ContentType),
-                d.CreationTime.ToString("yyyy-MM-dd HH:mm:ss")));
-        }
-
-        return sb.ToString();
-    }
-
-    private static string EscapeCsv(string? value)
-    {
-        if (value.IsNullOrEmpty()) return string.Empty;
-        if (value!.Contains(',') || value.Contains('"') || value.Contains('\n'))
-            return $"\"{value.Replace("\"", "\"\"")}\"";
-        return value;
     }
 
     private static bool IsValidExtractedFieldValue(JsonElement value, FieldDataType dataType)

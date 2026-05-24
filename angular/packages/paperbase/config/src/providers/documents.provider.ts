@@ -57,12 +57,21 @@ export function provideDocuments(): EnvironmentProviders {
           layout: eLayoutType.application,
         },
         {
+          path: '/documents/export-templates',
+          name: '::Menu:ExportTemplates',
+          iconClass: 'fas fa-file-export',
+          parentName: '::Menu:Documents',
+          requiredPolicy: PAPERBASE_PERMISSIONS.Documents.Templates.Default,
+          order: 5,
+          layout: eLayoutType.application,
+        },
+        {
           path: '/documents/recycle',
           name: '::Menu:DocumentRecycleBin',
           iconClass: 'fas fa-trash-can',
           parentName: '::Menu:Documents',
           requiredPolicy: PAPERBASE_PERMISSIONS.Documents.Restore,
-          order: 5,
+          order: 6,
           layout: eLayoutType.application,
         },
       ]);

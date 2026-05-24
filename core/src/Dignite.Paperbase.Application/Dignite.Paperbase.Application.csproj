@@ -16,6 +16,7 @@
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Agents.AI" />
     <PackageReference Include="Markdig" />
+    <PackageReference Include="ClosedXML" />
     <PackageReference Include="Volo.Abp.BackgroundJobs" />
     <PackageReference Include="Volo.Abp.BlobStoring" />
     <PackageReference Include="Volo.Abp.Auditing" />

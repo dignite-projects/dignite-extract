@@ -111,3 +111,14 @@ public partial class FieldDefinitionToDtoMapper : MapperBase<FieldDefinition, Fi
     public override partial FieldDefinitionDto Map(FieldDefinition source);
     public override partial void Map(FieldDefinition source, FieldDefinitionDto destination);
 }
+
+/// <summary>
+/// ExportTemplate -> ExportTemplateDto。Columns（IReadOnlyList&lt;ExportColumn&gt; → List&lt;ExportColumnDto&gt;）
+/// 元素映射由 Mapperly 按同名属性自动 inline。
+/// </summary>
+[Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
+public partial class ExportTemplateToDtoMapper : MapperBase<ExportTemplate, ExportTemplateDto>
+{
+    public override partial ExportTemplateDto Map(ExportTemplate source);
+    public override partial void Map(ExportTemplate source, ExportTemplateDto destination);
+}
