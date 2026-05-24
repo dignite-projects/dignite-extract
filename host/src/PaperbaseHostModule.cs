@@ -64,6 +64,7 @@ using Volo.Abp.Swashbuckle;
 using Volo.Abp.Timing;
 using Volo.Abp.UI.Navigation.Urls;
 using Volo.Abp.VirtualFileSystem;
+using ModelContextProtocol.AspNetCore;
 
 namespace Dignite.Paperbase.Host;
 
@@ -116,6 +117,7 @@ namespace Dignite.Paperbase.Host;
 
     // Paperbase core modules
     typeof(PaperbaseHttpApiModule),
+    typeof(PaperbaseMcpModule),          // MCP 出口适配器（与 HttpApi REST 出口平行）
     typeof(PaperbaseApplicationModule),
     typeof(PaperbaseEntityFrameworkCoreModule),
 
@@ -586,6 +588,11 @@ public class PaperbaseHostModule : AbpModule
 
         app.UseAuditing();
         app.UseAbpSerilogEnrichers();
-        app.UseConfiguredEndpoints();
+        app.UseConfiguredEndpoints(endpoints =>
+        {
+            // MCP 出口端点（Streamable HTTP）。复用 host 现有 OpenIddict Bearer：
+            // RequireAuthorization 在端点强制鉴权；tool / resource 方法体内再做显式权限断言（fail-closed 双保险）。
+            endpoints.MapMcp("/mcp").RequireAuthorization();
+        });
     }
 }

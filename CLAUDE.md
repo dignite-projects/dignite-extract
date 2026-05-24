@@ -41,8 +41,9 @@ Paperbase 采用**两层架构**（业务层不在 Paperbase 范畴）：
      - 文本提取契约：`ITextExtractor`、`TextExtractionContext`、`TextExtractionResult`
    - **约束**：不依赖任何其他 Paperbase 项目，仅依赖 ABP 基础模块
 
-2. **Dignite.Paperbase 核心模块栈**（标准 ABP 分层：`Domain.Shared` / `Domain` / `Application` / `EntityFrameworkCore` / `HttpApi`）
-   - **通道核心能力都在 Application 层**：文档存储、OCR pipeline 编排、文档分类（LLM 自动分类至 Host / 租户已定义类型）、系统通用字段抽取、类型绑定字段抽取（B 机制：Host 字段 + 租户字段）、出口事件发布、MCP server 实现
+2. **Dignite.Paperbase 核心模块栈**（标准 ABP 分层：`Domain.Shared` / `Domain` / `Application` / `EntityFrameworkCore` / `HttpApi` / `Mcp`）
+   - **通道核心能力都在 Application 层**：文档存储、OCR pipeline 编排、文档分类（LLM 自动分类至 Host / 租户已定义类型）、系统通用字段抽取、类型绑定字段抽取（B 机制：Host 字段 + 租户字段）、出口事件发布
+   - **出口适配器各占独立项目**：`HttpApi`（REST 出口）与 `Mcp`（MCP server 出口，`Dignite.Paperbase.Mcp`）平行——协议/传输关注点隔离在出口项目、不渗入 Application。`Mcp` 把文档暴露为 MCP 资源（`paperbase://documents/{id}`）+ 检索 tool（keyword + 元数据 + ExtractedFields 字段值，**不做向量检索**），依赖 `ModelContextProtocol.AspNetCore`；`MapMcp` 端点仍只在 host 映射。认证复用 host OpenIddict Bearer；订阅 + lifecycle 通知是后续增量（#197）
 
 3. **文本提取能力栈（三层契约 + 多 Provider）**——核心可插拔点
    - **`Dignite.Paperbase.TextExtraction`** —— orchestrator + 默认 `ITextExtractor` 实现（`DefaultTextExtractor`：按文件扩展名 dispatch，图片走 OCR；其他走 Markdown Provider，PDF 无文本层时 fallback OCR）。同项目内声明 `IMarkdownTextProvider` 副契约
@@ -92,6 +93,8 @@ Host Application
     ├── 注册 IChatClient + IEmbeddingGenerator
     └── DependsOn:
         ├── Dignite.Paperbase.Application（通道核心 + 编排 + LLM 分类 / 字段抽取）
+        ├── Dignite.Paperbase.HttpApi（REST 出口）
+        ├── Dignite.Paperbase.Mcp（MCP 出口：文档资源 + 检索 tool；MapMcp 端点在 host 映射）
         ├── Dignite.Paperbase.TextExtraction（orchestrator + IMarkdownTextProvider 契约）
         ├── Dignite.Paperbase.TextExtraction.ElBrunoMarkItDown（Markdown Provider 实现）
         └── Dignite.Paperbase.Ocr.PaddleOcr（OCR Provider，当前默认；可切换 Ocr.AzureDocumentIntelligence）
