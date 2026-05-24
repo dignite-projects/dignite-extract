@@ -122,3 +122,10 @@ public partial class ExportTemplateToDtoMapper : MapperBase<ExportTemplate, Expo
     public override partial ExportTemplateDto Map(ExportTemplate source);
     public override partial void Map(ExportTemplate source, ExportTemplateDto destination);
 }
+
+[Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
+public partial class CabinetToDtoMapper : MapperBase<Cabinet, CabinetDto>
+{
+    public override partial CabinetDto Map(Cabinet source);
+    public override partial void Map(Cabinet source, CabinetDto destination);
+}

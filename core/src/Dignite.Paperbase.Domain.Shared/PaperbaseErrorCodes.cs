@@ -39,4 +39,9 @@ public static class PaperbaseErrorCodes
     public const string InvalidExportColumnName = "Paperbase:InvalidExportColumnName";
     public const string ExportTemplateInvalidDocumentTypeCode = "Paperbase:ExportTemplateInvalidDocumentTypeCode";
     public const string ExportDocumentLimitExceeded = "Paperbase:ExportDocumentLimitExceeded";
+
+    // 文件柜（#194）
+    public const string InvalidCabinetDisplayName = "Paperbase:InvalidCabinetDisplayName";
+    public const string CabinetDisplayNameAlreadyExists = "Paperbase:CabinetDisplayNameAlreadyExists";
+    public const string InvalidCabinetId = "Paperbase:InvalidCabinetId";
 }

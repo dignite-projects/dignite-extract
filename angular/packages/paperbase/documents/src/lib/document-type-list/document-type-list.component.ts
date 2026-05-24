@@ -12,12 +12,15 @@ import { Router, RouterModule } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { LocalizationPipe, PermissionService } from '@abp/ng.core';
 import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
+import { map } from 'rxjs';
 import {
   CreateDocumentTypeDto,
   DocumentTypeDto,
   DocumentTypeService,
   PAPERBASE_PERMISSIONS,
+  SlugSuggestionService,
 } from '@dignite/paperbase';
+import { SlugSuggestionHandle, wireSlugSuggestion } from '../slug-suggestion';
 
 // Mirrors DocumentTypeConsts (Domain.Shared): TypeCode whitelist + length cap.
 const TYPE_CODE_PATTERN = /^[A-Za-z0-9_\-]+(\.[A-Za-z0-9_\-]+)*$/;
@@ -33,6 +36,7 @@ const MAX_DISPLAY_NAME_LENGTH = 128;
 })
 export class DocumentTypeListComponent implements OnInit {
   private readonly service = inject(DocumentTypeService);
+  private readonly slugService = inject(SlugSuggestionService);
   private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
   private readonly confirmation = inject(ConfirmationService);
@@ -52,6 +56,9 @@ export class DocumentTypeListComponent implements OnInit {
   // null = closed; 'create' / DocumentTypeDto = open in the matching mode.
   editing = signal<DocumentTypeDto | 'create' | null>(null);
   isSubmitting = signal(false);
+  isSuggesting = signal(false);
+
+  private slugHandle?: SlugSuggestionHandle;
 
   readonly form = this.fb.nonNullable.group({
     typeCode: [
@@ -68,7 +75,23 @@ export class DocumentTypeListComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.slugHandle = wireSlugSuggestion({
+      displayName: this.form.controls.displayName,
+      target: this.form.controls.typeCode,
+      suggest: text => this.slugService.suggest({ displayName: text }).pipe(map(r => r.slug)),
+      fallback: () => this.nextTypeCode(),
+      destroyRef: this.destroyRef,
+      onPending: pending => this.isSuggesting.set(pending),
+    });
     this.load();
+  }
+
+  // LLM 不可用 / 未翻译时的本地回退：取与现有类型代码不冲突的最小 type_{n}。
+  private nextTypeCode(): string {
+    const existing = new Set(this.types().map(t => t.typeCode));
+    let i = 1;
+    while (existing.has(`type_${i}`)) i++;
+    return `type_${i}`;
   }
 
   refresh(): void {
@@ -95,18 +118,23 @@ export class DocumentTypeListComponent implements OnInit {
   openCreate(): void {
     this.form.reset({ typeCode: '', displayName: '', confidenceThreshold: 0.7, priority: 0 });
     this.form.controls.typeCode.enable();
+    // 必须在 form.reset()/enable() 之后调用：二者触发的 valueChanges 会误标"手动编辑"，
+    // reset() 清掉该标记并复位建议状态（含 spinner）。
+    this.slugHandle?.reset();
     this.editing.set('create');
   }
 
   openEdit(type: DocumentTypeDto): void {
+    // TypeCode is immutable after creation (UpdateDocumentTypeDto omits it).
+    // 先 disable 再 reset：让 slug 自动建议在编辑态 reset 期间识别为非创建态，
+    // 不会把既有 typeCode 当"过期键"清空（见 wireSlugSuggestion 注释）。
+    this.form.controls.typeCode.disable();
     this.form.reset({
       typeCode: type.typeCode,
       displayName: type.displayName,
       confidenceThreshold: type.confidenceThreshold,
       priority: type.priority,
     });
-    // TypeCode is immutable after creation (UpdateDocumentTypeDto omits it).
-    this.form.controls.typeCode.disable();
     this.editing.set(type);
   }
 

@@ -72,6 +72,11 @@
         <PackageVersion Include="Microsoft.Agents.AI" Version="1.5.0" />
     </ItemGroup>
 
+    <ItemGroup Label="MCP">
+        <PackageVersion Include="ModelContextProtocol" Version="1.3.0" />
+        <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="1.3.0" />
+    </ItemGroup>
+
     <ItemGroup Label="OpenTelemetry">
         <!-- Aligned with the OTel 1.15.x family that Microsoft.Agents.AI 1.4+ depends on
              (see plan doc § "MAF 版本升级 1.2 → 1.5"). The host wires up the export

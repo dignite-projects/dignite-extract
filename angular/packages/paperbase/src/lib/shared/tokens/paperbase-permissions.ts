@@ -18,4 +18,10 @@ export const PAPERBASE_PERMISSIONS = {
       Delete: 'Paperbase.Documents.Templates.Delete',
     },
   },
+  Cabinets: {
+    Default: 'Paperbase.Cabinets',
+    Create: 'Paperbase.Cabinets.Create',
+    Update: 'Paperbase.Cabinets.Update',
+    Delete: 'Paperbase.Cabinets.Delete',
+  },
 } as const;

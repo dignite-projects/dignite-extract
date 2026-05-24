@@ -5,7 +5,7 @@ namespace Dignite.Paperbase.Abstractions.Documents;
 
 /// <summary>
 /// 文本提取（OCR 或数字版抽取）完成后发布。
-/// 携带 OCR 置信度供下游决策；不受置信度门槛约束（仅 DocumentReadyEto 受约束）。
+/// 携带 OCR 置信度供下游决策；该值是 informational 指标，不门控任何 Paperbase 阶段事件。
 /// <para>
 /// 不变契约（issue #188）：所有属性 <c>init</c>-only；<see cref="EventTime"/> 标 <c>required</c>。
 /// </para>

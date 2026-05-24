@@ -101,29 +101,6 @@ export class DocumentReviewQueueComponent implements OnInit {
     this.router.navigate(['/documents', doc.id]);
   }
 
-  // Accept the current (low-confidence) classification and clear the review flag.
-  // Backend no-ops when there is no DocumentTypeCode, so the button is only shown
-  // for documents that already carry a candidate type.
-  approve(doc: DocumentListItemDto, event: Event): void {
-    event.stopPropagation();
-    if (this.isSubmitting()) return;
-    this.isSubmitting.set(true);
-    this.documentService
-      .approveReview(doc.id)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => {
-          this.isSubmitting.set(false);
-          this.toaster.success('::Document:Review:ApprovedSuccessfully', '::Success');
-          this.loadList();
-        },
-        error: () => {
-          this.isSubmitting.set(false);
-          this.toaster.error('::Document:Review:ActionFailed', '::Error');
-        },
-      });
-  }
-
   openClassifyDialog(doc: DocumentListItemDto, event: Event): void {
     event.stopPropagation();
     this.classifyingDoc.set(doc);

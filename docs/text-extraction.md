@@ -77,11 +77,11 @@ Default for development. `PP-StructureV3` runs on CPU and emits native Markdown 
 | `ModelName` | `PP-StructureV3` | One of: `PP-StructureV3` (CPU + native Markdown, default), `PP-OCRv4` (lightest, no Markdown structure), `PaddleOCR-VL-1.5` (highest quality; requires GPU + ~2 GB model download; native Markdown) |
 | `Languages` | `["ja", "en"]` | Default recognition languages (BCP 47); overridden per call by `OcrOptions.LanguageHints` |
 
-Paperbase does not auto-switch OCR profiles per document. The OCR provider runs once with the host-configured model; low confidence is handled by the pipeline's review path rather than a second OCR pass with a guessed specialized mode.
+Paperbase does not auto-switch OCR profiles per document. The OCR provider runs once with the host-configured model; there is no second OCR pass with a guessed specialized mode, and OCR average confidence is no longer a quality gate (#196).
 
-OCR review has only two operator outcomes. Approving a low-confidence OCR result means the current Markdown is acceptable enough to continue classification. Rejecting it means this digitization result is unusable: Paperbase keeps the original file, Markdown, OCR confidence, and rejection reason for audit, marks the document failed, and does not offer a normal "rerun OCR" or source replacement path.
+OCR completion always advances the document to classification. `OcrConfidence` is surfaced on `OCRCompletedEto` / `DocumentReadyEto` as an informational quality metric (for downstream secondary gating), but it gates no Paperbase stage. A document reaches the review queue only via low classification confidence / no matching type, where the operator reclassifies, rejects (Paperbase keeps the original file, Markdown, OCR confidence, and rejection reason for audit, then marks the document failed — no "rerun OCR" or source-replacement path), or re-uploads a better source.
 
-`ReviewStatus` is the current routing state, not a durable audit ledger. When an OCR-approved document later classifies successfully, automatic classification may reset `ReviewStatus` to `None`; the OCR confidence and pipeline history remain available, while a dedicated audit/event model should be added only if the product needs to query "was manually OCR-approved" as historical fact.
+`ReviewStatus` is the current routing state, not a durable audit ledger: `None` (no human action needed), `PendingReview` (classification needs an operator), or `Reviewed` (operator confirmed a type). Automatic re-classification may reset it; OCR confidence and pipeline history remain available if a dedicated audit/event model is later needed.
 
 **Bring up the sidecar:**
 

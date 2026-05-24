@@ -13,6 +13,7 @@ public class PaperbaseDbContext : AbpDbContext<PaperbaseDbContext>, IPaperbaseDb
     public DbSet<DocumentType> DocumentTypes { get; set; }
     public DbSet<FieldDefinition> FieldDefinitions { get; set; }
     public DbSet<ExportTemplate> ExportTemplates { get; set; }
+    public DbSet<Cabinet> Cabinets { get; set; }
 
     public PaperbaseDbContext(DbContextOptions<PaperbaseDbContext> options)
         : base(options)

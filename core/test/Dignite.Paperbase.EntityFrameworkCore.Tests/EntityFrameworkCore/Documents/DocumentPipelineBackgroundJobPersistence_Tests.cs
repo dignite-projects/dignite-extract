@@ -70,35 +70,8 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
     public async Task Text_Extraction_Job_Should_Persist_Run_Status_And_Queued_Classification_Run()
     {
         var documentId = _guidGenerator.Create();
-        Guid textExtractionRunId = default;
-
-        await WithUnitOfWorkAsync(async () =>
-        {
-            var document = CreateDocument(documentId);
-            await _documentRepository.InsertAsync(document, autoSave: true);
-
-            var run = await _pipelineJobScheduler.QueueAsync(document, PaperbasePipelines.TextExtraction);
-            textExtractionRunId = run.Id;
-        });
-
-        _blobContainer.GetAsync(Arg.Any<string>())
-            .Returns(Task.FromResult<Stream>(new MemoryStream([1, 2, 3])));
-        _textExtractor.ExtractAsync(
-                Arg.Any<Stream>(),
-                Arg.Any<TextExtractionContext>(),
-                Arg.Any<CancellationToken>())
-            .Returns(_ =>
-            {
-                _unitOfWorkManager.Current.ShouldBeNull();
-                return new TextExtractionResult
-                {
-                    Markdown = "# Contract\n\nThis is a contract.",
-                    Confidence = 0.98,
-                    DetectedLanguage = "en",
-                    PageCount = 1,
-                    UsedOcr = false
-                };
-            });
+        var textExtractionRunId = await ArrangeQueuedTextExtractionAsync(documentId);
+        StubExtraction("# Contract\n\nThis is a contract.", confidence: 0.98, usedOcr: false);
 
         await _textExtractionJob.ExecuteAsync(new DocumentTextExtractionJobArgs
         {
@@ -128,6 +101,77 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
                 x.PipelineRunId == classificationRunId),
             Arg.Any<BackgroundJobPriority>(),
             Arg.Any<TimeSpan?>());
+    }
+
+    [Fact]
+    public async Task Text_Extraction_Job_Should_Queue_Classification_Even_When_Ocr_Confidence_Is_Low()
+    {
+        // #196 契约固化：OCR 置信度不再做事前门控。即便走 OCR 路径且置信度远低于旧门槛(0.85)，
+        // 文档也照常推进到 classification，不被路由到 PendingReview；OcrConfidence 仅作 informational 指标持久化。
+        var documentId = _guidGenerator.Create();
+        var textExtractionRunId = await ArrangeQueuedTextExtractionAsync(documentId);
+        StubExtraction("# Blurry Scan\n\nlow quality ocr text.", confidence: 0.40, usedOcr: true);
+
+        await _textExtractionJob.ExecuteAsync(new DocumentTextExtractionJobArgs
+        {
+            DocumentId = documentId,
+            PipelineRunId = textExtractionRunId
+        });
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var document = await _documentRepository.GetAsync(documentId, includeDetails: true);
+
+            document.GetRun(textExtractionRunId)!.Status.ShouldBe(PipelineRunStatus.Succeeded);
+            document.PipelineRuns
+                .Count(x => x.PipelineCode == PaperbasePipelines.Classification)
+                .ShouldBe(1);
+            document.ReviewStatus.ShouldBe(DocumentReviewStatus.None);
+            document.OcrConfidence.ShouldNotBeNull();
+            document.OcrConfidence!.Value.ShouldBe(0.40, 0.0001);
+        });
+
+        await _backgroundJobManager.Received(1).EnqueueAsync(
+            Arg.Is<DocumentClassificationJobArgs>(x => x.DocumentId == documentId),
+            Arg.Any<BackgroundJobPriority>(),
+            Arg.Any<TimeSpan?>());
+    }
+
+    private async Task<Guid> ArrangeQueuedTextExtractionAsync(Guid documentId)
+    {
+        Guid textExtractionRunId = default;
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var document = CreateDocument(documentId);
+            await _documentRepository.InsertAsync(document, autoSave: true);
+
+            var run = await _pipelineJobScheduler.QueueAsync(document, PaperbasePipelines.TextExtraction);
+            textExtractionRunId = run.Id;
+        });
+        return textExtractionRunId;
+    }
+
+    // stub 回调内断言外部提取工作不在 ambient UoW 下运行（background-jobs.md 短 UoW 规则）。
+    private void StubExtraction(string markdown, double confidence, bool usedOcr)
+    {
+        _blobContainer.GetAsync(Arg.Any<string>())
+            .Returns(Task.FromResult<Stream>(new MemoryStream([1, 2, 3])));
+        _textExtractor.ExtractAsync(
+                Arg.Any<Stream>(),
+                Arg.Any<TextExtractionContext>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                _unitOfWorkManager.Current.ShouldBeNull();
+                return new TextExtractionResult
+                {
+                    Markdown = markdown,
+                    Confidence = confidence,
+                    DetectedLanguage = "en",
+                    PageCount = 1,
+                    UsedOcr = usedOcr
+                };
+            });
     }
 
     private static Document CreateDocument(Guid id)

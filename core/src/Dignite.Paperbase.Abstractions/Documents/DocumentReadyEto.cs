@@ -4,11 +4,11 @@ using Volo.Abp.EventBus;
 namespace Dignite.Paperbase.Abstractions.Documents;
 
 /// <summary>
-/// 全流水线完成 + 通过 OCR 置信度门槛后发布——下游消费方的"可信信号"。
-/// 这是受置信度门槛约束的**唯一**生命周期事件：
+/// 全流水线完成 + 文档拿到已确认类型后发布——下游消费方的"可信信号"。
+/// 生命周期跃迁到 <c>Ready</c> 即隐含通过分类 / 人工审核闸门：
 /// <list type="bullet">
-///   <item>OCR confidence ≥ 门槛 → 自动发布</item>
-///   <item>OCR confidence &lt; 门槛 → 文档进待人工审核队列；操作员通过后才发布</item>
+///   <item>自动分类置信度 ≥ 类型门槛 → 自动到 Ready 发布</item>
+///   <item>分类置信度不足 / 无合适类型 → 文档进待人工审核队列；操作员确认类型后才发布</item>
 /// </list>
 /// 大多数下游业务消费方应订阅此事件而非早期阶段事件（DocumentUploaded/OCRCompleted/...）。
 /// <para>
@@ -34,8 +34,8 @@ public class DocumentReadyEto
 
     /// <summary>
     /// 最终 OCR 置信度（0.0 - 1.0）。仅 OCR 路径有值；数字版抽取无 OCR 概念，此值为 <c>null</c>。
-    /// 下游不应把 null 当 1.0 处理——文档生命周期已经过 OCR 门槛或人工审核才到 Ready，
-    /// 置信度数值是给操作员 UI / 次级 quality gating 的辅助信号，不是路径判别依据。
+    /// 下游不应把 null 当 1.0 处理。这是 informational 质量指标（供操作员 UI / 下游次级 quality gating），
+    /// 不参与 Paperbase 内部的 Ready 门控——文档到 Ready 取决于分类 / 人工审核，与此值无关。
     /// </summary>
     public double? OcrConfidence { get; init; }
 }

@@ -208,22 +208,6 @@ public class DocumentPipelineRunManager : DomainService
     }
 
     /// <summary>
-    /// 在 pipeline run 之外触发 lifecycle 重新派生——典型场景是操作员人工审核通过
-    /// （<see cref="Document.ApproveReview"/>）后，需要让已经全部 Succeeded 的关键流水线
-    /// 即时跃迁到 <see cref="DocumentLifecycleStatus.Ready"/>，从而触发 <c>DocumentReadyEto</c>。
-    /// <para>
-    /// 这是把 line 32-35 "lifecycle 由 DocumentPipelineRunManager 派生" 契约落到 AppService
-    /// 可调用入口的方式：AppService 不直接调 <see cref="Document.TransitionLifecycle"/>（internal），
-    /// 而是经由本 manager 统一派生。
-    /// </para>
-    /// </summary>
-    public virtual Task RecomputeLifecycleAsync(Document document)
-    {
-        DeriveLifecycle(document);
-        return Task.CompletedTask;
-    }
-
-    /// <summary>
     /// 根据所有关键流水线的最新 Run 派生 Document.LifecycleStatus。
     /// </summary>
     protected virtual void DeriveLifecycle(Document document)

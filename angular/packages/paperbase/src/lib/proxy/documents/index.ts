@@ -1,3 +1,4 @@
+export * from './cabinet.models';
 export * from './document-lifecycle-status.enum';
 export * from './document-review-status.enum';
 export * from './document-type.models';
@@ -5,6 +6,7 @@ export * from './field-data-type.enum';
 export * from './field-definition.models';
 export * from './models';
 export * from './pipeline-run-status.enum';
+export * from './slug-suggestion.models';
 export * from './source-type.enum';
 export * from './export-format.enum';
 export * from './export-column-source-kind.enum';

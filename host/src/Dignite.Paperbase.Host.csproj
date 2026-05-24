@@ -85,6 +85,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\core\src\Dignite.Paperbase.HttpApi\Dignite.Paperbase.HttpApi.csproj" />
+    <ProjectReference Include="..\..\core\src\Dignite.Paperbase.Mcp\Dignite.Paperbase.Mcp.csproj" />
     <ProjectReference Include="..\..\core\src\Dignite.Paperbase.Application\Dignite.Paperbase.Application.csproj" />
     <ProjectReference Include="..\..\core\src\Dignite.Paperbase.EntityFrameworkCore\Dignite.Paperbase.EntityFrameworkCore.csproj" />
     <ProjectReference Include="..\..\core\src\Dignite.Paperbase.TextExtraction\Dignite.Paperbase.TextExtraction.csproj" />

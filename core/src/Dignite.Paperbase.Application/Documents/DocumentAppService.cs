@@ -27,6 +27,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
     private readonly IDocumentRepository _documentRepository;
     private readonly IDocumentTypeRepository _documentTypeRepository;
     private readonly IFieldDefinitionRepository _fieldDefinitionRepository;
+    private readonly ICabinetRepository _cabinetRepository;
     private readonly IBlobContainer<PaperbaseDocumentContainer> _blobContainer;
     private readonly DocumentPipelineRunManager _pipelineRunManager;
     private readonly DocumentPipelineJobScheduler _pipelineJobScheduler;
@@ -36,6 +37,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         IDocumentRepository documentRepository,
         IDocumentTypeRepository documentTypeRepository,
         IFieldDefinitionRepository fieldDefinitionRepository,
+        ICabinetRepository cabinetRepository,
         IBlobContainer<PaperbaseDocumentContainer> blobContainer,
         DocumentPipelineRunManager pipelineRunManager,
         DocumentPipelineJobScheduler pipelineJobScheduler,
@@ -44,6 +46,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         _documentRepository = documentRepository;
         _documentTypeRepository = documentTypeRepository;
         _fieldDefinitionRepository = fieldDefinitionRepository;
+        _cabinetRepository = cabinetRepository;
         _blobContainer = blobContainer;
         _pipelineRunManager = pipelineRunManager;
         _pipelineJobScheduler = pipelineJobScheduler;
@@ -110,6 +113,22 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
             throw new BusinessException(PaperbaseErrorCodes.NoDocumentTypesConfigured);
         }
 
+        // 文件柜归属校验（#194）：若指定 cabinetId，先断言 Cabinets 权限（fail-closed，与前端 canViewCabinets
+        // gate 对称）——[Authorize(Documents.Upload)] 不覆盖 cabinet 归属，无此断言则无 Cabinets 权限者可绕过 UI
+        // 把文档归到隐藏柜。再校验柜存在且属当前层（显式 TenantId 谓词，
+        // 不依赖 ambient DataFilter）。柜正交于 pipeline——此处仅做上传时人工归属校验，后续 pipeline 不碰。
+        if (input.CabinetId.HasValue)
+        {
+            await CheckPolicyAsync(PaperbasePermissions.Cabinets.Default);
+
+            var cabinet = await _cabinetRepository.FindAsync(input.CabinetId.Value);
+            if (cabinet == null || cabinet.TenantId != CurrentTenant.Id)
+            {
+                throw new BusinessException(PaperbaseErrorCodes.InvalidCabinetId)
+                    .WithData("CabinetId", input.CabinetId.Value);
+            }
+        }
+
         var fileName = input.File.FileName ?? "document";
         var contentType = input.File.ContentType ?? "application/octet-stream";
         var extension = Path.GetExtension(fileName);
@@ -153,7 +172,8 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
             CurrentTenant.Id,
             blobName,
             sourceType,
-            fileOrigin);
+            fileOrigin,
+            cabinetId: input.CabinetId);
 
         await _documentRepository.InsertAsync(document, autoSave: true);
 
@@ -453,52 +473,6 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
     }
 
     [Authorize(PaperbasePermissions.Documents.ConfirmClassification)]
-    public virtual async Task<DocumentDto> ApproveReviewAsync(Guid id)
-    {
-        var document = await _documentRepository.GetAsync(id, includeDetails: true);
-
-        if (document.ReviewStatus != DocumentReviewStatus.PendingReview)
-        {
-            // 幂等：不在 PendingReview 状态下返回当前快照，不抛
-            return ObjectMapper.Map<Document, DocumentDto>(document);
-        }
-
-        // 兑现 CLAUDE.md "OCR 置信度门槛" 承诺："操作员手动确认通过 → 触发 DocumentReadyEto"。
-        // 两类待审核场景：
-        //   (a) OCR confidence 不达标 → classification 尚未跑：schedule classification pipeline，
-        //       让它正常推进，完成后由 DeriveLifecycle 跃到 Ready 自动发 DocumentReadyEto。
-        //   (b) classification 已跑且有 DocumentTypeCode：直接 RecomputeLifecycle 让它进 Ready。
-        //       分类已跑但 DocumentTypeCode 仍为空时，当前后台 pipeline 已经停在
-        //       "没有已确认类型" 的审核结论上；不要抛客户端错误，也不要把它改成 Reviewed。
-        //       保持 PendingReview + ClassificationReason，让操作员创建 DocumentType 后
-        //       Reclassify，或重新上传更合适的源文件。
-        var hasClassificationRun = document.GetLatestRun(PaperbasePipelines.Classification) != null;
-        if (hasClassificationRun && string.IsNullOrWhiteSpace(document.DocumentTypeCode))
-        {
-            return ObjectMapper.Map<Document, DocumentDto>(document);
-        }
-
-        document.ApproveReview();
-
-        if (!hasClassificationRun)
-        {
-            // QueueAsync 内已 _documentRepository.UpdateAsync(document, autoSave: true)，
-            // 同一 document 实例的 ApproveReview() 状态变更随 scheduler 内的 save 一起落库；
-            // 此分支无需再写一次。
-            await _pipelineJobScheduler.QueueAsync(document, PaperbasePipelines.Classification);
-        }
-        else
-        {
-            // RecomputeLifecycleAsync 仅修改 document 状态（in-memory），不写 DB——
-            // 必须在这里显式 UpdateAsync 才能把 ApproveReview + RecomputeLifecycle 的变更落库。
-            await _pipelineRunManager.RecomputeLifecycleAsync(document);
-            await _documentRepository.UpdateAsync(document, autoSave: true);
-        }
-
-        return ObjectMapper.Map<Document, DocumentDto>(document);
-    }
-
-    [Authorize(PaperbasePermissions.Documents.ConfirmClassification)]
     public virtual async Task<DocumentDto> RejectReviewAsync(Guid id, RejectReviewInput input)
     {
         var document = await _documentRepository.GetAsync(id, includeDetails: true);
@@ -551,6 +525,9 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
 
         if (!input.DocumentTypeCode.IsNullOrWhiteSpace())
             query = query.Where(x => x.DocumentTypeCode == input.DocumentTypeCode);
+
+        if (input.CabinetId.HasValue)
+            query = query.Where(x => x.CabinetId == input.CabinetId.Value);
 
         if (input.ReviewStatus.HasValue)
         {
