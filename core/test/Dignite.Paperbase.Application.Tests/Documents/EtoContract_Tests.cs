@@ -56,14 +56,12 @@ public class EtoContract_Tests
             DocumentId = Guid.NewGuid(),
             TenantId = null,
             EventTime = SampleEventTime,
-            OcrConfidence = 0.87,
             UsedOcr = true
         };
 
         var roundTrip = RoundTrip(eto);
 
         roundTrip.EventTime.ShouldBe(eto.EventTime);
-        roundTrip.OcrConfidence.ShouldBe(0.87);
         roundTrip.UsedOcr.ShouldBeTrue();
     }
 
@@ -112,13 +110,12 @@ public class EtoContract_Tests
             DocumentId = Guid.NewGuid(),
             TenantId = null,
             EventTime = SampleEventTime,
-            DocumentTypeCode = "contract.general",
-            OcrConfidence = null
+            DocumentTypeCode = "contract.general"
         };
 
         var roundTrip = RoundTrip(eto);
 
-        roundTrip.OcrConfidence.ShouldBeNull();
+        roundTrip.DocumentTypeCode.ShouldBe("contract.general");
         roundTrip.EventTime.ShouldBe(eto.EventTime);
     }
 

@@ -39,7 +39,6 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
 
         // OCR Provider 直接负责输出 Markdown（即便是扁平段落），DefaultTextExtractor 透传字段。
         result.Markdown.ShouldBe("fake ocr markdown");
-        result.Confidence.ShouldBe(0.95);
         result.UsedOcr.ShouldBeTrue();
 
         // OCR 编排只调用 provider 一次；具体模型由 provider/host 配置决定。
@@ -66,8 +65,6 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
 
         result.Markdown.ShouldContain("Hello World");
         result.UsedOcr.ShouldBeFalse();
-        // 数字版抽取无 OCR 概念——Confidence 为 null，不应兜底成 1.0。
-        result.Confidence.ShouldBeNull();
     }
 
     [Fact]
@@ -108,13 +105,12 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
     }
 
     [Fact]
-    public async Task Should_Not_Retry_Ocr_When_Result_Has_Low_Confidence()
+    public async Task Should_Not_Retry_Ocr_For_Image()
     {
         _ocrProvider.RecognizeAsync(Arg.Any<Stream>(), Arg.Any<OcrOptions>())
             .Returns(new OcrResult
             {
                 Markdown = "| A | B |\n|---|---|\n| kept | table |",
-                Confidence = 0.40,
                 PageCount = 1
             });
 
@@ -128,8 +124,8 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
         var result = await _extractor.ExtractAsync(stream, ctx);
 
         result.Markdown.ShouldContain("kept");
-        result.Confidence.ShouldBe(0.40);
 
+        // orchestrator 不做 OCR 重试——provider 只调用一次。
         await _ocrProvider.Received(1).RecognizeAsync(
             Arg.Any<Stream>(),
             Arg.Any<OcrOptions>());
@@ -148,7 +144,6 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
                 .Returns(new OcrResult
                 {
                     Markdown = "fake ocr markdown",
-                    Confidence = 0.95,
                     PageCount = 1
                 });
 

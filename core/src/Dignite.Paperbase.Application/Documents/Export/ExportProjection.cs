@@ -17,7 +17,6 @@ internal sealed class ExportProjection
     public DocumentLifecycleStatus LifecycleStatus { get; init; }
     public DocumentReviewStatus ReviewStatus { get; init; }
     public string? Language { get; init; }
-    public double? OcrConfidence { get; init; }
     public double ClassificationConfidence { get; init; }
     public DateTime CreationTime { get; init; }
     public string? OriginalFileName { get; init; }

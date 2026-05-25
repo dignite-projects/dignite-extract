@@ -71,7 +71,7 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
     {
         var documentId = _guidGenerator.Create();
         var textExtractionRunId = await ArrangeQueuedTextExtractionAsync(documentId);
-        StubExtraction("# Contract\n\nThis is a contract.", confidence: 0.98, usedOcr: false);
+        StubExtraction("# Contract\n\nThis is a contract.", usedOcr: false);
 
         await _textExtractionJob.ExecuteAsync(new DocumentTextExtractionJobArgs
         {
@@ -104,13 +104,13 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
     }
 
     [Fact]
-    public async Task Text_Extraction_Job_Should_Queue_Classification_Even_When_Ocr_Confidence_Is_Low()
+    public async Task Text_Extraction_Job_Should_Queue_Classification_For_Ocr_Path()
     {
-        // #196 契约固化：OCR 置信度不再做事前门控。即便走 OCR 路径且置信度远低于旧门槛(0.85)，
-        // 文档也照常推进到 classification，不被路由到 PendingReview；OcrConfidence 仅作 informational 指标持久化。
+        // #196 契约固化：OCR 不做事前质量门控。即便走 OCR 路径识别质量差，
+        // 文档也照常推进到 classification，不被路由到 PendingReview。
         var documentId = _guidGenerator.Create();
         var textExtractionRunId = await ArrangeQueuedTextExtractionAsync(documentId);
-        StubExtraction("# Blurry Scan\n\nlow quality ocr text.", confidence: 0.40, usedOcr: true);
+        StubExtraction("# Blurry Scan\n\nlow quality ocr text.", usedOcr: true);
 
         await _textExtractionJob.ExecuteAsync(new DocumentTextExtractionJobArgs
         {
@@ -127,8 +127,6 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
                 .Count(x => x.PipelineCode == PaperbasePipelines.Classification)
                 .ShouldBe(1);
             document.ReviewStatus.ShouldBe(DocumentReviewStatus.None);
-            document.OcrConfidence.ShouldNotBeNull();
-            document.OcrConfidence!.Value.ShouldBe(0.40, 0.0001);
         });
 
         await _backgroundJobManager.Received(1).EnqueueAsync(
@@ -152,7 +150,7 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
     }
 
     // stub 回调内断言外部提取工作不在 ambient UoW 下运行（background-jobs.md 短 UoW 规则）。
-    private void StubExtraction(string markdown, double confidence, bool usedOcr)
+    private void StubExtraction(string markdown, bool usedOcr)
     {
         _blobContainer.GetAsync(Arg.Any<string>())
             .Returns(Task.FromResult<Stream>(new MemoryStream([1, 2, 3])));
@@ -166,7 +164,6 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
                 return new TextExtractionResult
                 {
                     Markdown = markdown,
-                    Confidence = confidence,
                     DetectedLanguage = "en",
                     PageCount = 1,
                     UsedOcr = usedOcr

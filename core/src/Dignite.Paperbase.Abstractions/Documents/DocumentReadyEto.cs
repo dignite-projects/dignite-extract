@@ -31,11 +31,4 @@ public class DocumentReadyEto
     public required DateTime EventTime { get; init; }
 
     public string? DocumentTypeCode { get; init; }
-
-    /// <summary>
-    /// 最终 OCR 置信度（0.0 - 1.0）。仅 OCR 路径有值；数字版抽取无 OCR 概念，此值为 <c>null</c>。
-    /// 下游不应把 null 当 1.0 处理。这是 informational 质量指标（供操作员 UI / 下游次级 quality gating），
-    /// 不参与 Paperbase 内部的 Ready 门控——文档到 Ready 取决于分类 / 人工审核，与此值无关。
-    /// </summary>
-    public double? OcrConfidence { get; init; }
 }

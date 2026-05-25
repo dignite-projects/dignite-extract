@@ -4,6 +4,7 @@ using Dignite.Paperbase.Host.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Volo.Abp.EntityFrameworkCore;
 
@@ -12,9 +13,11 @@ using Volo.Abp.EntityFrameworkCore;
 namespace Dignite.Paperbase.Host.Migrations
 {
     [DbContext(typeof(PaperbaseHostDbContext))]
-    partial class PaperbaseHostDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260525024205_Drop_Document_OcrConfidence")]
+    partial class Drop_Document_OcrConfidence
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

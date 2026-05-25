@@ -104,25 +104,20 @@ public class DocumentPipelineRunManager : DomainService
     }
 
     /// <summary>
-    /// 记录文本提取结果、回写实际 SourceType + OCR 置信度并完成 Run。
+    /// 记录文本提取结果、回写实际 SourceType 并完成 Run。
     /// <paramref name="markdown"/> 是流水线唯一的文本载荷（数字版与 OCR 路径都已统一输出 Markdown）；
     /// 下游需要纯文本时通过 <see cref="MarkdownStripper.Strip"/> 投影。
-    /// <paramref name="ocrConfidence"/> 写入 <see cref="Document.OcrConfidence"/>，供 <c>DocumentReadyEto</c>
-    /// 出口事件 + 操作员审核 UI 消费；数字版抽取路径无 OCR 概念应传 <c>null</c>，
-    /// 不要塞 1.0 当 sentinel（与 OCR 99% 真值不可分）。
     /// </summary>
     public virtual Task CompleteTextExtractionAsync(
         Document document,
         DocumentPipelineRun run,
         string markdown,
         string? title,
-        double? ocrConfidence,
         SourceType sourceType = SourceType.Physical)
     {
         document.SetSourceType(sourceType);
         document.SetMarkdown(markdown);
         document.SetTitle(title);
-        document.SetOcrConfidence(ocrConfidence);
         return CompleteAsync(document, run);
     }
 

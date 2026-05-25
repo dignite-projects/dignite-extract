@@ -19,7 +19,6 @@ public static class ExportSystemFields
     public const string LifecycleStatus = "LifecycleStatus";
     public const string ReviewStatus = "ReviewStatus";
     public const string Language = "Language";
-    public const string OcrConfidence = "OcrConfidence";
     public const string ClassificationConfidence = "ClassificationConfidence";
     public const string CreationTime = "CreationTime";
     public const string OriginalFileName = "OriginalFileName";
@@ -34,7 +33,6 @@ public static class ExportSystemFields
         LifecycleStatus,
         ReviewStatus,
         Language,
-        OcrConfidence,
         ClassificationConfidence,
         CreationTime,
         OriginalFileName,

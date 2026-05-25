@@ -63,7 +63,6 @@ public static class PaperbaseDbContextModelCreatingExtensions
 
             // 字段架构 v2：系统通用字段平铺顶层 typed columns —— 真 pipeline 自动产物
             b.Property(x => x.Language).HasMaxLength(DocumentConsts.MaxLanguageLength);
-            b.Property(x => x.OcrConfidence);
 
             // 字段架构 v2：ExtractedFields 是动态 schema (Dictionary<string, JsonElement>)。
             // ValueConverter 序列化为 JSON 字符串，存到 SQL Server 2025 native json 列；

@@ -30,13 +30,11 @@ public class AzureDocumentIntelligenceOcrProvider : IOcrProvider, ITransientDepe
         var analyzeResult = await AnalyzeAsync(fileStream, ModelId, cancellationToken: default);
 
         var markdown = BuildMarkdown(analyzeResult);
-        var confidence = CalculateConfidence(analyzeResult);
         var pageCount = analyzeResult.Pages?.Count ?? 0;
 
         return new OcrResult
         {
             Markdown = markdown,
-            Confidence = confidence,
             DetectedLanguage = analyzeResult.Languages?.FirstOrDefault()?.Locale,
             PageCount = pageCount,
             ProviderName = "AzureDocumentIntelligence",
@@ -72,26 +70,6 @@ public class AzureDocumentIntelligenceOcrProvider : IOcrProvider, ITransientDepe
         var operation = await client.AnalyzeDocumentAsync(WaitUntil.Completed, analyzeOptions, cancellationToken);
         var analyzeResult = operation.Value;
         return analyzeResult;
-    }
-
-    private static double CalculateConfidence(AnalyzeResult analyzeResult)
-    {
-        // Confidence: page.Words[*].Confidence 是 Azure DI 真实给的字符级 softmax 评分，
-        // 取所有词的均值作为整体识别置信度。DocumentLine 自身不携带 confidence，
-        // 早期实现按 Spans 命中兜底成 0.9/1.0 是假评分，会让门槛检查事实上变成 no-op——
-        // 现已切回 SDK 真实字段。
-        double totalConfidence = 0;
-        int wordCount = 0;
-        foreach (var page in analyzeResult.Pages ?? [])
-        {
-            foreach (var word in page.Words ?? [])
-            {
-                totalConfidence += word.Confidence;
-                wordCount++;
-            }
-        }
-
-        return wordCount > 0 ? totalConfidence / wordCount : 0;
     }
 
     private static string BuildMarkdown(AnalyzeResult analyzeResult)

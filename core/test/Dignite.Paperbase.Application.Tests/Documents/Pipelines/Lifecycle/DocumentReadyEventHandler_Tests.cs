@@ -44,7 +44,7 @@ public class DocumentReadyEventHandler_Tests
     [Fact]
     public async Task Ready_Transition_Publishes_DocumentReadyEto()
     {
-        var doc = CreateDocument(documentTypeCode: "contract.general", ocrConfidence: 0.93);
+        var doc = CreateDocument(documentTypeCode: "contract.general");
         SetupDocumentRepository(doc);
 
         var evt = new DocumentLifecycleStatusChangedEvent(
@@ -56,15 +56,14 @@ public class DocumentReadyEventHandler_Tests
             Arg.Is<DocumentReadyEto>(e =>
                 e.DocumentId == doc.Id &&
                 e.TenantId == doc.TenantId &&
-                e.DocumentTypeCode == "contract.general" &&
-                e.OcrConfidence == 0.93),
+                e.DocumentTypeCode == "contract.general"),
             Arg.Any<bool>());
     }
 
     [Fact]
     public async Task Non_Ready_Transition_Does_Not_Publish()
     {
-        var doc = CreateDocument(documentTypeCode: null, ocrConfidence: 0.5);
+        var doc = CreateDocument(documentTypeCode: null);
         SetupDocumentRepository(doc);
 
         var evt = new DocumentLifecycleStatusChangedEvent(
@@ -74,26 +73,6 @@ public class DocumentReadyEventHandler_Tests
 
         await _eventBus.DidNotReceive().PublishAsync(
             Arg.Any<DocumentReadyEto>(), Arg.Any<bool>());
-    }
-
-    [Fact]
-    public async Task Ready_Transition_With_Null_OcrConfidence_Publishes_Null()
-    {
-        // 数字版抽取无 OCR 概念，Document.OcrConfidence 为 null；handler 应当原样透传，
-        // 不要塞 1.0 当 sentinel（与 OCR 99% 真值不可分，下游做 quality gating 会被噪声污染）。
-        var doc = CreateDocument(documentTypeCode: "contract.general", ocrConfidence: null);
-        SetupDocumentRepository(doc);
-
-        var evt = new DocumentLifecycleStatusChangedEvent(
-            doc.Id, DocumentLifecycleStatus.Processing, DocumentLifecycleStatus.Ready);
-
-        await _handler.HandleEventAsync(evt);
-
-        await _eventBus.Received(1).PublishAsync(
-            Arg.Is<DocumentReadyEto>(e =>
-                e.DocumentId == doc.Id &&
-                e.OcrConfidence == null),
-            Arg.Any<bool>());
     }
 
     [Fact]
@@ -120,7 +99,7 @@ public class DocumentReadyEventHandler_Tests
             .Returns(doc);
     }
 
-    private static Document CreateDocument(string? documentTypeCode, double? ocrConfidence)
+    private static Document CreateDocument(string? documentTypeCode)
     {
         var doc = new Document(
             Guid.NewGuid(), null,
@@ -140,14 +119,6 @@ public class DocumentReadyEventHandler_Tests
                 .GetMethod("ApplyAutomaticClassificationResult",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
                 .Invoke(doc, [documentTypeCode, 0.99]);
-        }
-
-        if (ocrConfidence.HasValue)
-        {
-            typeof(Document)
-                .GetMethod("SetOcrConfidence",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-                .Invoke(doc, [ocrConfidence.Value]);
         }
 
         return doc;

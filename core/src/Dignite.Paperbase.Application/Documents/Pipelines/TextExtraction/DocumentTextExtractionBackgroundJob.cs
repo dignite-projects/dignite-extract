@@ -132,7 +132,7 @@ public class DocumentTextExtractionBackgroundJob
                 document, runId, PaperbasePipelines.TextExtraction);
 
         await _pipelineRunManager.CompleteTextExtractionAsync(
-            document, run, result.Markdown, title, result.Confidence, actualSourceType);
+            document, run, result.Markdown, title, actualSourceType);
 
         // 发布 OCRCompletedEto——薄载荷，下游通过 REST 回拉 Markdown。
         await _distributedEventBus.PublishAsync(
@@ -141,11 +141,10 @@ public class DocumentTextExtractionBackgroundJob
                 DocumentId = document.Id,
                 TenantId = document.TenantId,
                 EventTime = _clock.Now,
-                OcrConfidence = result.Confidence,
                 UsedOcr = result.UsedOcr
             });
 
-        // 文本提取完成即推进分类——OcrConfidence 仅作 informational 质量指标，不再做事前门控
+        // 文本提取完成即推进分类——OCR 不设质量门控
         // （#196：OCR 平均置信度预测不了真实质量；质量问题由分类审核 + 操作员重跑/重传事后处理）。
         await _pipelineJobScheduler.QueueAsync(document, PaperbasePipelines.Classification);
 

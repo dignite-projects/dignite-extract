@@ -38,7 +38,6 @@ const SYSTEM_FIELD_KEYS = [
   'LifecycleStatus',
   'ReviewStatus',
   'Language',
-  'OcrConfidence',
   'ClassificationConfidence',
   'CreationTime',
   'OriginalFileName',

@@ -19,9 +19,6 @@ public class OcrResult
     /// </summary>
     public string Markdown { get; set; } = string.Empty;
 
-    /// <summary>整体识别置信度（0.0 ~ 1.0）。</summary>
-    public double Confidence { get; set; }
-
     /// <summary>检测到的主要语言（BCP 47 格式）。</summary>
     public string? DetectedLanguage { get; set; }
 

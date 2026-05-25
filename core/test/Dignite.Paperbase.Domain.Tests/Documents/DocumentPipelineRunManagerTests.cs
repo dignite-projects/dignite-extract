@@ -266,12 +266,11 @@ public class DocumentPipelineRunManagerTests : PaperbaseDomainTestBase<Paperbase
         var run = await _manager.StartAsync(doc, PaperbasePipelines.TextExtraction);
 
         await _manager.CompleteTextExtractionAsync(
-            doc, run, markdown: "# Hello\n\nbody", title: "Hello", ocrConfidence: 0.97, sourceType: SourceType.Digital);
+            doc, run, markdown: "# Hello\n\nbody", title: "Hello", sourceType: SourceType.Digital);
 
         doc.Markdown.ShouldBe("# Hello\n\nbody");
         doc.Title.ShouldBe("Hello");
         doc.SourceType.ShouldBe(SourceType.Digital);
-        doc.OcrConfidence.ShouldBe(0.97);
         run.Status.ShouldBe(PipelineRunStatus.Succeeded);
     }
 
@@ -282,24 +281,9 @@ public class DocumentPipelineRunManagerTests : PaperbaseDomainTestBase<Paperbase
         var run = await _manager.StartAsync(doc, PaperbasePipelines.TextExtraction);
 
         await _manager.CompleteTextExtractionAsync(
-            doc, run, markdown: "irrelevant", title: null, ocrConfidence: 0.5);
+            doc, run, markdown: "irrelevant", title: null);
 
         doc.Title.ShouldBeNull();
-        doc.OcrConfidence.ShouldBe(0.5);
-    }
-
-    [Fact]
-    public async Task CompleteTextExtraction_Persists_Null_OcrConfidence_For_Digital_Path()
-    {
-        // 数字版抽取无 OCR 概念，上游传 null；Document.OcrConfidence 应保持 null，
-        // 不要在 Domain 层兜底成 1.0（会让下游无法区分"未走 OCR"和"OCR 99% 真值"）。
-        var doc = CreateDocument();
-        var run = await _manager.StartAsync(doc, PaperbasePipelines.TextExtraction);
-
-        await _manager.CompleteTextExtractionAsync(
-            doc, run, markdown: "# Digital", title: "Digital", ocrConfidence: null, sourceType: SourceType.Digital);
-
-        doc.OcrConfidence.ShouldBeNull();
     }
 
     [Fact]
@@ -309,13 +293,13 @@ public class DocumentPipelineRunManagerTests : PaperbaseDomainTestBase<Paperbase
 
         // 1st extraction succeeds with a title
         var run1 = await _manager.StartAsync(doc, PaperbasePipelines.TextExtraction);
-        await _manager.CompleteTextExtractionAsync(doc, run1, "# Original", "Original", ocrConfidence: 1.0);
+        await _manager.CompleteTextExtractionAsync(doc, run1, "# Original", "Original");
 
         // A second completion attempt must fail — Markdown invariant guards write-once.
         var run2 = await _manager.StartAsync(doc, PaperbasePipelines.TextExtraction);
         await Should.ThrowAsync<BusinessException>(async () =>
         {
-            await _manager.CompleteTextExtractionAsync(doc, run2, "# Other", "Other", ocrConfidence: 1.0);
+            await _manager.CompleteTextExtractionAsync(doc, run2, "# Other", "Other");
         });
 
         // Title remains the originally persisted value.

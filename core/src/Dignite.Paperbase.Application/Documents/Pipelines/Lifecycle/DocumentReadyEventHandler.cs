@@ -60,12 +60,11 @@ public class DocumentReadyEventHandler
                 DocumentId = document.Id,
                 TenantId = document.TenantId,
                 EventTime = _clock.Now,
-                DocumentTypeCode = document.DocumentTypeCode,
-                OcrConfidence = document.OcrConfidence
+                DocumentTypeCode = document.DocumentTypeCode
             });
 
         _logger.LogInformation(
-            "Document {DocumentId} reached Ready lifecycle; DocumentReadyEto enqueued (type={DocTypeCode} confidence={OcrConfidence}).",
-            document.Id, document.DocumentTypeCode, document.OcrConfidence);
+            "Document {DocumentId} reached Ready lifecycle; DocumentReadyEto enqueued (type={DocTypeCode}).",
+            document.Id, document.DocumentTypeCode);
     }
 }

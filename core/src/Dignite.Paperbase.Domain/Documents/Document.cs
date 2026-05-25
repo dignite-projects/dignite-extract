@@ -83,9 +83,6 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// <summary>文档语言（ISO 639-1 / IETF tag）。OCR / 抽取阶段检测；影响下游 prompt 语言选择。</summary>
     public virtual string? Language { get; private set; }
 
-    /// <summary>OCR 平均置信度（0..1）。OCR 完成后填充；informational 质量指标，随出口事件透出，不参与 Ready 门控（#196）。</summary>
-    public virtual double? OcrConfidence { get; private set; }
-
     /// <summary>
     /// 类型绑定字段抽取结果（字段架构 v2）。键 = FieldName（与 LLM 输出 JSON 键同形）。
     /// <para>
@@ -178,13 +175,6 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     public void UnassignCabinet()
     {
         CabinetId = null;
-    }
-
-    internal void SetOcrConfidence(double? confidence)
-    {
-        OcrConfidence = confidence.HasValue
-            ? Check.Range(confidence.Value, nameof(confidence), 0d, 1d)
-            : null;
     }
 
     /// <summary>

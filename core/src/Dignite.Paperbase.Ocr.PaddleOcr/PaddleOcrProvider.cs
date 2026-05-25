@@ -37,12 +37,10 @@ public class PaddleOcrProvider : IOcrProvider, ITransientDependency
             cancellationToken: default);
 
         var markdown = BuildMarkdown(result);
-        var confidence = CalculateConfidence(result);
 
         return new OcrResult
         {
             Markdown = markdown,
-            Confidence = confidence,
             DetectedLanguage = result.DetectedLanguage,
             PageCount = result.PageCount,
             ProviderName = result.ProviderName ?? "PaddleOCR",
@@ -100,13 +98,6 @@ public class PaddleOcrProvider : IOcrProvider, ITransientDependency
             : WrapParagraphs(result.RawText);
     }
 
-    private static double CalculateConfidence(PaddleOcrResponse result)
-    {
-        return result.Blocks is { Count: > 0 }
-            ? result.Blocks.Average(b => b.Confidence)
-            : result.Confidence;
-    }
-
     private static string WrapParagraphs(string? rawText)
     {
         if (string.IsNullOrWhiteSpace(rawText)) return string.Empty;
@@ -131,19 +122,11 @@ public class PaddleOcrProvider : IOcrProvider, ITransientDependency
         [JsonPropertyName("markdown")]
         public string? Markdown { get; set; }
 
-        /// <summary>Sidecar 行级 OCR 结果。Provider 内部只读其 <c>confidence</c> 用于整体置信度均值，
-        /// 不再向外暴露 bbox/text。Sidecar 协议未来若简化 schema 可安全省略此字段（按 0 处理）。</summary>
-        [JsonPropertyName("blocks")]
-        public List<PaddleOcrLineConfidence>? Blocks { get; set; }
-
         [JsonPropertyName("detected_language")]
         public string? DetectedLanguage { get; set; }
 
         [JsonPropertyName("page_count")]
         public int PageCount { get; set; }
-
-        [JsonPropertyName("confidence")]
-        public double Confidence { get; set; }
 
         [JsonPropertyName("provider_name")]
         public string? ProviderName { get; set; }
@@ -153,11 +136,5 @@ public class PaddleOcrProvider : IOcrProvider, ITransientDependency
 
         [JsonPropertyName("provider_version")]
         public string? ProviderVersion { get; set; }
-    }
-
-    private sealed class PaddleOcrLineConfidence
-    {
-        [JsonPropertyName("confidence")]
-        public double Confidence { get; set; }
     }
 }

@@ -84,7 +84,6 @@ public class DefaultTextExtractor : ITextExtractor, ITransientDependency
         return new TextExtractionResult
         {
             Markdown = result.Markdown,
-            Confidence = result.Confidence,
             DetectedLanguage = result.DetectedLanguage,
             PageCount = result.PageCount,
             UsedOcr = true

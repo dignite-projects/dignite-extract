@@ -24,12 +24,6 @@ public class TextExtractionResult
     /// </remarks>
     public string Markdown { get; set; } = string.Empty;
 
-    /// <summary>
-    /// OCR 平均置信度（0..1）。仅 OCR 路径（<see cref="UsedOcr"/> = true）有值；
-    /// 数字版抽取路径无 OCR 概念，应保持 <c>null</c>——下游能区分"未走 OCR"和"OCR 通过"，
-    /// 不要塞 1.0 当 sentinel（噪声且与 OCR 99% 真值不可分）。
-    /// </summary>
-    public double? Confidence { get; set; }
     public string? DetectedLanguage { get; set; }
     public int PageCount { get; set; }
 
