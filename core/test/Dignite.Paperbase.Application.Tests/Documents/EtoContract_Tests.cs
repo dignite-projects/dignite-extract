@@ -140,13 +140,13 @@ public class EtoContract_Tests
         var eto = new DocumentPermanentlyDeletedEto
         {
             DocumentId = Guid.NewGuid(),
-            EventTime = SampleEventTime,
-            DocumentTypeCode = "contract.general"
+            EventTime = SampleEventTime
         };
 
         var roundTrip = RoundTrip(eto);
 
-        roundTrip.DocumentTypeCode.ShouldBe("contract.general");
+        roundTrip.DocumentId.ShouldBe(eto.DocumentId);
+        roundTrip.Version.ShouldBe("1.0");
     }
 
     [Fact]

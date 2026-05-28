@@ -85,9 +85,7 @@ public class DocumentAppService_Delete_Tests
         await _distributedEventBus.Received(1).PublishAsync(
             Arg.Is<DocumentDeletedEto>(e =>
                 e.DocumentId == doc.Id &&
-                e.TenantId == doc.TenantId &&
-                // 未分类文档 → DocumentTypeId 为 null → ETO 解析出的 DocumentTypeCode 为 null（#207）。
-                e.DocumentTypeCode == null),
+                e.TenantId == doc.TenantId),
             Arg.Any<bool>());
     }
 
@@ -111,9 +109,7 @@ public class DocumentAppService_Delete_Tests
         await _distributedEventBus.Received(1).PublishAsync(
             Arg.Is<DocumentRestoredEto>(e =>
                 e.DocumentId == doc.Id &&
-                e.TenantId == doc.TenantId &&
-                // 未分类文档 → DocumentTypeId 为 null → ETO 解析出的 DocumentTypeCode 为 null（#207）。
-                e.DocumentTypeCode == null),
+                e.TenantId == doc.TenantId),
             Arg.Any<bool>());
     }
 

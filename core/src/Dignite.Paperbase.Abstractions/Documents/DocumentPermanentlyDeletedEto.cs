@@ -26,6 +26,4 @@ public class DocumentPermanentlyDeletedEto
     /// 下游消费方按 <c>(DocumentId, EventType, EventTime)</c> 做幂等（at-least-once 投递）。
     /// </summary>
     public required DateTime EventTime { get; init; }
-
-    public string? DocumentTypeCode { get; init; }
 }

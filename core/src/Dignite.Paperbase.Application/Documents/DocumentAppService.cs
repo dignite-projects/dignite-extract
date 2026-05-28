@@ -264,7 +264,8 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
     {
         await CheckPolicyAsync(PaperbasePermissions.Documents.Default);
 
-        var document = await _documentRepository.GetAsync(id, includeDetails: true);
+        // 只取 blob 流——仅需标量 + owned FileOrigin（随实体加载），不需要任何子集合。
+        var document = await _documentRepository.GetAsync(id, includeDetails: false);
         var stream = await _blobContainer.GetAsync(document.OriginalFileBlobName);
 
         return new RemoteStreamContent(
@@ -279,9 +280,6 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
     {
         var document = await _documentRepository.GetAsync(id);
 
-        // ETO 仍携带 DocumentTypeCode 字符串（出口契约不变）——由内部 DocumentTypeId 解析（#207，穿透 soft-delete）。
-        var documentTypeCode = await ResolveTypeCodeAsync(document.DocumentTypeId);
-
         await _documentRepository.DeleteAsync(id);
 
         // 通知下游消费方：Document 进入回收站，应将派生数据置为可恢复的归档状态
@@ -290,8 +288,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
             {
                 DocumentId = document.Id,
                 TenantId = document.TenantId,
-                EventTime = Clock.Now,
-                DocumentTypeCode = documentTypeCode
+                EventTime = Clock.Now
             });
     }
 
@@ -303,9 +300,6 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         {
             document = await _documentRepository.GetAsync(id, includeDetails: true);
         }
-
-        // 解析 ETO 携带的 DocumentTypeCode（#207）——在硬删前用文档的 DocumentTypeId 解析（类型本身不随文档删除而删）。
-        var documentTypeCode = await ResolveTypeCodeAsync(document.DocumentTypeId);
 
         await _documentRepository.HardDeleteAsync(id);
 
@@ -326,8 +320,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
             {
                 DocumentId = document.Id,
                 TenantId = document.TenantId,
-                EventTime = Clock.Now,
-                DocumentTypeCode = documentTypeCode
+                EventTime = Clock.Now
             });
     }
 
@@ -348,16 +341,12 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
 
             await _documentRepository.UpdateAsync(document);
 
-            // 已在 DataFilter.Disable<ISoftDelete> 作用域内——ResolveTypeCodeAsync 再嵌套一层 Disable 无害。
-            var documentTypeCode = await ResolveTypeCodeAsync(document.DocumentTypeId);
-
             await _distributedEventBus.PublishAsync(
                 new DocumentRestoredEto
                 {
                     DocumentId = document.Id,
                     TenantId = document.TenantId,
-                    EventTime = Clock.Now,
-                    DocumentTypeCode = documentTypeCode
+                    EventTime = Clock.Now
                 });
         }
     }
