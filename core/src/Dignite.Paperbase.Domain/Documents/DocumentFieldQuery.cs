@@ -1,3 +1,5 @@
+using Dignite.Paperbase.Documents.Fields;
+
 namespace Dignite.Paperbase.Documents;
 
 /// <summary>

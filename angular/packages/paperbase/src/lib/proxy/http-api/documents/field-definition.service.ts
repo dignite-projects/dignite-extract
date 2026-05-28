@@ -7,7 +7,7 @@ import type {
   UpdateFieldDefinitionDto,
 } from '../../documents/field-definition.models';
 
-// Backend: Dignite.Paperbase.HttpApi.Documents.FieldDefinitionController (/api/paperbase/field-definitions).
+// Backend: Dignite.Paperbase.HttpApi.Documents.Fields.FieldDefinitionController (/api/paperbase/field-definitions).
 @Injectable({ providedIn: 'root' })
 export class FieldDefinitionService {
   private readonly rest = inject(RestService);

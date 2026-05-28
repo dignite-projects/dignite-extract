@@ -8,21 +8,21 @@ export const DOCUMENTS_ROUTES: Routes = [
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: PAPERBASE_PERMISSIONS.Documents.Default },
     loadComponent: () =>
-      import('./document-list/document-list.component').then(c => c.DocumentListComponent),
+      import('./documents/document-list/document-list.component').then(c => c.DocumentListComponent),
   },
   {
     path: 'upload',
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: PAPERBASE_PERMISSIONS.Documents.Upload },
     loadComponent: () =>
-      import('./document-upload/document-upload.component').then(c => c.DocumentUploadComponent),
+      import('./documents/document-upload/document-upload.component').then(c => c.DocumentUploadComponent),
   },
   {
     path: 'recycle',
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: PAPERBASE_PERMISSIONS.Documents.Restore },
     loadComponent: () =>
-      import('./document-recycle-bin/document-recycle-bin.component').then(
+      import('./documents/document-recycle-bin/document-recycle-bin.component').then(
         c => c.DocumentRecycleBinComponent,
       ),
   },
@@ -31,7 +31,7 @@ export const DOCUMENTS_ROUTES: Routes = [
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: PAPERBASE_PERMISSIONS.Documents.ConfirmClassification },
     loadComponent: () =>
-      import('./document-review-queue/document-review-queue.component').then(
+      import('./documents/document-review-queue/document-review-queue.component').then(
         c => c.DocumentReviewQueueComponent,
       ),
   },
@@ -40,7 +40,7 @@ export const DOCUMENTS_ROUTES: Routes = [
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: PAPERBASE_PERMISSIONS.Documents.ConfirmClassification },
     loadComponent: () =>
-      import('./document-type-list/document-type-list.component').then(
+      import('./document-types/document-type-list/document-type-list.component').then(
         c => c.DocumentTypeListComponent,
       ),
   },
@@ -49,7 +49,7 @@ export const DOCUMENTS_ROUTES: Routes = [
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: PAPERBASE_PERMISSIONS.Documents.ConfirmClassification },
     loadComponent: () =>
-      import('./field-definition-list/field-definition-list.component').then(
+      import('./fields/field-definition-list/field-definition-list.component').then(
         c => c.FieldDefinitionListComponent,
       ),
   },
@@ -58,7 +58,7 @@ export const DOCUMENTS_ROUTES: Routes = [
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: PAPERBASE_PERMISSIONS.Documents.Templates.Default },
     loadComponent: () =>
-      import('./export-template-list/export-template-list.component').then(
+      import('./exports/export-template-list/export-template-list.component').then(
         c => c.ExportTemplateListComponent,
       ),
   },
@@ -67,13 +67,13 @@ export const DOCUMENTS_ROUTES: Routes = [
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: PAPERBASE_PERMISSIONS.Cabinets.Default },
     loadComponent: () =>
-      import('./cabinet-list/cabinet-list.component').then(c => c.CabinetListComponent),
+      import('./cabinets/cabinet-list/cabinet-list.component').then(c => c.CabinetListComponent),
   },
   {
     path: ':id',
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: PAPERBASE_PERMISSIONS.Documents.Default },
     loadComponent: () =>
-      import('./document-detail/document-detail.component').then(c => c.DocumentDetailComponent),
+      import('./documents/document-detail/document-detail.component').then(c => c.DocumentDetailComponent),
   },
 ];

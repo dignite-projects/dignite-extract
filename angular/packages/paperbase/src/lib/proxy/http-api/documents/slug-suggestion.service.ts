@@ -6,7 +6,7 @@ import type {
   SuggestSlugInput,
 } from '../../documents/slug-suggestion.models';
 
-// Backend: Dignite.Paperbase.HttpApi.Documents.SlugSuggestionController (/api/paperbase/slug-suggestion).
+// Backend: Dignite.Paperbase.HttpApi.Slugging.SlugSuggestionController (/api/paperbase/slug-suggestion).
 @Injectable({ providedIn: 'root' })
 export class SlugSuggestionService {
   private readonly rest = inject(RestService);

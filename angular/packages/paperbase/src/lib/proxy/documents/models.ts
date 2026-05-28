@@ -11,7 +11,7 @@ export interface FileOriginDto {
   fileSize: number;
 }
 
-// Mirrors C# Dignite.Paperbase.Documents.PipelineRunCandidate (Domain.Shared).
+// Mirrors C# Dignite.Paperbase.Documents.Pipelines.PipelineRunCandidate (Domain.Shared).
 export interface PipelineRunCandidate {
   typeCode: string;
   confidenceScore: number;

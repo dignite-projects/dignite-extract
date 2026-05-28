@@ -3,7 +3,7 @@ import type { DocumentLifecycleStatus } from './document-lifecycle-status.enum';
 import type { ExportColumnSourceKind } from './export-column-source-kind.enum';
 import type { ExportFormat } from './export-format.enum';
 
-// Mirrors C# Dignite.Paperbase.Documents.ExportColumnDto / ExportTemplateDto / inputs.
+// Mirrors C# Dignite.Paperbase.Documents.Exports.ExportColumnDto / ExportTemplateDto / inputs.
 export interface ExportColumnDto {
   sourceKind: ExportColumnSourceKind;
   key: string;

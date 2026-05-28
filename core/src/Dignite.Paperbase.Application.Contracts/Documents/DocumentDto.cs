@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using Dignite.Paperbase.Documents;
+using Dignite.Paperbase.Documents.Fields;
+using Dignite.Paperbase.Documents.Pipelines;
 using Volo.Abp.Application.Dtos;
 
 namespace Dignite.Paperbase.Documents;

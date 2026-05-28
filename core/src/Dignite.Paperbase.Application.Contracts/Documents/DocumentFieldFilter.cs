@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using Dignite.Paperbase.Documents.Fields;
 
 namespace Dignite.Paperbase.Documents;
 

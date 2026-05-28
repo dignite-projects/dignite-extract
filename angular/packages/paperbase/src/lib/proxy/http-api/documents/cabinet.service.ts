@@ -7,7 +7,7 @@ import type {
   UpdateCabinetDto,
 } from '../../documents/cabinet.models';
 
-// Backend: Dignite.Paperbase.HttpApi.Documents.CabinetController (/api/paperbase/cabinets).
+// Backend: Dignite.Paperbase.HttpApi.Documents.Cabinets.CabinetController (/api/paperbase/cabinets).
 @Injectable({ providedIn: 'root' })
 export class CabinetService {
   private readonly rest = inject(RestService);

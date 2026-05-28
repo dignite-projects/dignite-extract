@@ -1,4 +1,4 @@
-// Mirrors C# Dignite.Paperbase.Documents.SuggestSlugInput / SlugSuggestionDto (issue #190).
+// Mirrors C# Dignite.Paperbase.Slugging.SuggestSlugInput / SlugSuggestionDto (issue #190).
 // 显示名 → 机器标识（slug）建议，FieldDefinition 与 DocumentType 创建表单共用。
 
 export interface SuggestSlugInput {

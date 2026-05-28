@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using Dignite.Paperbase.Documents;
+using Dignite.Paperbase.Documents.Cabinets;
+using Dignite.Paperbase.Documents.Pipelines;
 using Volo.Abp;
 using Volo.Abp.Domain.Entities.Auditing;
 using Volo.Abp.MultiTenancy;

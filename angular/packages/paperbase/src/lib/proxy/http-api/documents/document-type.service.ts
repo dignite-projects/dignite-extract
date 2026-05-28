@@ -7,7 +7,7 @@ import type {
   UpdateDocumentTypeDto,
 } from '../../documents/document-type.models';
 
-// Backend: Dignite.Paperbase.HttpApi.Documents.DocumentTypeController (/api/paperbase/document-types).
+// Backend: Dignite.Paperbase.HttpApi.Documents.DocumentTypes.DocumentTypeController (/api/paperbase/document-types).
 @Injectable({ providedIn: 'root' })
 export class DocumentTypeService {
   private readonly rest = inject(RestService);
