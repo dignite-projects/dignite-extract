@@ -583,7 +583,7 @@ namespace Dignite.Paperbase.Host.Migrations
                     Name = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                     Format = table.Column<int>(type: "int", nullable: false),
                     DocumentTypeCode = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
-                    Columns = table.Column<string>(type: "json", nullable: false),
+                    Columns = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ExtraProperties = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ConcurrencyStamp = table.Column<string>(type: "nvarchar(40)", maxLength: 40, nullable: false),
                     CreationTime = table.Column<DateTime>(type: "datetime2", nullable: false),
@@ -927,7 +927,6 @@ namespace Dignite.Paperbase.Host.Migrations
                     ClassificationConfidence = table.Column<double>(type: "float", nullable: false),
                     ClassificationReason = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     Language = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: true),
-                    ExtractedFields = table.Column<string>(type: "json", nullable: true),
                     ExtraProperties = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ConcurrencyStamp = table.Column<string>(type: "nvarchar(40)", maxLength: 40, nullable: false),
                     CreationTime = table.Column<DateTime>(type: "datetime2", nullable: false),
@@ -1003,6 +1002,33 @@ namespace Dignite.Paperbase.Host.Migrations
                         column: x => x.AuthorizationId,
                         principalTable: "OpenIddictAuthorizations",
                         principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PaperbaseDocumentExtractedFields",
+                columns: table => new
+                {
+                    DocumentId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    DocumentTypeCode = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    DataType = table.Column<int>(type: "int", nullable: false),
+                    StringValue = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    BooleanValue = table.Column<bool>(type: "bit", nullable: true),
+                    IntegerValue = table.Column<long>(type: "bigint", nullable: true),
+                    DecimalValue = table.Column<decimal>(type: "decimal(38,6)", precision: 38, scale: 6, nullable: true),
+                    DateValue = table.Column<DateOnly>(type: "date", nullable: true),
+                    DateTimeValue = table.Column<DateTime>(type: "datetime2", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PaperbaseDocumentExtractedFields", x => new { x.DocumentId, x.Name });
+                    table.ForeignKey(
+                        name: "FK_PaperbaseDocumentExtractedFields_PaperbaseDocuments_DocumentId",
+                        column: x => x.DocumentId,
+                        principalTable: "PaperbaseDocuments",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -1305,6 +1331,11 @@ namespace Dignite.Paperbase.Host.Migrations
                 filter: "IsDeleted = 0");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PaperbaseDocumentExtractedFields_TenantId_DocumentTypeCode_Name",
+                table: "PaperbaseDocumentExtractedFields",
+                columns: new[] { "TenantId", "DocumentTypeCode", "Name" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PaperbaseDocumentPipelineRuns_DocumentId_PipelineCode_AttemptNumber",
                 table: "PaperbaseDocumentPipelineRuns",
                 columns: new[] { "DocumentId", "PipelineCode", "AttemptNumber" });
@@ -1456,6 +1487,9 @@ namespace Dignite.Paperbase.Host.Migrations
 
             migrationBuilder.DropTable(
                 name: "OpenIddictTokens");
+
+            migrationBuilder.DropTable(
+                name: "PaperbaseDocumentExtractedFields");
 
             migrationBuilder.DropTable(
                 name: "PaperbaseDocumentPipelineRuns");

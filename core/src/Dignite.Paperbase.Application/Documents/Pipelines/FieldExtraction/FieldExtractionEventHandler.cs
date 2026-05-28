@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Dignite.Paperbase.Abstractions.Documents;
 using Microsoft.Extensions.Logging;
@@ -16,8 +15,8 @@ namespace Dignite.Paperbase.Documents.Pipelines.FieldExtraction;
 /// <summary>
 /// 统一字段抽取 EventHandler（字段架构 v2 + 解读 X）。订阅 <see cref="DocumentClassifiedEto"/>：
 /// 分类完成后按 Document 所属租户精确查 <see cref="FieldDefinition"/> 一层（Host 文档用
-/// TenantId IS NULL 字段；租户文档用对应租户字段），跑 LLM 抽取，写入
-/// <c>Document.ExtractedFields</c>（单一 Dictionary，源由 Document.TenantId 决定，
+/// TenantId IS NULL 字段；租户文档用对应租户字段），跑 LLM 抽取，经 <c>Document.SetFields</c> 整组写入
+/// <see cref="Document.ExtractedFieldValues"/>（typed child 集合，源由 Document.TenantId 决定，
 /// 不分桶不存在跨层命名冲突）。统一发布 <see cref="FieldsExtractedEto"/>。
 /// <para>
 /// 安全约束（CLAUDE.md "## 安全约定"）：显式 <see cref="ICurrentTenant.Change"/> 恢复事件携带的
@@ -85,13 +84,28 @@ public class FieldExtractionEventHandler
                 await readUow.CompleteAsync();
             }
 
-            // 空字段路径：显式短 UoW 包 publish 让 ABP transactional outbox 接住事件，
-            // 避免裸 publish 走非事务路径导致事件可能丢失。
+            // 空字段路径：目标类型无字段定义。仍需把该文档可能残留的旧 schema 字段行清空——
+            // reclassify 从「有字段类型」换到「无字段类型」时，旧字段行不清会以新 TypeCode 被结构化检索 /
+            // DTO 误带（违反「reclassify 整组替换、不残留旧 schema」语义）。短 UoW 内清空 + publish，
+            // 由 ABP transactional outbox 原子接住事件（避免裸 publish 走非事务路径丢事件）。
             if (definitions.Count == 0)
             {
-                using var publishUow = _unitOfWorkManager.Begin(requiresNew: true);
+                using var clearUow = _unitOfWorkManager.Begin(requiresNew: true);
+
+                var blankDocument = await _documentRepository.FindAsync(eventData.DocumentId, includeDetails: true);
+                // 仅当文档仍存在、同租户、且当前类型仍是本事件的类型（非 reclassify race 的 stale 事件）才清空，
+                // 避免用 stale 事件误删后续分类写入的字段。
+                if (blankDocument != null
+                    && blankDocument.TenantId == eventData.TenantId
+                    && string.Equals(blankDocument.DocumentTypeCode, eventData.DocumentTypeCode, StringComparison.Ordinal)
+                    && blankDocument.ExtractedFieldValues.Count > 0)
+                {
+                    blankDocument.SetFields(Array.Empty<DocumentFieldValue>());
+                    await _documentRepository.UpdateAsync(blankDocument, autoSave: true);
+                }
+
                 await PublishFieldsExtractedAsync(eventData, fieldCount: 0);
-                await publishUow.CompleteAsync();
+                await clearUow.CompleteAsync();
                 return;
             }
 
@@ -152,7 +166,9 @@ public class FieldExtractionEventHandler
             // 两件事在同一 UoW 内由 ABP outbox 原子持久化，避免"字段写入成功但事件丢失"。
             using var writeUow = _unitOfWorkManager.Begin(requiresNew: true);
 
-            var document = await _documentRepository.FindAsync(eventData.DocumentId, includeDetails: false);
+            // includeDetails: true 让 ExtractedFieldValues child 集合一并加载——SetFields 走 reconcile
+            // 需要现有字段行在场才能正确 diff（删旧 / 原地改同名 / 增新），避免 stale collection 漏删旧行。
+            var document = await _documentRepository.FindAsync(eventData.DocumentId, includeDetails: true);
             if (document == null)
             {
                 _logger.LogWarning(
@@ -184,29 +200,30 @@ public class FieldExtractionEventHandler
                 return;
             }
 
-            // 非空字段写入 ExtractedFields（单层，无分桶）。
-            var fields = new Dictionary<string, JsonElement>();
+            // 非空字段构造 typed DocumentFieldValue（DataType 来自 descriptor，源自 FieldDefinition）——
+            // 整组替换字段值集合（单层，无分桶；reconcile 删旧 / 改同名 / 增新）。
+            var fieldValues = new List<DocumentFieldValue>();
             foreach (var d in descriptors)
             {
                 if (extracted.TryGetValue(d.Name, out var value) && value.HasValue)
                 {
-                    fields[d.Name] = value.Value;
+                    fieldValues.Add(new DocumentFieldValue(d.Name, d.DataType, value.Value));
                 }
             }
 
-            document.SetExtractedFields(fields.Count > 0 ? fields : null);
+            document.SetFields(fieldValues);
 
             await _documentRepository.UpdateAsync(document, autoSave: true);
 
-            // 在 UoW 内 publish，让 ABP transactional outbox 把事件与 Document.ExtractedFields
-            // 的写入原子地一起持久化——避免"字段写入成功但事件丢失"。
-            await PublishFieldsExtractedAsync(eventData, fields.Count);
+            // 在 UoW 内 publish，让 ABP transactional outbox 把事件与字段值的写入原子地一起持久化——
+            // 避免"字段写入成功但事件丢失"。
+            await PublishFieldsExtractedAsync(eventData, fieldValues.Count);
 
             await writeUow.CompleteAsync();
 
             _logger.LogInformation(
                 "Field extraction for document {DocumentId} produced {NonNullCount}/{TotalCount} non-null values.",
-                eventData.DocumentId, fields.Count, definitions.Count);
+                eventData.DocumentId, fieldValues.Count, definitions.Count);
         }
     }
 

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using Dignite.Paperbase.Documents;
 using Dignite.Paperbase.Documents.Cabinets;
 using Dignite.Paperbase.Documents.Pipelines;
@@ -85,20 +84,20 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// <summary>文档语言（ISO 639-1 / IETF tag）。OCR / 抽取阶段检测；影响下游 prompt 语言选择。</summary>
     public virtual string? Language { get; private set; }
 
+    // --- 聚合内的字段值集合（字段架构 v2 / Issue #206） ---
+
+    private readonly List<DocumentExtractedField> _extractedFieldValues = new();
+
     /// <summary>
-    /// 类型绑定字段抽取结果（字段架构 v2）。键 = FieldName（与 LLM 输出 JSON 键同形）。
+    /// 类型绑定字段抽取结果（字段架构 v2）——一行一个字段值的 child 集合，字段值查询与持久化的唯一 truth source。
     /// <para>
-    /// 来源由 <see cref="TenantId"/> 决定：
-    /// <list type="bullet">
-    ///   <item><c>TenantId IS NULL</c>（Host 文档）→ <c>FieldDefinition.TenantId IS NULL</c> 的字段定义</item>
-    ///   <item><c>TenantId != null</c>（租户文档）→ <c>FieldDefinition.TenantId = Document.TenantId</c> 的字段定义</item>
-    /// </list>
-    /// 两层 mutually exclusive——同一 Document 只跑一层字段抽取，不存在分桶 / 命名冲突。
+    /// 来源层由 <see cref="TenantId"/> 决定：Host 文档（<c>TenantId IS NULL</c>）用 Host 字段定义；
+    /// 租户文档用对应租户字段定义。两层 mutually exclusive——同一 Document 只跑一层抽取，不分桶不命名冲突。
     /// </para>
-    /// EF Core 10 SQL Server provider 不直接支持 <c>Dictionary&lt;string, JsonElement&gt;</c> ↔ <c>json</c> 列映射，
-    /// 必须 ValueConverter 中转；底层 storage 仍为 SQL Server 2025 原生 <c>json</c> 列。
+    /// 出口 DTO / MCP / REST 的 <c>ExtractedFields</c> 字典由 App / Mapper 层从这些行即时组装
+    /// （见 <see cref="DocumentExtractedField.ToJsonElement"/>），wire-format 与旧 JSON 列兼容。
     /// </summary>
-    public virtual Dictionary<string, JsonElement>? ExtractedFields { get; private set; }
+    public virtual IReadOnlyCollection<DocumentExtractedField> ExtractedFieldValues => _extractedFieldValues.AsReadOnly();
 
     // --- 聚合内的 PipelineRun 集合 ---
 
@@ -171,7 +170,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
 
     /// <summary>
     /// 删柜时把文档回退"未归类"（#194）。CabinetId 是正交组织维度——清空它不触发任何 pipeline / 领域事件，
-    /// 是原子状态变更（与 <see cref="SetExtractedFields"/> 同类，由 Application 层直接调，无需经 DomainService 中转）。
+    /// 是原子状态变更（与 <see cref="SetFields"/> 同类，由 Application 层直接调，无需经 DomainService 中转）。
     /// 由 <c>CabinetAppService.DeleteAsync</c> 在删柜前对该柜全部文档调用，避免悬空指向已删柜。
     /// </summary>
     public void UnassignCabinet()
@@ -180,16 +179,37 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// 写入字段抽取结果到 <see cref="ExtractedFields"/>。
-    /// <see cref="FieldExtractionEventHandler"/> 在分类完成后调用；重分类时可覆写；null 或空字典清空。
-    /// 原子状态变更，无需经 DomainService 中转（与 <see cref="SetMarkdown"/> 等
-    /// 必须与 pipeline 完成事务组合调用的 internal setter 不同）。
+    /// 整组替换类型绑定字段值（字段架构 v2 / Issue #206）。<c>FieldExtractionEventHandler</c> 在分类完成后调用，
+    /// 操作员手改（<c>UpdateExtractedFieldsAsync</c>）亦走此路径；传空集合清空全部字段行。
+    /// 调用方提交该文档当前的全部字段值（已校验值类型与 <see cref="DocumentFieldValue.DataType"/> 对齐）。
+    /// <para>
+    /// 用 <b>reconcile</b> 而非 clear+add：同名字段<b>原地更新</b>、消失的删除、新增的插入。
+    /// 原因——复合主键 <c>(DocumentId, Name)</c> 下，clear+add 会在单次 SaveChanges 内对同名字段
+    /// 产生 delete+insert 同键，触发唯一冲突 / EF 操作排序风险（操作员把 <c>amount=100</c> 改 <c>200</c> 即同名替换）。
+    /// </para>
+    /// 原子状态变更，无需经 DomainService 中转（与 <see cref="SetMarkdown"/> 等必须与 pipeline 完成事务组合的 internal setter 不同）。
+    /// <b>前置条件</b>：<see cref="DocumentTypeCode"/> 非空（字段挂在文档类型下；两条调用路径均在分类完成后调用）。
     /// </summary>
-    public void SetExtractedFields(IReadOnlyDictionary<string, JsonElement>? fields)
+    public void SetFields(IEnumerable<DocumentFieldValue>? values)
     {
-        ExtractedFields = fields == null || fields.Count == 0
-            ? null
-            : new Dictionary<string, JsonElement>(fields);
+        var incoming = values?.ToList() ?? new List<DocumentFieldValue>();
+
+        _extractedFieldValues.RemoveAll(existing =>
+            incoming.All(v => !string.Equals(v.Name, existing.Name, StringComparison.Ordinal)));
+
+        foreach (var value in incoming)
+        {
+            var existing = _extractedFieldValues.FirstOrDefault(
+                f => string.Equals(f.Name, value.Name, StringComparison.Ordinal));
+            if (existing != null)
+            {
+                existing.SetValue(DocumentTypeCode!, value);
+            }
+            else
+            {
+                _extractedFieldValues.Add(new DocumentExtractedField(Id, TenantId, DocumentTypeCode!, value));
+            }
+        }
     }
 
     // 高置信度路径：ClassificationReason 必须为 null，与 RequestClassificationReview 路径区分。

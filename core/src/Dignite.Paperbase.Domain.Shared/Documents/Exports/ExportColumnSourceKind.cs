@@ -5,7 +5,7 @@ namespace Dignite.Paperbase.Documents.Exports;
 /// <list type="bullet">
 ///   <item><see cref="System"/> → 取自 <c>Document</c> 顶层 typed column（系统通用字段），
 ///   <c>ExportColumn.Key</c> 须命中 <see cref="ExportSystemFields"/> 白名单</item>
-///   <item><see cref="Extracted"/> → 取自 <c>Document.ExtractedFields</c> 字典（Host / 租户类型绑定字段），
+///   <item><see cref="Extracted"/> → 取自该文档的类型绑定字段值（<c>DocumentExtractedField</c> 行，Host / 租户字段），
 ///   <c>ExportColumn.Key</c> = <c>FieldDefinition.Name</c></item>
 /// </list>
 /// Host 字段与租户字段在执行期无需区分——按 <c>Document.TenantId</c> 单层匹配，

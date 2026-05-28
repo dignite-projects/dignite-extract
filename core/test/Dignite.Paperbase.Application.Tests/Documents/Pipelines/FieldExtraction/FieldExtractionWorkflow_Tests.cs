@@ -107,8 +107,8 @@ public class FieldExtractionWorkflow_Tests
     [Fact]
     public async Task DateTime_must_be_offset_free_wall_clock()
     {
-        // 通道 DateTime 字段统一为无偏移 wall-clock——带偏移 / Z 的值会让查询侧 TRY_CONVERT(datetime2)
-        // 比较随服务器时区漂移，故抽取阶段就拦下存 null（Codex 评审 finding 2）。
+        // 通道 DateTime 字段统一为无偏移 wall-clock——带偏移 / Z 的值会让 datetime2 列比较随服务器时区
+        // 漂移，故抽取阶段就拦下存 null（Codex 评审 finding 2）。
         var json = """
         {
           "offset_free": "2024-01-01T10:00:00",

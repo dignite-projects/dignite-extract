@@ -114,10 +114,13 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         bool onlyDeleted,
         List<DocumentFieldQuery>? fieldQueries)
     {
-        var query = await _documentRepository.GetQueryableAsync();
+        // 用 WithDetailsAsync(选择器) 只 eager-load ExtractedFieldValues child 行（不含 PipelineRuns）——
+        // 持久化无关（ABP 仓储 API，避免 App 层直接依赖 EF Core .Include）。一次性 JOIN 取回 → mapper 组装
+        // ExtractedFields 字典，杜绝逐文档 N+1 / lazy loading（Issue #206 复核护栏）。
+        var query = await _documentRepository.WithDetailsAsync(d => d.ExtractedFieldValues);
 
-        // ExtractedFields 字段值过滤：动态 JSON 键查询 EF Core 10 无法 LINQ 翻译，下沉到仓储 raw SQL
-        // 取（锚定 DocumentTypeCode 的）匹配 Id 集合，再与本查询求交——保持 ApplyFilter 为元数据过滤单一来源。
+        // ExtractedFields 字段值过滤：仓储用 Documents-anchored LINQ（child EXISTS + 类型化列比较）取（锚定
+        // DocumentTypeCode 的）匹配 Id 集合，再与本查询求交——保持 ApplyFilter 为元数据过滤单一来源。
         if (fieldQueries is { Count: > 0 })
         {
             var matchedIds = await _documentRepository.GetFieldMatchedIdsAsync(input.DocumentTypeCode!, fieldQueries);
@@ -137,7 +140,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
 
         var documents = await AsyncExecuter.ToListAsync(query);
 
-        // ExtractedFields 由 Mapperly 直通映射（无条件全带；消费方按 DocumentTypeCode 决定如何呈现）。
+        // ExtractedFields 由 mapper 从 ExtractedFieldValues 即时组装（无条件全带；消费方按 DocumentTypeCode 决定如何呈现）。
         return new PagedResultDto<DocumentListItemDto>(
             totalCount,
             ObjectMapper.Map<List<Document>, List<DocumentListItemDto>>(documents));
@@ -402,6 +405,9 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         var definitionsByName = definitions.ToDictionary(d => d.Name, StringComparer.Ordinal);
         var fields = input.Fields ?? new Dictionary<string, JsonElement>();
 
+        // 校验每个值符合声明类型后，构造 typed DocumentFieldValue（DataType 来自 FieldDefinition）。
+        // 校验通过即可直接交给聚合根，不再经 JSON 字典中转——值类型与列对齐的转换集中在 DocumentExtractedField 内。
+        var fieldValues = new List<DocumentFieldValue>(fields.Count);
         foreach (var (key, value) in fields)
         {
             if (!definitionsByName.TryGetValue(key, out var definition))
@@ -419,11 +425,12 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
                     .WithData("DataType", definition.DataType.ToString())
                     .WithData("JsonValueKind", value.ValueKind.ToString());
             }
+
+            fieldValues.Add(new DocumentFieldValue(key, definition.DataType, value));
         }
 
-        // 整体替换（与 FieldExtractionEventHandler 一致：空则清空）。值保留原始 JsonElement，
-        // 仅校验 JSON 值类型符合 FieldDefinition.DataType，不做跨类型强制转换。
-        document.SetExtractedFields(fields.Count > 0 ? fields : null);
+        // 整组替换（与 FieldExtractionEventHandler 一致：空则清空全部字段行）。
+        document.SetFields(fieldValues);
         await _documentRepository.UpdateAsync(document, autoSave: true);
 
         // 复用 FieldsExtractedEto 重发——手改与 LLM 抽取对下游是同一种"字段已更新"信号，
@@ -435,7 +442,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
                 TenantId = document.TenantId,
                 EventTime = Clock.Now,
                 DocumentTypeCode = document.DocumentTypeCode,
-                FieldCount = fields.Count
+                FieldCount = fieldValues.Count
             });
 
         return ObjectMapper.Map<Document, DocumentDto>(document);

@@ -18,13 +18,13 @@ ExportAsync(TemplateId, DocumentIds? | Filter)
 documents ──► per-column value projection ──► ExportFileBuilder ──► CSV / XLSX stream
                      │
                      ├─ SourceKind=System    → Document top-level column (whitelisted key)
-                     └─ SourceKind=Extracted → Document.ExtractedFields[key]  (key = FieldDefinition.Name)
+                     └─ SourceKind=Extracted → DocumentExtractedField row where Name = key  (key = FieldDefinition.Name)
 ```
 
 Each `ExportColumn` carries `{ SourceKind, Key, ColumnName, Order }`. The `SourceKind` abstracts away the three kinds of fields:
 
 - **`System`** — a system-common field computed by the pipeline. `Key` must be one of the whitelisted names (see below). These map to `Document`'s top-level typed columns.
-- **`Extracted`** — a type-bound field. `Key` is the `FieldDefinition.Name`; the value is read from `Document.ExtractedFields[key]`. Host fields and tenant fields need no distinction here — a document only ever carries one layer's extraction result (field architecture v2's "two layers mutually exclusive"), so keys never collide.
+- **`Extracted`** — a type-bound field. `Key` is the `FieldDefinition.Name`; the value is read from the document's `DocumentExtractedField` row whose `Name` equals `key` (issue #206), rendered from its typed column per the field's `DataType`. Host fields and tenant fields need no distinction here — a document only ever carries one layer's extraction result (field architecture v2's "two layers mutually exclusive"), so keys never collide.
 
 `ColumnName` is the header text written to the file (Unicode is allowed, so Japanese/Chinese headers like `金額` work; control characters are rejected). `Order` sorts columns ascending.
 

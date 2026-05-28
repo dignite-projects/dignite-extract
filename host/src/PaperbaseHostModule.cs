@@ -396,12 +396,10 @@ public class PaperbaseHostModule : AbpModule
         {
             options.Configure(configurationContext =>
             {
-                // compat level 170 = SQL Server 2025；让 EF Core 10 把所有 JSON 形态属性
-                // （primitive collection / Complex Type ToJson / Dictionary via ValueConverter）
-                // 自动落到 native json 列类型，享受 SQL Server 2025 原生 JSON 索引 / modify 优化。
-                // 字段架构 v2 forward-only 原则：部署目标 = SQL Server 2025+ / Azure SQL DB；
-                // 旧 SQL Server 版本部署需要降级 compat level 才能 apply migration（json 列不识别）。
-                configurationContext.UseSqlServer(o => o.UseCompatibilityLevel(170));
+                // Issue #206：移除 native json 列后不再需要 SQL Server 2025 compatibility level 170。
+                // 持久化层只用普通关系型列（typed columns + nvarchar(max)），跨任意 SQL Server 版本 / 关系型
+                // 数据库可移植——部署目标不再硬锁 SQL Server 2025。
+                configurationContext.UseSqlServer();
             });
         });
 

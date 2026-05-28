@@ -156,8 +156,8 @@ public class FieldExtractionWorkflow : ITransientDependency
             // 强校验：值必须符合声明的 FieldDataType（与操作员手改路径
             // DocumentAppService.UpdateExtractedFieldsAsync 共用 ExtractedFieldValueValidator）。
             // 归一化责任在 prompt（AI 输出规范形）；此处是兜底护栏，不做强制转换——
-            // 不符声明类型的值写 null + log，保证 Document.ExtractedFields 类型自洽
-            // （Issue #204 任务 2：让任务 3 的 JSON_VALUE 类型化查询建立在干净数据上）。
+            // 不符声明类型的值写 null + log，保证字段值类型自洽
+            // （让 DocumentExtractedField 的类型化列查询建立在干净数据上）。
             if (!ExtractedFieldValueValidator.IsValid(prop, field.DataType))
             {
                 _logger.LogWarning(

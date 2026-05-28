@@ -19,8 +19,8 @@ public static class DocumentConsts
     public const int MaxSearchResultCount = 50;
 
     /// <summary>
-    /// 程序化 / LLM 触发检索按 ExtractedFields 字段值过滤时的字段值长度上限。
-    /// fail-closed 安全门：超长输入直接空结果，不进 JSON_VALUE 全表扫，防 DB / CPU 滥用。
+    /// 程序化 / LLM 触发检索按字段值过滤时的字段值长度上限。
+    /// fail-closed 安全门：超长输入直接空结果，不进字段值列扫描，防 DB / CPU 滥用。
     /// </summary>
     public const int MaxSearchFieldValueLength = 512;
 

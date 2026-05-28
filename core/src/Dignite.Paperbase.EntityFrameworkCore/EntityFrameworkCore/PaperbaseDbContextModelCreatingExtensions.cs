@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using Dignite.Paperbase.Documents;
+using Dignite.Paperbase.Documents.Fields;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -11,25 +12,11 @@ namespace Dignite.Paperbase.EntityFrameworkCore;
 
 public static class PaperbaseDbContextModelCreatingExtensions
 {
-    // EF Core 10 SQL Server provider 暂未原生支持 Dictionary<string, JsonElement> ↔ json 列直接映射
-    // （会抛 "could not be mapped to the database type 'json'" 异常）。用 ValueConverter
-    // 显式把 Dictionary 序列化为 JSON 字符串，存储到 native json 列上——数据 round-trip 工作；
-    // LINQ 翻译能力受限（动态键查询要走 EF.Functions.JsonValue / JsonContains 而非
-    // d.ExtractedFields["x"]）——动态字典与 LINQ 翻译模型互斥，不是 EF Core 版本能解决的限制。
-    private static readonly ValueConverter<Dictionary<string, JsonElement>?, string?> ExtractedFieldsConverter =
-        new(
-            v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-            v => string.IsNullOrEmpty(v) ? null : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(v, (JsonSerializerOptions?)null));
-
-    private static readonly ValueComparer<Dictionary<string, JsonElement>?> ExtractedFieldsComparer =
-        new(
-            (a, b) => JsonSerializer.Serialize(a, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(b, (JsonSerializerOptions?)null),
-            v => v == null ? 0 : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null).GetHashCode(),
-            v => v == null ? null : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(JsonSerializer.Serialize(v, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null));
-
-    // ExportTemplate.Columns 是有序列定义数组，整体读写（无单列查询需求），同 ExtractedFields
-    // 走 ValueConverter 序列化进 native json 列。ExportColumn 为 get-only 值对象，
-    // System.Text.Json 用其唯一带参构造函数反序列化（参数名匹配属性名）。
+    // ExportTemplate.Columns 是有序列定义数组，整体读写（无单列查询需求）——走 ValueConverter 整体序列化
+    // 成大文本列（不绑 provider-specific native json：SQL Server 落 nvarchar(max)，其它 provider 自选）。
+    // ExportColumn 为 get-only 值对象，System.Text.Json 用其唯一带参构造函数反序列化（参数名匹配属性名）。
+    // 对比 DocumentExtractedField：有查询诉求的字段值拆一等 child（Issue #206），无查询诉求的 JSON-like
+    // payload 留字符串、不绑 native json 类型——这是 Issue #206 cross-DB 清理确立的原则。
     private static readonly ValueConverter<IReadOnlyList<ExportColumn>, string> ExportColumnsConverter =
         new(
             v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
@@ -64,14 +51,12 @@ public static class PaperbaseDbContextModelCreatingExtensions
             // 字段架构 v2：系统通用字段平铺顶层 typed columns —— 真 pipeline 自动产物
             b.Property(x => x.Language).HasMaxLength(DocumentConsts.MaxLanguageLength);
 
-            // 字段架构 v2：ExtractedFields 是动态 schema (Dictionary<string, JsonElement>)。
-            // ValueConverter 序列化为 JSON 字符串，存到 SQL Server 2025 native json 列；
-            // 旧 compat level 自动 fallback 到 nvarchar(max)。
-            // 解读 X：源由 Document.TenantId 决定（Host 文档用 Host 字段定义；租户文档用租户字段定义）；
-            // 两层 mutually exclusive 同一 Document 只有一层抽取结果，无分桶。
-            b.Property(x => x.ExtractedFields)
-                .HasColumnType("json")
-                .HasConversion(ExtractedFieldsConverter, ExtractedFieldsComparer);
+            // 字段架构 v2 / Issue #206：类型绑定字段值是聚合内 child 集合（DocumentExtractedField），
+            // 不再是 Document 顶层的 native json 列。硬删 Document 时级联删除字段行。
+            b.HasMany(x => x.ExtractedFieldValues)
+                .WithOne()
+                .HasForeignKey(f => f.DocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             b.OwnsOne(x => x.FileOrigin, fo =>
             {
@@ -105,6 +90,29 @@ public static class PaperbaseDbContextModelCreatingExtensions
             b.HasIndex(x => x.ReviewStatus);
             b.HasIndex(x => x.DocumentTypeCode);
             b.HasIndex(x => x.CreationTime);
+        });
+
+        builder.Entity<DocumentExtractedField>(b =>
+        {
+            b.ToTable(PaperbaseDbProperties.DbTablePrefix + "DocumentExtractedFields", PaperbaseDbProperties.DbSchema);
+            b.ConfigureByConvention();
+
+            // 复合主键 (DocumentId, Name) = 字段集自然键：同文档同名字段唯一，reconcile 整组替换不留重复行。
+            // DocumentId 同时是指向 Document 聚合根的外键（identifying relationship）。
+            b.HasKey(x => new { x.DocumentId, x.Name });
+
+            b.Property(x => x.DocumentTypeCode).IsRequired().HasMaxLength(DocumentConsts.MaxDocumentTypeCodeLength);
+            b.Property(x => x.Name).IsRequired().HasMaxLength(FieldDefinitionConsts.MaxNameLength);
+            b.Property(x => x.DataType).IsRequired();
+            // StringValue 不限长（nvarchar(max) / text）：忠实存储，不截断；故不进索引键。
+            // DecimalValue 用 precision(38,6)（32 位整数 + 6 位小数）——覆盖任何现实抽取数值（金额 / 比率 / 百分比）
+            // 而不溢出 / 截断；EF 默认 decimal(18,2) 会静默把 >2 位小数四舍五入，丢精度。precision 跨库可移植（provider 各自映射）。
+            // 其余数字 / 日期值列由 provider 按 CLR 类型自动映射（long→bigint、DateOnly→date、DateTime→datetime2 等），不绑 provider-specific 类型。
+            b.Property(x => x.DecimalValue).HasPrecision(38, 6);
+
+            // 字段值查询从 Documents 聚合根起手（按 TenantId + DocumentTypeCode + 软删全局过滤收窄），
+            // 再对 child 走 (DocumentId, Name) 主键 EXISTS。此二级索引支撑 child-first 收窄（同层同类型同名字段）。
+            b.HasIndex(x => new { x.TenantId, x.DocumentTypeCode, x.Name });
         });
 
         builder.Entity<DocumentPipelineRun>(b =>
@@ -163,9 +171,9 @@ public static class PaperbaseDbContextModelCreatingExtensions
             b.Property(x => x.Format).IsRequired();
             b.Property(x => x.DocumentTypeCode).HasMaxLength(DocumentTypeConsts.MaxTypeCodeLength);
 
-            // Columns 序列化进 native json 列（同 Document.ExtractedFields 模式）。
+            // Columns 整体序列化进大文本列（无单列查询需求，不绑 provider-specific native json）——
+            // EF Core provider 自选列类型（SQL Server → nvarchar(max)）。见文件首 ExportColumnsConverter 注释。
             b.Property(x => x.Columns)
-                .HasColumnType("json")
                 .HasConversion(ExportColumnsConverter, ExportColumnsComparer);
 
             // 唯一约束：(TenantId, Name)；跨层同名是合法的两行。软删过滤。

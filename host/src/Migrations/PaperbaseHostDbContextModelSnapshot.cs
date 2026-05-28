@@ -137,9 +137,6 @@ namespace Dignite.Paperbase.Host.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("ExtraProperties");
 
-                    b.Property<string>("ExtractedFields")
-                        .HasColumnType("json");
-
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -196,6 +193,53 @@ namespace Dignite.Paperbase.Host.Migrations
                     b.HasIndex("ReviewStatus");
 
                     b.ToTable("PaperbaseDocuments", (string)null);
+                });
+
+            modelBuilder.Entity("Dignite.Paperbase.Documents.DocumentExtractedField", b =>
+                {
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<bool?>("BooleanValue")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("DataType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("DateTimeValue")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateOnly?>("DateValue")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("DecimalValue")
+                        .HasPrecision(38, 6)
+                        .HasColumnType("decimal(38,6)");
+
+                    b.Property<string>("DocumentTypeCode")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<long?>("IntegerValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StringValue")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("TenantId");
+
+                    b.HasKey("DocumentId", "Name");
+
+                    b.HasIndex("TenantId", "DocumentTypeCode", "Name");
+
+                    b.ToTable("PaperbaseDocumentExtractedFields", (string)null);
                 });
 
             modelBuilder.Entity("Dignite.Paperbase.Documents.DocumentTypes.DocumentType", b =>
@@ -283,7 +327,7 @@ namespace Dignite.Paperbase.Host.Migrations
 
                     b.Property<string>("Columns")
                         .IsRequired()
-                        .HasColumnType("json");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
@@ -2419,6 +2463,15 @@ namespace Dignite.Paperbase.Host.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Dignite.Paperbase.Documents.DocumentExtractedField", b =>
+                {
+                    b.HasOne("Dignite.Paperbase.Documents.Document", null)
+                        .WithMany("ExtractedFieldValues")
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Dignite.Paperbase.Documents.Pipelines.DocumentPipelineRun", b =>
                 {
                     b.HasOne("Dignite.Paperbase.Documents.Document", null)
@@ -2619,6 +2672,8 @@ namespace Dignite.Paperbase.Host.Migrations
 
             modelBuilder.Entity("Dignite.Paperbase.Documents.Document", b =>
                 {
+                    b.Navigation("ExtractedFieldValues");
+
                     b.Navigation("PipelineRuns");
                 });
 

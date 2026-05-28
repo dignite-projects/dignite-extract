@@ -9,12 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 让 EF.Tests 直接单元测试 internal 的字段值谓词构造器（typed JSON_VALUE/TRY_CONVERT SQL 生成）：
-         SQLite 测试库无法执行 SQL Server JSON 函数，谓词分派逻辑只能在内存中按生成的 SQL + 参数断言。 -->
-    <InternalsVisibleTo Include="Dignite.Paperbase.EntityFrameworkCore.Tests" />
-  </ItemGroup>
-
-  <ItemGroup>
     <!-- Keep the core EF project free of vector database dependencies. Vectorization and
          vector storage are downstream RAG concerns, out of scope for the Paperbase channel. -->
     <PackageReference Include="Volo.Abp.EntityFrameworkCore" />

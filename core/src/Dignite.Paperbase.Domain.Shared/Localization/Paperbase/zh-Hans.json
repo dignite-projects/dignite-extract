@@ -28,7 +28,6 @@
     "Paperbase:UnknownExtractedField": "字段 '{FieldName}' 未在文档类型 '{DocumentTypeCode}' 下定义。",
     "Paperbase:InvalidExtractedFieldValue": "文档类型 '{DocumentTypeCode}' 下字段 '{FieldName}' 的值必须是有效的 {DataType}。",
     "Paperbase:FieldTypeDoesNotSupportRange": "字段 '{FieldName}' 类型为 {DataType}，仅支持等值匹配，不支持区间（min/max）查询。",
-    "Paperbase:InvalidExtractedFieldName": "字段名 '{FieldName}' 不是合法的抽取字段标识符。",
     "Paperbase:InvalidCabinetDisplayName": "文件柜名称 '{displayName}' 包含换行 / 制表符等控制字符，不允许使用。",
     "Paperbase:CabinetDisplayNameAlreadyExists": "当前作用域下已存在名为 '{DisplayName}' 的文件柜。",
     "Paperbase:InvalidCabinetId": "所选文件柜在当前作用域下不存在。",

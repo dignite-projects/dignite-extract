@@ -14,8 +14,8 @@ namespace Dignite.Paperbase.Documents;
 /// <see cref="DocumentAppService.GetListAsync"/> 字段值过滤的输入校验 + 字段定义解析行为（验证上移重构）。
 /// 复用 <see cref="DocumentAppServiceReviewTestModule"/> 的 mock 仓储；这些用例都在触达 <c>GetQueryableAsync</c>
 /// 之前短路——DTO 校验抛 <see cref="AbpValidationException"/>（loud，替掉旧的静默空）/ 未定义字段抛
-/// <see cref="BusinessException"/>，故无需真实 DB。实际 JSON_VALUE 字段匹配
-/// （<c>GetFieldMatchedIdsAsync</c> → <c>FromSqlRaw</c>）属 SQL Server 路径，不在此测。
+/// <see cref="BusinessException"/>，故无需真实 DB。实际字段值匹配（<c>GetFieldMatchedIdsAsync</c> 的
+/// Documents-anchored LINQ）由 <c>EfCoreDocumentRepositorySearch_Tests</c> 在真实 EF（SQLite）上覆盖。
 /// </summary>
 public class DocumentAppService_FieldFilter_Tests
     : PaperbaseApplicationTestBase<DocumentAppServiceReviewTestModule>

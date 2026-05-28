@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -122,6 +123,42 @@ public class FieldExtractionEventHandler_Tests
     }
 
     [Fact]
+    public async Task No_Field_Definitions_Clears_Stale_Fields_From_Previous_Type()
+    {
+        // reclassify 到无字段定义的类型：旧 schema 残留字段行必须被清空（#206 验收「reclassify 不残留旧 schema」+ 审查发现 #1）。
+        var doc = CreateDocument(tenantId: null, typeCode: "blank.type");
+        doc.SetFields(new[]
+        {
+            new DocumentFieldValue("amount", FieldDataType.Decimal, JsonDocument.Parse("100").RootElement)
+        });
+        doc.ExtractedFieldValues.ShouldNotBeEmpty();
+
+        _documentRepository
+            .FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(doc);
+        _fieldDefinitionRepository
+            .GetForExtractionAsync("blank.type", Arg.Any<CancellationToken>())
+            .Returns(new List<FieldDefinition>());
+
+        var evt = new DocumentClassifiedEto
+        {
+            DocumentId = doc.Id,
+            TenantId = null,
+            EventTime = DateTime.UtcNow,
+            DocumentTypeCode = "blank.type",
+            ClassificationConfidence = 1.0
+        };
+
+        await _handler.HandleEventAsync(evt);
+
+        doc.ExtractedFieldValues.ShouldBeEmpty();
+        await _documentRepository.Received().UpdateAsync(doc, Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _eventBus.Received(1).PublishAsync(
+            Arg.Is<FieldsExtractedEto>(e => e.DocumentId == doc.Id && e.FieldCount == 0),
+            Arg.Any<bool>(), Arg.Any<bool>());
+    }
+
+    [Fact]
     public async Task Missing_Document_Logs_And_Returns_Without_Publishing()
     {
         var docId = Guid.NewGuid();
@@ -187,7 +224,7 @@ public class FieldExtractionEventHandler_Tests
 
         await _handler.HandleEventAsync(evt);
 
-        doc.ExtractedFields.ShouldBeNull();
+        doc.ExtractedFieldValues.ShouldBeEmpty();
         await _documentRepository.DidNotReceive().UpdateAsync(
             Arg.Any<Document>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
         await _eventBus.DidNotReceive().PublishAsync(
@@ -228,7 +265,7 @@ public class FieldExtractionEventHandler_Tests
         await _handler.HandleEventAsync(staleEvent);
 
         // 关键断言：不能把基于 contract schema 抽取的字段写入 Document（现在 typeCode=invoice）
-        doc.ExtractedFields.ShouldBeNull();
+        doc.ExtractedFieldValues.ShouldBeEmpty();
         await _documentRepository.DidNotReceive().UpdateAsync(
             Arg.Any<Document>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
         await _eventBus.DidNotReceive().PublishAsync(
@@ -243,11 +280,12 @@ public class FieldExtractionEventHandler_Tests
             .FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(doc);
 
+        // 类型与 DataType 对齐（生产中 workflow 已校验类型；amount=Decimal 数字、party=String 字符串、date=Date）。
         var defs = new List<FieldDefinition>
         {
-            CreateFieldDefinition("contract.general", "amount"),
-            CreateFieldDefinition("contract.general", "party"),
-            CreateFieldDefinition("contract.general", "date")
+            CreateFieldDefinition("contract.general", "amount", FieldDataType.Decimal),
+            CreateFieldDefinition("contract.general", "party", FieldDataType.String),
+            CreateFieldDefinition("contract.general", "date", FieldDataType.Date)
         };
         _fieldDefinitionRepository
             .GetForExtractionAsync("contract.general", Arg.Any<CancellationToken>())
@@ -261,7 +299,7 @@ public class FieldExtractionEventHandler_Tests
             {
                 ["amount"] = JsonDocument.Parse("1500").RootElement,
                 ["party"] = JsonDocument.Parse("\"Acme Corp\"").RootElement,
-                ["date"] = null   // LLM 未能抽到——不应进入 ExtractedFields
+                ["date"] = null   // LLM 未能抽到——不应进入字段集
             });
 
         var evt = new DocumentClassifiedEto
@@ -275,11 +313,11 @@ public class FieldExtractionEventHandler_Tests
 
         await _handler.HandleEventAsync(evt);
 
-        doc.ExtractedFields.ShouldNotBeNull();
-        doc.ExtractedFields.Count.ShouldBe(2);   // null 值不入字典
-        doc.ExtractedFields.ShouldContainKey("amount");
-        doc.ExtractedFields.ShouldContainKey("party");
-        doc.ExtractedFields.ShouldNotContainKey("date");
+        var names = doc.ExtractedFieldValues.Select(f => f.Name).ToList();
+        names.Count.ShouldBe(2);   // null 值不入字段集
+        names.ShouldContain("amount");
+        names.ShouldContain("party");
+        names.ShouldNotContain("date");
 
         await _documentRepository.Received(1).UpdateAsync(
             doc, Arg.Any<bool>(), Arg.Any<CancellationToken>());
@@ -322,7 +360,8 @@ public class FieldExtractionEventHandler_Tests
     }
 
     private static FieldDefinition CreateFieldDefinition(
-        string documentTypeCode, string name, Guid? tenantId = null) =>
+        string documentTypeCode, string name,
+        FieldDataType dataType = FieldDataType.String, Guid? tenantId = null) =>
         new(
             id: Guid.NewGuid(),
             tenantId: tenantId,
@@ -330,5 +369,5 @@ public class FieldExtractionEventHandler_Tests
             name: name,
             displayName: name,
             prompt: $"Extract the {name}.",
-            dataType: FieldDataType.String);
+            dataType: dataType);
 }

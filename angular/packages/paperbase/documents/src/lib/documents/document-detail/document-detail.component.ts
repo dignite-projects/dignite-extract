@@ -164,8 +164,8 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
   );
 
   // Type-bound extracted fields (field architecture v2). Key = field name; value
-  // is decoded server-side from a SQL Server json column. Sorted by key for a
-  // stable display order.
+  // is assembled server-side from the DocumentExtractedField rows (#206). Sorted by
+  // key for a stable display order.
   extractedFieldEntries = computed<{ key: string; value: string }[]>(() => {
     const fields = this.document()?.extractedFields;
     if (!fields) return [];

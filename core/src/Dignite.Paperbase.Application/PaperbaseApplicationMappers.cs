@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using Dignite.Paperbase.Documents;
 using Riok.Mapperly.Abstractions;
@@ -10,6 +12,13 @@ namespace Dignite.Paperbase;
 /// <summary>
 /// Document -> DocumentDto
 /// FileOrigin and PipelineRun nested mappings are consolidated here (Mapperly compile-time constraint).
+/// <para>
+/// <c>ExtractedFields</c>（出口 wire-format：<c>Dictionary&lt;string, JsonElement&gt;</c>）由 <see cref="AfterMap"/>
+/// 从 <see cref="Document.ExtractedFieldValues"/> typed child 行即时组装（Issue #206）——不再是 Document 上的
+/// 同名属性，故 <see cref="MapperIgnoreTargetAttribute"/> 忽略后手填。AfterMap 在本顶层 mapper 经 ABP
+/// IObjectMapper 调用时会被触发，但显式 MapCore + AfterMap 包装保证任何调用路径都执行（与
+/// <see cref="DocumentPipelineRunToDocumentPipelineRunDtoMapper"/> 同理）。
+/// </para>
 /// </summary>
 [Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
 public partial class DocumentToDocumentDtoMapper : MapperBase<Document, DocumentDto>
@@ -17,8 +26,29 @@ public partial class DocumentToDocumentDtoMapper : MapperBase<Document, Document
     [UseMapper]
     private readonly DocumentPipelineRunToDocumentPipelineRunDtoMapper _pipelineRunMapper = new();
 
-    public override partial DocumentDto Map(Document source);
-    public override partial void Map(Document source, DocumentDto destination);
+    public override DocumentDto Map(Document source)
+    {
+        var destination = MapCore(source);
+        AfterMap(source, destination);
+        return destination;
+    }
+
+    public override void Map(Document source, DocumentDto destination)
+    {
+        MapCore(source, destination);
+        AfterMap(source, destination);
+    }
+
+    public override void AfterMap(Document source, DocumentDto destination)
+    {
+        destination.ExtractedFields = ExtractedFieldsAssembler.ToDictionary(source.ExtractedFieldValues);
+    }
+
+    [MapperIgnoreTarget(nameof(DocumentDto.ExtractedFields))]
+    private partial DocumentDto MapCore(Document source);
+
+    [MapperIgnoreTarget(nameof(DocumentDto.ExtractedFields))]
+    private partial void MapCore(Document source, DocumentDto destination);
 }
 
 /// <summary>
@@ -94,9 +124,44 @@ public partial class DocumentPipelineRunToDocumentPipelineRunDtoMapper : MapperB
 [Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
 public partial class DocumentToDocumentListItemDtoMapper : MapperBase<Document, DocumentListItemDto>
 {
-    // ExtractedFields（Document → DTO 同名 Dictionary<string, JsonElement>）由 Mapperly 自动映射，无需手填。
-    public override partial DocumentListItemDto Map(Document source);
-    public override partial void Map(Document source, DocumentListItemDto destination);
+    // ExtractedFields 由 AfterMap 从 ExtractedFieldValues typed child 行即时组装（Issue #206）；
+    // 列表路径已 WithDetailsAsync(ExtractedFieldValues) 批量 eager-load，组装不触发 N+1。
+    public override DocumentListItemDto Map(Document source)
+    {
+        var destination = MapCore(source);
+        AfterMap(source, destination);
+        return destination;
+    }
+
+    public override void Map(Document source, DocumentListItemDto destination)
+    {
+        MapCore(source, destination);
+        AfterMap(source, destination);
+    }
+
+    public override void AfterMap(Document source, DocumentListItemDto destination)
+    {
+        destination.ExtractedFields = ExtractedFieldsAssembler.ToDictionary(source.ExtractedFieldValues);
+    }
+
+    [MapperIgnoreTarget(nameof(DocumentListItemDto.ExtractedFields))]
+    private partial DocumentListItemDto MapCore(Document source);
+
+    [MapperIgnoreTarget(nameof(DocumentListItemDto.ExtractedFields))]
+    private partial void MapCore(Document source, DocumentListItemDto destination);
+}
+
+/// <summary>
+/// 把 <see cref="Document.ExtractedFieldValues"/> typed child 行组装回出口 wire-format
+/// <c>Dictionary&lt;string, JsonElement&gt;</c>（key = 字段名，value = <see cref="DocumentExtractedField.ToJsonElement"/>
+/// 重建的规范 JSON）。空集合 → null（与旧 JSON 列"未抽取时 null"语义一致）。
+/// </summary>
+internal static class ExtractedFieldsAssembler
+{
+    public static Dictionary<string, JsonElement>? ToDictionary(IReadOnlyCollection<DocumentExtractedField> fields)
+        => fields.Count == 0
+            ? null
+            : fields.ToDictionary(f => f.Name, f => f.ToJsonElement(), StringComparer.Ordinal);
 }
 
 [Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]

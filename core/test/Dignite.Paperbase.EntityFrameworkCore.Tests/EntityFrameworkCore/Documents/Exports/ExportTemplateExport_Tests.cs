@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Dignite.Paperbase.Documents;
+using Dignite.Paperbase.Documents.Fields;
 using Shouldly;
 using Volo.Abp;
 using Volo.Abp.Guids;
@@ -12,10 +14,9 @@ using Xunit;
 namespace Dignite.Paperbase.EntityFrameworkCore.Documents;
 
 /// <summary>
-/// ExportTemplateAppService.ExportAsync 集成测试（SQLite 真实 EF）。覆盖 Codex adversarial review
-/// 后两条修复的运行时行为：
+/// ExportTemplateAppService.ExportAsync 集成测试（SQLite 真实 EF）：
 /// <list type="bullet">
-///   <item>ExtractedFields（json 列 + ValueConverter）能否被 Select 投影到非实体类型并正确取值</item>
+///   <item>DocumentExtractedField typed child 行（Issue #206）能否被 Select 投影到非实体类型并正确渲染单元格</item>
 ///   <item>over-cap fail-fast（fetch Max+1，超限抛错而非静默截断）</item>
 /// </list>
 /// </summary>
@@ -80,6 +81,59 @@ public class ExportTemplateExport_Tests : PaperbaseEntityFrameworkCoreTestBase
         // 表头按列定义顺序，Extracted 列从 json 投影正确取值。
         csv.ShouldContain("标题,金额,对方");
         csv.ShouldContain("Invoice A,1000,Acme");
+    }
+
+    [Fact]
+    public async Task Export_Should_Render_Typed_Decimal_And_Date_Fields()
+    {
+        // 覆盖非 String 字段经 typed child 投影 + FieldValueToString 的导出渲染（#206 审查补漏：
+        // 旧测试全部字段按 String 落库，未验证 Decimal / Date 列的单元格渲染）。
+        var templateId = _guidGenerator.Create();
+        var docId = _guidGenerator.Create();
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var doc = new Document(
+                docId,
+                tenantId: null,
+                originalFileBlobName: $"blobs/{docId:N}.pdf",
+                sourceType: SourceType.Digital,
+                fileOrigin: new FileOrigin("test-user", "application/pdf", $"{Guid.NewGuid():N}{Guid.NewGuid():N}", 1024, "f.pdf"));
+            typeof(Document).GetProperty(nameof(Document.DocumentTypeCode))!.SetValue(doc, "host.invoice");
+            typeof(Document).GetProperty(nameof(Document.Title))!.SetValue(doc, "Invoice T");
+            doc.SetFields(new[]
+            {
+                new DocumentFieldValue("amount", FieldDataType.Decimal, JsonSerializer.SerializeToElement(1234.5m)),
+                new DocumentFieldValue("issued", FieldDataType.Date, JsonSerializer.SerializeToElement("2024-03-09")),
+            });
+            await _documentRepository.InsertAsync(doc, autoSave: true);
+
+            await _templateRepository.InsertAsync(
+                new ExportTemplate(
+                    templateId,
+                    tenantId: null,
+                    name: "Typed Invoice",
+                    format: ExportFormat.Csv,
+                    documentTypeCode: "host.invoice",
+                    new[]
+                    {
+                        new ExportColumn(ExportColumnSourceKind.Extracted, "amount", "金额", 0),
+                        new ExportColumn(ExportColumnSourceKind.Extracted, "issued", "日期", 1),
+                    }),
+                autoSave: true);
+        });
+
+        string csv = null!;
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var content = await _appService.ExportAsync(new ExportDocumentsInput { TemplateId = templateId });
+            using var reader = new StreamReader(content.GetStream());
+            csv = await reader.ReadToEndAsync();
+        });
+
+        csv.ShouldContain("金额,日期");
+        csv.ShouldContain("1234.5");      // Decimal 渲染（decimal(38,6) 带尾随零，只断言数值前缀）
+        csv.ShouldContain("2024-03-09");  // Date 渲染
     }
 
     [Fact]
@@ -148,7 +202,8 @@ public class ExportTemplateExport_Tests : PaperbaseEntityFrameworkCoreTestBase
 
         if (fields != null)
         {
-            document.SetExtractedFields(fields);
+            // 导出测试只关心单元格渲染——把全部字段当 String 落库（与下方 Json(...) 存 JSON 字符串一致）。
+            document.SetFields(fields.Select(f => new DocumentFieldValue(f.Key, FieldDataType.String, f.Value)));
         }
 
         return document;

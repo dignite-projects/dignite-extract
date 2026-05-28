@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
+using Dignite.Paperbase.Documents.Fields;
 using Dignite.Paperbase.Permissions;
 using Microsoft.AspNetCore.Authorization;
 using Volo.Abp;
@@ -138,7 +138,20 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
                     OriginalFileName = d.FileOrigin.OriginalFileName,
                     ContentType = d.FileOrigin.ContentType,
                     FileSize = d.FileOrigin.FileSize,
-                    ExtractedFields = d.ExtractedFields,
+                    // typed child 行随文档一并投影（单查询相关子查询，非逐文档 N+1）。
+                    ExtractedFields = d.ExtractedFieldValues
+                        .Select(f => new ExtractedFieldProjection
+                        {
+                            Name = f.Name,
+                            DataType = f.DataType,
+                            StringValue = f.StringValue,
+                            BooleanValue = f.BooleanValue,
+                            IntegerValue = f.IntegerValue,
+                            DecimalValue = f.DecimalValue,
+                            DateValue = f.DateValue,
+                            DateTimeValue = f.DateTimeValue,
+                        })
+                        .ToList(),
                 })
                 .Take(limit + 1));
 
@@ -232,21 +245,19 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
 
     private static string? GetExtractedValue(ExportProjection d, string key)
     {
-        if (d.ExtractedFields != null && d.ExtractedFields.TryGetValue(key, out var element))
-        {
-            return JsonElementToString(element);
-        }
-
-        return null;
+        var field = d.ExtractedFields.FirstOrDefault(f => f.Name == key);
+        return field == null ? null : FieldValueToString(field);
     }
 
-    private static string? JsonElementToString(JsonElement element) => element.ValueKind switch
+    // 按 DataType 渲染类型化列为单元格字符串（InvariantCulture，与 DocumentExtractedField.ToJsonElement 的规范形一致）。
+    private static string? FieldValueToString(ExtractedFieldProjection f) => f.DataType switch
     {
-        JsonValueKind.String => element.GetString(),
-        JsonValueKind.Number => element.GetRawText(),
-        JsonValueKind.True => "true",
-        JsonValueKind.False => "false",
-        JsonValueKind.Null or JsonValueKind.Undefined => null,
-        _ => element.GetRawText()
+        FieldDataType.String => f.StringValue,
+        FieldDataType.Integer => f.IntegerValue?.ToString(CultureInfo.InvariantCulture),
+        FieldDataType.Decimal => f.DecimalValue?.ToString(CultureInfo.InvariantCulture),
+        FieldDataType.Boolean => f.BooleanValue == null ? null : (f.BooleanValue.Value ? "true" : "false"),
+        FieldDataType.Date => f.DateValue?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        FieldDataType.DateTime => f.DateTimeValue?.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture),
+        _ => null
     };
 }

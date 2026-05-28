@@ -49,8 +49,7 @@ public class DocumentAppService_ExtractedFields_Tests
             }
         });
 
-        doc.ExtractedFields.ShouldNotBeNull();
-        doc.ExtractedFields!.Count.ShouldBe(2);
+        doc.ExtractedFieldValues.Count.ShouldBe(2);
         await _documentRepository.Received().UpdateAsync(doc, Arg.Any<bool>(), Arg.Any<CancellationToken>());
         await _eventBus.Received().PublishAsync(
             Arg.Is<FieldsExtractedEto>(e => e.DocumentId == doc.Id && e.FieldCount == 2),
@@ -101,8 +100,7 @@ public class DocumentAppService_ExtractedFields_Tests
             }
         });
 
-        doc.ExtractedFields.ShouldNotBeNull();
-        doc.ExtractedFields!.Count.ShouldBe(6);
+        doc.ExtractedFieldValues.Count.ShouldBe(6);
     }
 
     [Fact]
@@ -145,6 +143,28 @@ public class DocumentAppService_ExtractedFields_Tests
 
         ex.Code.ShouldBe(PaperbaseErrorCodes.InvalidExtractedFieldValue);
         ex.Data["FieldName"].ShouldBe("occurredAt");
+    }
+
+    [Fact]
+    public async Task Should_Clear_All_Fields_When_Input_Is_Empty()
+    {
+        var doc = CreateClassifiedDocument("host.contract");
+        doc.SetFields(new[] { new DocumentFieldValue("amount", FieldDataType.String, JsonString("1000")) });
+        doc.ExtractedFieldValues.Count.ShouldBe(1);
+        StubGet(doc);
+        StubFields("host.contract", "amount");
+
+        await _appService.UpdateExtractedFieldsAsync(doc.Id, new UpdateExtractedFieldsInput
+        {
+            Fields = new Dictionary<string, JsonElement>()
+        });
+
+        // 传空 → 整组清空全部字段行；复用 FieldsExtractedEto 重发，FieldCount = 0。
+        doc.ExtractedFieldValues.ShouldBeEmpty();
+        await _eventBus.Received().PublishAsync(
+            Arg.Is<FieldsExtractedEto>(e => e.DocumentId == doc.Id && e.FieldCount == 0),
+            Arg.Any<bool>(),
+            Arg.Any<bool>());
     }
 
     [Fact]

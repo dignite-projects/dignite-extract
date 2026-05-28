@@ -217,7 +217,6 @@
     "Paperbase:UnknownExtractedField": "Field '{FieldName}' is not defined on document type '{DocumentTypeCode}'.",
     "Paperbase:InvalidExtractedFieldValue": "Field '{FieldName}' on document type '{DocumentTypeCode}' must be a valid {DataType} value.",
     "Paperbase:FieldTypeDoesNotSupportRange": "Field '{FieldName}' is of type {DataType}, which supports only equality matching, not range (min/max) queries.",
-    "Paperbase:InvalidExtractedFieldName": "Field name '{FieldName}' is not a valid extracted-field identifier.",
     "Permission:Documents.Templates": "Export Templates",
     "Permission:Documents.Templates.Create": "Create Export Templates",
     "Permission:Documents.Templates.Update": "Update Export Templates",
