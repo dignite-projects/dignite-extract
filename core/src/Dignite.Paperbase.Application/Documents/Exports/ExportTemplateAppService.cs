@@ -50,7 +50,10 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
     public virtual async Task<List<ExportTemplateDto>> GetListAsync()
     {
         await CheckPolicyAsync(PaperbasePermissions.Documents.Templates.Default);
-        var list = await _templateRepository.GetByTenantAsync();
+        // 租户隔离由 ambient IMultiTenant 过滤器施加；Name ASC 排序在内存中保持。
+        var list = (await _templateRepository.GetListAsync())
+            .OrderBy(t => t.Name)
+            .ToList();
         var dtos = ObjectMapper.Map<List<ExportTemplate>, List<ExportTemplateDto>>(list);
         await FillTemplateDtosAsync(list, dtos);
         return dtos;
