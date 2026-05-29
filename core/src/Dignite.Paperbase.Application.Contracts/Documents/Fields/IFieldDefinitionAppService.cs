@@ -6,13 +6,8 @@ using Volo.Abp.Application.Services;
 namespace Dignite.Paperbase.Documents.Fields;
 
 /// <summary>
-/// 字段定义管理（字段架构 v2 统一 API）。
-/// <para>
-/// 所有路径强制当前租户上下文（CurrentTenant.Id 绑定）；不允许跨租户读写。
-/// 按所属层精确匹配单层、不跨层混合：Host admin（CurrentTenant.Id IS NULL）增删改 Host 字段
-/// （TenantId IS NULL 行），租户 admin 增删改自己租户字段。两层都通过此 AppService CRUD 自管——
-/// 不存在 seed contributor / Module 启动注册路径。
-/// </para>
+/// 字段定义管理（字段架构 v2 统一 API）。按所属层精确匹配单层、不跨层混合；
+/// 两层都通过此 AppService CRUD 自管——不存在 seed contributor / Module 启动注册路径。
 /// </summary>
 public interface IFieldDefinitionAppService : IApplicationService
 {

@@ -3,10 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Dignite.Paperbase.Documents.Fields;
 
-/// <summary>
-/// 字段定义列表查询输入（统一 <c>GetListAsync</c>）。强制当前租户层、不跨层：
-/// Host admin（CurrentTenant.Id IS NULL）查 Host 字段，租户 admin 查自己租户字段。
-/// </summary>
+/// <summary>字段定义列表查询输入（统一 <c>GetListAsync</c>）。匹配当前层、不跨层。</summary>
 public class GetFieldDefinitionListInput
 {
     /// <summary>目标文档类型不可变 Id（#207：内部按 Id 关联，TypeCode 可重命名故不作引用键）。</summary>

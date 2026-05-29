@@ -208,7 +208,7 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
     {
         var entity = await _templateRepository.GetAsync(id);
 
-        // 跨层防御：只能访问自己所在层（Host admin 操作 TenantId IS NULL；租户 admin 操作自己租户）。
+        // 跨层防御：只能访问自己所在层。
         if (entity.TenantId != CurrentTenant.Id)
         {
             throw new EntityNotFoundException(typeof(ExportTemplate), id);

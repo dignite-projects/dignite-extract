@@ -154,8 +154,7 @@ public static class PaperbaseDbContextModelCreatingExtensions
             b.Property(x => x.ConfidenceThreshold).IsRequired();
             b.Property(x => x.Priority).IsRequired();
 
-            // 唯一约束：(TenantId, TypeCode)；Host (TenantId IS NULL) 和租户私有可共用相同 TypeCode
-            // （但建议租户用 "tenant." 前缀避免歧义）。软删过滤。
+            // 唯一约束：(TenantId, TypeCode)；跨层可共用相同 TypeCode。软删过滤。
             b.HasIndex(x => new { x.TenantId, x.TypeCode })
                 .IsUnique()
                 .HasFilter("IsDeleted = 0");

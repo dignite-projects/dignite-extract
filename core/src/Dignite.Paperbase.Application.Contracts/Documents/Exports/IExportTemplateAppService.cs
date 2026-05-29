@@ -7,8 +7,7 @@ using Volo.Abp.Content;
 namespace Dignite.Paperbase.Documents.Exports;
 
 /// <summary>
-/// 导出模板管理 + 执行（per-tenant）。两层独立单层：Host admin 操作 Host 模板（TenantId IS NULL），
-/// 租户 admin 操作自己租户模板。导出是通道的"文件出口"——仅字段投影 + 序列化，零业务转换。
+/// 导出模板管理 + 执行（per-tenant）。导出是通道的"文件出口"——仅字段投影 + 序列化，零业务转换。
 /// </summary>
 public interface IExportTemplateAppService : IApplicationService
 {

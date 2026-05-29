@@ -29,9 +29,8 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
 
     public virtual async Task<List<DocumentTypeDto>> GetVisibleAsync()
     {
-        // 当前层文档类型（Host admin 看 TenantId IS NULL 行；租户 admin 看自己租户行）。
-        // 解读 X + 没有继承关系：不做 Host ∪ Tenant union。租户隔离由 ambient IMultiTenant
-        // 过滤器施加；Priority DESC + TypeCode ASC 排序在内存中保持。
+        // 不做 Host ∪ Tenant union；租户隔离由 ambient IMultiTenant 过滤器施加。
+        // Priority DESC + TypeCode ASC 排序在内存中保持。
         var list = (await _repository.GetListAsync())
             .OrderByDescending(t => t.Priority)
             .ThenBy(t => t.TypeCode)
@@ -41,9 +40,7 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
 
     public virtual async Task<List<DocumentTypeDto>> GetDeletedAsync()
     {
-        // 仅关闭 ISoftDelete 看到已删除行；租户隔离仍由 ambient IMultiTenant 过滤器施加。
-        // 当前层回收站：Host admin（CurrentTenant.Id IS NULL）看 Host 类型；租户 admin 看自己租户。
-        // Host 与 tenant 各自独立宇宙，不跨层。
+        // 仅关闭 ISoftDelete 看到已删除行；租户隔离仍由 ambient IMultiTenant 过滤器施加，不跨层。
         using (DataFilter.Disable<ISoftDelete>())
         {
             var queryable = await _repository.GetQueryableAsync();
@@ -89,7 +86,7 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
     {
         var entity = await _repository.GetAsync(id);
 
-        // 跨层防御：只能改自己所在层（Host admin 改 TenantId IS NULL；租户 admin 改 TenantId == 自己）。
+        // 跨层防御：只能改自己所在层。
         if (entity.TenantId != CurrentTenant.Id)
         {
             throw new EntityNotFoundException(typeof(DocumentType), id);

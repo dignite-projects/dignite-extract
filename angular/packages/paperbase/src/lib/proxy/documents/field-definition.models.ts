@@ -2,8 +2,7 @@ import type { EntityDto } from '@abp/ng.core';
 import type { FieldDataType } from './field-data-type.enum';
 
 // Mirrors C# Dignite.Paperbase.Documents.Fields.FieldDefinitionDto.
-// 类型绑定字段（B 机制）。按 (tenantId, documentTypeId, name) 唯一；
-// tenantId == null 为 Host 字段，否则为该租户字段（两层互斥，不混合）。
+// 类型绑定字段（B 机制）。按 (tenantId, documentTypeId, name) 唯一，两层互斥不混合。
 // documentTypeId 为不可变 Id（#207：TypeCode 可重命名，故不作引用键）。
 export interface FieldDefinitionDto extends EntityDto<string> {
   tenantId?: string;

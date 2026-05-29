@@ -96,8 +96,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// <summary>
     /// 类型绑定字段抽取结果（字段架构 v2）——一行一个字段值的 child 集合，字段值查询与持久化的唯一 truth source。
     /// <para>
-    /// 来源层由 <see cref="TenantId"/> 决定：Host 文档（<c>TenantId IS NULL</c>）用 Host 字段定义；
-    /// 租户文档用对应租户字段定义。两层 mutually exclusive——同一 Document 只跑一层抽取，不分桶不命名冲突。
+    /// 同一 Document 只跑一层字段抽取（来源层由 <see cref="TenantId"/> 决定）——不分桶、不存在跨层命名冲突。
     /// </para>
     /// 出口 DTO / MCP / REST 的 <c>ExtractedFields</c> 字典由 App / Mapper 层从这些行即时组装
     /// （见 <see cref="DocumentExtractedField.ToJsonElement"/>），wire-format 与旧 JSON 列兼容。

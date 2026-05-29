@@ -13,9 +13,8 @@ using Volo.Abp.Uow;
 namespace Dignite.Paperbase.Documents.Pipelines.FieldExtraction;
 
 /// <summary>
-/// 统一字段抽取 EventHandler（字段架构 v2 + 解读 X）。订阅 <see cref="DocumentClassifiedEto"/>：
-/// 分类完成后按 Document 所属租户精确查 <see cref="FieldDefinition"/> 一层（Host 文档用
-/// TenantId IS NULL 字段；租户文档用对应租户字段），跑 LLM 抽取，经 <c>Document.SetFields</c> 整组写入
+/// 统一字段抽取 EventHandler（字段架构 v2）。订阅 <see cref="DocumentClassifiedEto"/>：
+/// 分类完成后按 Document 所属租户精确查 <see cref="FieldDefinition"/> 一层，跑 LLM 抽取，经 <c>Document.SetFields</c> 整组写入
 /// <see cref="Document.ExtractedFieldValues"/>（typed child 集合，源由 Document.TenantId 决定，
 /// 不分桶不存在跨层命名冲突）。统一发布 <see cref="FieldsExtractedEto"/>。
 /// <para>

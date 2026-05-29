@@ -77,8 +77,7 @@ public class DocumentClassificationBackgroundJob
 
         var document = await _documentRepository.GetWithPipelineRunsAsync(args.DocumentId);
 
-        // 候选集组装：按 Document.TenantId 匹配单层文档类型（解读 X + 没有继承关系）。
-        // Host 文档用 TenantId IS NULL 类型；租户文档用对应租户类型；按 Priority DESC + 截断。
+        // 候选集组装：按 Document.TenantId 匹配单层文档类型，不跨层 union；按 Priority DESC + 截断。
         List<DocumentType> candidates;
         using (_currentTenant.Change(document.TenantId))
         {

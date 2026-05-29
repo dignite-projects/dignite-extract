@@ -8,38 +8,7 @@ using Volo.Abp.MultiTenancy;
 namespace Dignite.Paperbase.Documents.Fields;
 
 /// <summary>
-/// 字段定义实体（字段架构 v2）。两层独立单层模型：
-/// <list type="bullet">
-///   <item><c>TenantId == null</c> → Host 字段定义（Host admin 通过 IFieldDefinitionAppService 自助 CRUD；CurrentTenant.Id IS NULL）</item>
-///   <item><c>TenantId != null</c> → 租户字段定义（租户 admin 通过 IFieldDefinitionAppService 自助 CRUD）</item>
-/// </list>
-/// Host 与 tenant 各自独立宇宙——字段抽取按 Document.TenantId 严格匹配单层，不跨层混合。
-/// 唯一约束 <c>(TenantId, DocumentTypeId, Name)</c>：同层同类型下字段名不重复；跨层同名是合法的两行。
-/// <para>
-/// <see cref="DocumentTypeId"/> 引用 <see cref="DocumentType"/>.Id（内部不可变关联，#207），按 DDD reference-by-id 原则不加 navigation。
-/// 父类型必须存在于同层（同 TenantId）；不存在"租户字段挂在 Host 类型上"的关系。父类型硬删由 FK RESTRICT 阻止。
-/// </para>
-/// <para>
-/// <see cref="Name"/> 与 <see cref="DisplayName"/> 的职责分离（对齐 <see cref="DocumentType"/> 的
-/// <c>TypeCode</c> + <c>DisplayName</c>）：
-/// <list type="bullet">
-///   <item><see cref="Name"/>：机器标识符，ASCII 白名单，<strong>外部契约 key</strong>——作为 LLM prompt JSON schema key、
-///   <c>Document.ExtractedFields</c> 的字典 key、下游消费方依赖的契约 ID。#207 起 <strong>可由 admin 重命名</strong>
-///   （内部关联改用 <see cref="DocumentExtractedField.FieldDefinitionId"/> / <see cref="ExportColumn.FieldDefinitionId"/>，
-///   rename 不级联数据行），但仍执行 regex 白名单 + 同层同类型唯一约束，rename 是契约级变更（UI 应给警示）</item>
-///   <item><see cref="DisplayName"/>：人类可读展示名，Unicode，<strong>可改</strong>——仅 UI / API 文档使用，
-///   <strong>不进 LLM prompt</strong>（避免 prompt injection 面 + Name+Prompt 已足够告诉模型抽什么）</item>
-/// </list>
-/// </para>
-/// <para>
-/// 安全约束（CLAUDE.md "## 安全约定"）：
-/// <list type="bullet">
-///   <item>所有查询路径显式 TenantId 谓词</item>
-///   <item><see cref="Prompt"/> 是用户控制文本，LLM 抽取时由 Workflow 经 <c>PromptBoundary.WrapField</c> 包裹</item>
-///   <item><see cref="Name"/> 受 <see cref="FieldDefinitionConsts.NamePattern"/> 白名单约束——字面拼进 LLM prompt 的 JSON schema，必须无 prompt injection 控制字符</item>
-///   <item><see cref="DisplayName"/> 经 IsControl 拦截作为深度防御 hygiene（即使不进 prompt，UI 渲染也不应承受换行/制表符等控制字符）</item>
-/// </list>
-/// </para>
+/// 字段定义实体。唯一约束 <c>(TenantId, DocumentTypeId, Name)</c>；字段抽取严格匹配单层、不跨层 union。
 /// </summary>
 public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
 {
@@ -53,18 +22,13 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
     public virtual Guid DocumentTypeId { get; private set; }
 
     /// <summary>
-    /// 字段名（机器标识符 / 外部契约 key）。#207 起<b>可重命名</b>——内部关联已改用
-    /// <see cref="DocumentExtractedField.FieldDefinitionId"/> / <see cref="ExportColumn.FieldDefinitionId"/>，
-    /// rename 不级联字段值行 / 导出列。仍由 <see cref="ValidateName"/> 执行 regex 白名单，并由 AppService 保证
-    /// 同层同类型唯一；rename 是契约级变更（进 LLM prompt schema、作为 ExtractedFields 字典 key、被下游消费方依赖，UI 应警示）。
+    /// 机器契约 key——作为 LLM prompt 的 JSON schema key、<c>ExtractedFields</c> 字典 key、下游契约 ID；
+    /// #207 起可由 admin 重命名（内部关联走不可变 Id，rename 不级联）。受
+    /// <see cref="FieldDefinitionConsts.NamePattern"/> 白名单约束——它裸拼进 prompt schema，白名单即注入防线。
     /// </summary>
     public virtual string Name { get; private set; } = default!;
 
-    /// <summary>
-    /// 显示名称（人类可读，运行时直接展示）。Unicode 允许（中日文 / 空格 / 标点），但 IsControl 拦截。
-    /// 与 <see cref="Name"/> 的对比：<see cref="Name"/> 是 immutable 程序标识符，<see cref="DisplayName"/>
-    /// 是可改的 UI 文案。<strong>不进 LLM prompt</strong>。
-    /// </summary>
+    /// <summary>显示名称（人类可读，运行时直接展示）。<b>不进 LLM prompt</b>。</summary>
     public virtual string DisplayName { get; private set; } = default!;
 
     /// <summary>LLM 抽取指令——告诉模型从文档中找什么值。</summary>
@@ -101,9 +65,8 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// 更新字段定义。<paramref name="name"/> 是机器契约 key——#207 起允许重命名（仍执行 <see cref="ValidateName"/>
-    /// regex 白名单；同层同类型唯一性由 AppService 校验）。<paramref name="dataType"/> 变更约束（对已有抽取值的字段禁止改类型，
-    /// 防 typed-column 错位）由 AppService 在调用前断言（跨聚合存在性检查，不在实体层）。
+    /// 更新字段定义。rename <see cref="Name"/> 是契约级变更（下游 / LLM prompt schema 依赖），UI 应警示。
+    /// <paramref name="dataType"/> 对已有抽取值的字段禁止改类型（防 typed-column 错位）由 AppService 调用前断言。
     /// </summary>
     public void Update(string name, string displayName, string prompt, FieldDataType dataType, int displayOrder, bool isRequired)
     {
@@ -128,10 +91,7 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// DisplayName 是 admin 通过 UI 输入的用户控制文本。当前**不进 LLM prompt**（与 <see cref="DocumentType.DisplayName"/>
-    /// 进 prompt 的处理路径不同），此处 IsControl 拦截是深度防御 hygiene——
-    /// 防止 UI 渲染 / 日志输出承受换行 / 制表符 / null byte 等控制字符。
-    /// 允许 Unicode 字母数字 / 标点 / 空格（支持中日文 displayName）。
+    /// DisplayName 不进 LLM prompt；此处拒绝控制字符是深度防御 hygiene——防 UI 渲染 / 日志承受换行 / null byte 等。
     /// </summary>
     private static string ValidateDisplayName(string displayName)
     {

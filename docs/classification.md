@@ -28,7 +28,7 @@ Two design properties matter:
 
 ## Registering document types
 
-Both Host deployers and tenants create their `DocumentType` rows through the admin UI (`IDocumentTypeAppService`). Host admins (logged in with `CurrentTenant.Id IS NULL`) create Host-layer types; tenant admins create their own tenant-layer types. There is **no Module-startup registration path** — Paperbase Core ships with no built-in types, and there's no inheritance: a Host type never auto-applies to tenant documents.
+Both Host deployers and tenants create their `DocumentType` rows through the admin UI (`IDocumentTypeAppService`), each in their own layer. There is **no Module-startup registration path** — Paperbase Core ships with no built-in types, and there's no inheritance: a Host type never auto-applies to tenant documents.
 
 | Field | Used by |
 |---|---|

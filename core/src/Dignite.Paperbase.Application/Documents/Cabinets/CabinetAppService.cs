@@ -9,9 +9,7 @@ using Volo.Abp.Domain.Entities;
 namespace Dignite.Paperbase.Documents.Cabinets;
 
 /// <summary>
-/// 文件柜管理（#194）。两层独立单层（参照 <see cref="DocumentTypeAppService"/>）：
-/// Host admin（CurrentTenant.Id IS NULL）管 Host 柜，租户 admin 管自己租户柜，不跨层 union。
-/// 权限 fail-closed（方法级 Cabinets.* 断言）。
+/// 文件柜管理（#194）。匹配当前层、不跨层 union。权限 fail-closed（方法级 Cabinets.* 断言）。
 /// </summary>
 [Authorize(PaperbasePermissions.Cabinets.Default)]
 public class CabinetAppService : PaperbaseAppService, ICabinetAppService
@@ -49,7 +47,7 @@ public class CabinetAppService : PaperbaseAppService, ICabinetAppService
     {
         var entity = await _repository.GetAsync(id);
 
-        // 跨层防御：只能改自己所在层（Host admin 改 TenantId IS NULL；租户 admin 改 TenantId == 自己）。
+        // 跨层防御：只能改自己所在层。
         if (entity.TenantId != CurrentTenant.Id)
         {
             throw new EntityNotFoundException(typeof(Cabinet), id);

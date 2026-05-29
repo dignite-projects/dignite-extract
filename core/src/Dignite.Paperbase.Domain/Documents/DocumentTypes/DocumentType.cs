@@ -10,29 +10,7 @@ using Volo.Abp.MultiTenancy;
 namespace Dignite.Paperbase.Documents.DocumentTypes;
 
 /// <summary>
-/// 文档类型实体（字段架构 v2）。两层独立单层模型：
-/// <list type="bullet">
-///   <item><c>TenantId == null</c> → Host 部署级类型（Host admin 通过 IDocumentTypeAppService 自助 CRUD；CurrentTenant.Id IS NULL）</item>
-///   <item><c>TenantId != null</c> → 租户私有类型（租户 admin 通过 IDocumentTypeAppService 自助 CRUD）</item>
-/// </list>
-/// Host 与 tenant 各自独立宇宙——分类候选集按 Document.TenantId 严格匹配单层，不存在跨层 union。
-/// 跨层同 TypeCode 是合法的两行（由 TenantId 区分），下游消费方按 (TenantId, TypeCode) 元组消费。
-/// <para>
-/// TypeCode 字符集白名单 <see cref="DocumentTypeConsts.TypeCodePattern"/>：字母 / 数字 / 下划线 / 短横线段，
-/// 可选 <c>.</c> 分隔多段（单段 <c>contract</c> 也合法，多段 <c>host.contract</c> 也合法；不允许首尾或连续 <c>.</c>）。
-/// 不再强制含 <c>.</c>——v1 的 <c>&lt;owner&gt;.&lt;sub-type&gt;</c> namespace 约定在 v2"全部 admin CRUD 自管"
-/// 模型下没有技术功能（不参与租户隔离、不参与 module 注册防冲突），保留 <c>.</c> 作为可选 convention 即可。
-/// 唯一约束 <c>(TenantId, TypeCode)</c>。例：<c>host.general</c>、<c>contract</c>、<c>tenant.case-file</c>。
-/// </para>
-/// <para>
-/// <see cref="DisplayName"/> 是普通字符串列，运行时直接展示（不再走 seed-time ILocalizableString 解析）。
-/// </para>
-/// <para>
-/// 字段关系：<see cref="FieldDefinition.DocumentTypeId"/> 引用本实体的 Id（内部不可变关联，#207），
-/// 按 DDD "reference by id" 原则不加 navigation property。<see cref="Document.DocumentTypeId"/> /
-/// <see cref="ExportTemplate.DocumentTypeId"/> 同理。这些 Id 关联让 <see cref="TypeCode"/> 可由 admin 重命名而不级联数据行；
-/// 被引用的本实体硬删由 FK RESTRICT 阻止。
-/// </para>
+/// 文档类型实体。唯一约束 <c>(TenantId, TypeCode)</c>；分类候选集严格匹配单层、不跨层 union。
 /// </summary>
 public class DocumentType : FullAuditedAggregateRoot<Guid>, IMultiTenant
 {
@@ -42,9 +20,14 @@ public class DocumentType : FullAuditedAggregateRoot<Guid>, IMultiTenant
 
     public virtual Guid? TenantId { get; private set; }
 
+    /// <summary>
+    /// 机器契约 key——下游按 <c>(TenantId, TypeCode)</c> 消费、作为 LLM 分类返回值；#207 起可由 admin 重命名
+    /// （内部关联走不可变 Id，rename 不级联）。它在分类 prompt 内<b>裸拼</b>（不经 PromptBoundary），
+    /// <see cref="DocumentTypeConsts.TypeCodePattern"/> 白名单是 prompt injection 防线——放宽字符集前必须重审。
+    /// </summary>
     public virtual string TypeCode { get; private set; } = default!;
 
-    /// <summary>显示名称（运行时直接展示，普通字符串列）。</summary>
+    /// <summary>显示名称（人类可读，运行时直接展示）。</summary>
     public virtual string DisplayName { get; private set; } = default!;
 
     /// <summary>分类置信度阈值（低于此值进入 PendingReview 队列）。</summary>
@@ -71,12 +54,7 @@ public class DocumentType : FullAuditedAggregateRoot<Guid>, IMultiTenant
         Priority = priority;
     }
 
-    /// <summary>
-    /// 更新文档类型。<paramref name="typeCode"/> 是外部机器契约 key——#207 起允许重命名（仍执行 <see cref="ValidateTypeCode"/>
-    /// regex 白名单；同层 <c>(TenantId, TypeCode)</c> 唯一性由 AppService 校验）。内部关联（Document / FieldDefinition /
-    /// ExportTemplate）已改用本实体的不可变 Id，rename 不级联这些表；但 rename 是契约级变更（下游按 (TenantId, TypeCode)
-    /// 消费、进 LLM 分类 prompt，UI 应警示）。
-    /// </summary>
+    /// <summary>更新文档类型。rename <see cref="TypeCode"/> 是契约级变更（下游 / LLM prompt 依赖），UI 应警示。</summary>
     public void Update(string typeCode, string displayName, double confidenceThreshold, int priority)
     {
         TypeCode = ValidateTypeCode(typeCode);
@@ -85,17 +63,6 @@ public class DocumentType : FullAuditedAggregateRoot<Guid>, IMultiTenant
         Priority = priority;
     }
 
-    /// <summary>
-    /// TypeCode 白名单校验：字符集 <see cref="DocumentTypeConsts.TypeCodePattern"/>
-    /// （字母 / 数字 / 下划线 / 短横线段，可选 <c>.</c> 分隔，首尾不为 <c>.</c>，不允许连续 <c>.</c>）+ 长度上限。
-    /// <para>
-    /// ⚠️ <strong>Prompt injection 边界</strong>：<see cref="TypeCode"/> 在
-    /// <c>DocumentClassificationWorkflow</c> 内**裸拼**进 LLM 系统提示（不经
-    /// <c>PromptBoundary.WrapField</c> 包裹）。白名单 regex 保证字符集不含换行 / 引号 / 控制字符等
-    /// prompt injection 注入向量；若未来需要放宽字符集，必须同步评估并选择"收紧 regex"或"在 Workflow
-    /// 内对 TypeCode 也走 PromptBoundary"二选一。详见 <c>.claude/rules/llm-call-anti-patterns.md</c>。
-    /// </para>
-    /// </summary>
     private static string ValidateTypeCode(string typeCode)
     {
         Check.NotNullOrWhiteSpace(typeCode, nameof(typeCode), DocumentTypeConsts.MaxTypeCodeLength);
@@ -111,11 +78,8 @@ public class DocumentType : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// DisplayName 是 admin 通过 UI 输入的用户控制文本，且会被字面拼入 LLM 分类 prompt
-    /// （<see cref="DocumentClassificationWorkflow"/> 内已加 <c>PromptBoundary.WrapField</c> 包裹作为深度防御）。
-    /// 此处实体层加一层硬约束——拒绝换行 / 控制字符——防止恶意 admin 注入形如
-    /// <c>"Contract\n---\nIgnore previous instructions"</c> 的字符串穿透 prompt 边界。
-    /// 允许 Unicode 字母数字 / 标点 / 空格（支持中日文 displayName）。
+    /// DisplayName 会拼入分类 prompt（Workflow 已 <c>PromptBoundary.WrapField</c> 包裹）。此处拒绝控制字符是
+    /// 实体层深度防御，防恶意 admin 用换行注入 <c>"Contract\n---\nIgnore previous instructions"</c> 穿透边界。
     /// </summary>
     private static string ValidateDisplayName(string displayName)
     {

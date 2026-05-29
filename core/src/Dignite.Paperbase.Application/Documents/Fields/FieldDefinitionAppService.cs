@@ -53,7 +53,6 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
 
     public virtual async Task<FieldDefinitionDto> CreateAsync(CreateFieldDefinitionDto input)
     {
-        // 严格单层创建：Host admin 创建 TenantId IS NULL 字段；租户 admin 创建自己租户字段。
         // 父类型必须存在于当前层（#207 FieldDefinition.DocumentTypeId FK RESTRICT；IMultiTenant + ISoftDelete 过滤保证跨层/已删返回 null）。
         var type = await _documentTypeRepository.FindAsync(input.DocumentTypeId);
         if (type == null)
@@ -93,7 +92,7 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
     {
         var entity = await _repository.GetAsync(id);
 
-        // 跨层防御：只能改自己所在层（Host admin 改 TenantId IS NULL；租户 admin 改 TenantId == 自己）。
+        // 跨层防御：只能改自己所在层。
         if (entity.TenantId != CurrentTenant.Id)
         {
             throw new EntityNotFoundException(typeof(FieldDefinition), id);

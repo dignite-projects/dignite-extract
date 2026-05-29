@@ -9,12 +9,7 @@ using Volo.Abp.MultiTenancy;
 namespace Dignite.Paperbase.Documents.Exports;
 
 /// <summary>
-/// 导出模板聚合根。两层独立单层模型（对齐 <see cref="DocumentType"/> / <see cref="FieldDefinition"/>）：
-/// <list type="bullet">
-///   <item><c>TenantId == null</c> → Host 模板（Host admin 通过 IExportTemplateAppService 自助 CRUD）</item>
-///   <item><c>TenantId != null</c> → 租户模板（租户 admin 自助 CRUD）</item>
-/// </list>
-/// 唯一约束 <c>(TenantId, Name)</c>；跨层同名是合法的两行。
+/// 导出模板聚合根。唯一约束 <c>(TenantId, Name)</c>；跨层同名是合法的两行。
 /// <para>
 /// 导出引擎是通道的"文件出口"——只做字段投影 + 重命名 + 排序 + 序列化，<strong>零业务转换</strong>
 /// （不算税 / 不做科目映射 / 不做汇率换算）。业务格式靠租户拼模板组合，Paperbase 不预置行业模板。

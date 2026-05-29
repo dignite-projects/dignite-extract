@@ -7,11 +7,7 @@ using Volo.Abp.MultiTenancy;
 namespace Dignite.Paperbase.Documents.Cabinets;
 
 /// <summary>
-/// 文件柜实体——人工组织归属维度（#194）。两层独立单层模型（参照 <see cref="DocumentType"/>）：
-/// <list type="bullet">
-///   <item><c>TenantId == null</c> → Host 部署级柜（Host admin 通过 <c>ICabinetAppService</c> 自助 CRUD）</item>
-///   <item><c>TenantId != null</c> → 租户私有柜（租户 admin 自助 CRUD）</item>
-/// </list>
+/// 文件柜实体——人工组织归属维度（#194）。
 /// 与 <see cref="DocumentType"/> 正交：DocumentType 答"这是什么"（AI 分类），Cabinet 答"属于哪个组 / 批次"（人工指定）。
 /// 一个文档可同时"在法务部柜里" + "类型是合同"。
 /// <para>
