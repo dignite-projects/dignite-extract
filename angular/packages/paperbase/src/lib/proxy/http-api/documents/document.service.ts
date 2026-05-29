@@ -35,12 +35,12 @@ export class DocumentService {
       { apiName: this.apiName }
     );
 
-  confirmClassification = (id: string, documentTypeCode: string): Observable<DocumentDto> =>
-    this.rest.request<{ documentTypeCode: string }, DocumentDto>(
+  confirmClassification = (id: string, documentTypeId: string): Observable<DocumentDto> =>
+    this.rest.request<{ documentTypeId: string }, DocumentDto>(
       {
         method: 'POST',
         url: `${this.basePath}/${id}/confirm-classification`,
-        body: { documentTypeCode },
+        body: { documentTypeId },
       },
       { apiName: this.apiName }
     );

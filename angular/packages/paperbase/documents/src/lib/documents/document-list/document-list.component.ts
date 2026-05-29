@@ -90,7 +90,7 @@ export class DocumentListComponent implements OnInit {
   // definitions (not the union of extractedFields keys) so headers stay stable and
   // friendly even for fields no document in the page happened to fill.
   extractedFieldColumns = signal<FieldDefinitionDto[]>([]);
-  selectedTypeCode = signal('');
+  selectedTypeId = signal('');
   isConfirming = signal(false);
 
   page = signal(0);
@@ -307,20 +307,24 @@ export class DocumentListComponent implements OnInit {
     event.stopPropagation();
     this.confirmingDoc.set(doc);
     // Pre-select the document's current (low-confidence) classification when present,
-    // so the operator usually just confirms; otherwise force an explicit choice.
-    this.selectedTypeCode.set(doc.documentTypeCode ?? '');
+    // so the operator usually just confirms; otherwise force an explicit choice. The
+    // confirm command is keyed by immutable DocumentTypeId (#207), so resolve the
+    // document's exit-contract typeCode → id via the already-loaded visible types.
+    this.selectedTypeId.set(
+      this.documentTypes().find(t => t.typeCode === doc.documentTypeCode)?.id ?? '',
+    );
   }
 
   closeConfirmDialog(): void {
     this.confirmingDoc.set(null);
-    this.selectedTypeCode.set('');
+    this.selectedTypeId.set('');
   }
 
   submitConfirmation(): void {
     const doc = this.confirmingDoc();
-    if (!doc || !this.selectedTypeCode()) return;
+    if (!doc || !this.selectedTypeId()) return;
     this.isConfirming.set(true);
-    this.documentService.confirmClassification(doc.id, this.selectedTypeCode())
+    this.documentService.confirmClassification(doc.id, this.selectedTypeId())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
       next: () => {

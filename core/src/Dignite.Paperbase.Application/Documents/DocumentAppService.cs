@@ -475,13 +475,13 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
     [Authorize(PaperbasePermissions.Documents.ConfirmClassification)]
     public virtual async Task<DocumentDto> ConfirmClassificationAsync(Guid id, ConfirmClassificationInput input)
     {
-        return await ApplyManualClassificationAsync(id, input.DocumentTypeCode);
+        return await ApplyManualClassificationAsync(id, input.DocumentTypeId);
     }
 
     [Authorize(PaperbasePermissions.Documents.ConfirmClassification)]
     public virtual async Task<DocumentDto> ReclassifyAsync(Guid id, ReclassifyDocumentInput input)
     {
-        return await ApplyManualClassificationAsync(id, input.DocumentTypeCode);
+        return await ApplyManualClassificationAsync(id, input.DocumentTypeId);
     }
 
     [Authorize(PaperbasePermissions.Documents.ConfirmClassification)]
@@ -494,21 +494,20 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
     }
 
     /// <summary>
-    /// Confirm 与 Reclassify 共享实现：写入 TypeCode + Reviewed 状态，
-    /// 发布 DocumentClassifiedEto 让下游消费方重跑字段抽取。
+    /// Confirm 与 Reclassify 共享实现：按不可变 DocumentTypeId 解析类型后写入 Reviewed 状态，
+    /// 发布 DocumentClassifiedEto（投射回可重命名 TypeCode 出口契约）让下游消费方重跑字段抽取。
     /// </summary>
-    protected virtual async Task<DocumentDto> ApplyManualClassificationAsync(Guid id, string documentTypeCode)
+    protected virtual async Task<DocumentDto> ApplyManualClassificationAsync(Guid id, Guid documentTypeId)
     {
         var document = await _documentRepository.GetAsync(id, includeDetails: true);
 
-        // typeCode 校验责任在 AppService（不再走 manager 内部 EnsureRegisteredTypeCodeAsync）：
-        // 按 Document.TenantId 精确单层匹配（CLAUDE.md "两层 mutually exclusive"）；
-        // 不存在则 fail-fast，避免写入"业务模块订阅者认不出的 typeCode"。
-        var typeDef = await _documentTypeRepository.FindByTypeCodeAsync(documentTypeCode);
+        // 类型校验责任在 AppService（不再走 manager 内部 EnsureRegisteredTypeCodeAsync）：
+        // 按不可变 Id（#207）解析，租户隔离交给 ABP IMultiTenant 全局过滤器精确单层匹配；
+        // 不存在则 fail-fast，避免写入"业务模块订阅者认不出的类型"。
+        var typeDef = await _documentTypeRepository.FindAsync(documentTypeId);
         if (typeDef == null)
         {
-            throw new BusinessException(PaperbaseErrorCodes.DocumentType.InvalidCode)
-                .WithData(nameof(documentTypeCode), documentTypeCode);
+            throw new EntityNotFoundException(typeof(DocumentType), documentTypeId);
         }
 
         var run = await _pipelineRunManager.QueueAsync(document, PaperbasePipelines.Classification);
@@ -521,7 +520,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
                 DocumentId = document.Id,
                 TenantId = document.TenantId,
                 EventTime = Clock.Now,
-                DocumentTypeCode = documentTypeCode,
+                DocumentTypeCode = typeDef.TypeCode,
                 ClassificationConfidence = 1.0
             });
 

@@ -158,12 +158,12 @@
           <label class="form-label fw-semibold">{{ '::Document:SelectDocumentType' | abpLocalization }}</label>
           <select
             class="form-select"
-            [ngModel]="selectedTypeCode()"
-            (ngModelChange)="selectedTypeCode.set($event)"
+            [ngModel]="selectedTypeId()"
+            (ngModelChange)="selectedTypeId.set($event)"
           >
             <option value="" disabled>{{ '::Document:SelectDocumentType' | abpLocalization }}</option>
             @for (t of documentTypes(); track t.id) {
-              <option [value]="t.typeCode">{{ t.displayName }} ({{ t.typeCode }})</option>
+              <option [value]="t.id">{{ t.displayName }} ({{ t.typeCode }})</option>
             }
           </select>
         </div>
@@ -174,7 +174,7 @@
           <button
             type="button"
             class="btn btn-primary"
-            [disabled]="!selectedTypeCode() || isSubmitting()"
+            [disabled]="!selectedTypeId() || isSubmitting()"
             (click)="submitClassify()"
           >
             @if (isSubmitting()) {

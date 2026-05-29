@@ -20,7 +20,6 @@ public static class PaperbaseErrorCodes
 
     public static class DocumentType
     {
-        public const string InvalidCode = "Paperbase:InvalidDocumentTypeCode";
         public const string InvalidCodeFormat = "Paperbase:InvalidDocumentTypeCodeFormat";
         public const string CodeAlreadyExists = "Paperbase:DocumentTypeCodeAlreadyExists";
         public const string InUse = "Paperbase:DocumentTypeInUse";

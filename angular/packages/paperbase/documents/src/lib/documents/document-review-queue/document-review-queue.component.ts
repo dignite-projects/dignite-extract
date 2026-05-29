@@ -48,7 +48,7 @@ export class DocumentReviewQueueComponent implements OnInit {
 
   // Confirm/assign-classification dialog state.
   classifyingDoc = signal<DocumentListItemDto | null>(null);
-  selectedTypeCode = signal('');
+  selectedTypeId = signal('');
 
   // Reject dialog state.
   rejectingDoc = signal<DocumentListItemDto | null>(null);
@@ -104,20 +104,24 @@ export class DocumentReviewQueueComponent implements OnInit {
   openClassifyDialog(doc: DocumentListItemDto, event: Event): void {
     event.stopPropagation();
     this.classifyingDoc.set(doc);
-    this.selectedTypeCode.set(doc.documentTypeCode ?? '');
+    // The confirm command is keyed by immutable DocumentTypeId (#207); resolve the
+    // document's exit-contract typeCode → id via the already-loaded visible types.
+    this.selectedTypeId.set(
+      this.documentTypes().find(t => t.typeCode === doc.documentTypeCode)?.id ?? '',
+    );
   }
 
   closeClassifyDialog(): void {
     this.classifyingDoc.set(null);
-    this.selectedTypeCode.set('');
+    this.selectedTypeId.set('');
   }
 
   submitClassify(): void {
     const doc = this.classifyingDoc();
-    if (!doc || !this.selectedTypeCode()) return;
+    if (!doc || !this.selectedTypeId()) return;
     this.isSubmitting.set(true);
     this.documentService
-      .confirmClassification(doc.id, this.selectedTypeCode())
+      .confirmClassification(doc.id, this.selectedTypeId())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {

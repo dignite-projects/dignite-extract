@@ -194,7 +194,6 @@
     "Permission:Cabinets.Update": "Edit Cabinets",
     "Permission:Cabinets.Delete": "Delete Cabinets",
 
-    "Paperbase:InvalidDocumentTypeCode": "Invalid document type code: '{documentTypeCode}'.",
     "Paperbase:InvalidDocumentTypeCodeFormat": "Document type code '{typeCode}' is not allowed. Must match pattern '{pattern}' (letters, digits, underscore, hyphen segments, optionally separated by '.'; no leading/trailing/consecutive '.').",
     "Paperbase:DocumentTypeCodeAlreadyExists": "Document type code '{TypeCode}' is already in use (including soft-deleted records). Use a different code, or restore the existing one.",
     "Paperbase:DocumentTypeInUse": "Document type '{TypeCode}' is still referenced by one or more documents. Reclassify those documents before deleting this type.",

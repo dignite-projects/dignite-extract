@@ -4,7 +4,6 @@
     "MyAccount": "我的账户",
     "SamplePageMessage": "Paperbase 模块的示例页面",
 
-    "Paperbase:InvalidDocumentTypeCode": "文档类型代码无效：'{documentTypeCode}'。",
     "Paperbase:InvalidDocumentTypeCodeFormat": "文档类型代码 '{typeCode}' 不符合格式 '{pattern}'：仅允许字母 / 数字 / 下划线 / 短横线段，可选用 '.' 分隔多段；不允许首尾或连续 '.'。",
     "Paperbase:DocumentTypeCodeAlreadyExists": "文档类型代码 '{TypeCode}' 已被占用（包括已软删除的记录）。请使用其他代码，或先恢复已存在的同名类型。",
     "Paperbase:DocumentTypeInUse": "文档类型 '{TypeCode}' 仍被一个或多个文档引用，请先重新分类这些文档再删除该类型。",
