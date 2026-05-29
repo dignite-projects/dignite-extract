@@ -87,7 +87,7 @@ export class FieldDefinitionListComponent implements OnInit {
     this.slugHandle = wireSlugSuggestion({
       displayName: this.form.controls.displayName,
       target: this.form.controls.name,
-      suggest: text => this.slugService.suggest({ displayName: text }).pipe(map(r => r.slug)),
+      suggest: text => this.slugService.suggest({ label: text }).pipe(map(r => r.slug)),
       fallback: () => this.nextFieldSlug(),
       destroyRef: this.destroyRef,
       onPending: pending => this.isSuggesting.set(pending),

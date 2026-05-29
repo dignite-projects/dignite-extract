@@ -7,7 +7,7 @@ namespace Dignite.Paperbase.Slugging;
 /// <summary>
 /// 显示名 → 机器标识（slug）建议（issue #190）。
 /// <para>
-/// 抹平 admin "填两个字段（显示名 + 机器键）录入成本高"的痛点：admin 只填 DisplayName，
+/// 抹平 admin "填两个字段（显示名 + 机器键）录入成本高"的痛点：admin 只填显示名（作为标签传入），
 /// 前端调本服务用 LLM 出英译候选预填 <see cref="FieldDefinition.Name"/> /
 /// <see cref="DocumentType.TypeCode"/>，admin 可手动覆盖。
 /// </para>

@@ -78,7 +78,7 @@ export class DocumentTypeListComponent implements OnInit {
     this.slugHandle = wireSlugSuggestion({
       displayName: this.form.controls.displayName,
       target: this.form.controls.typeCode,
-      suggest: text => this.slugService.suggest({ displayName: text }).pipe(map(r => r.slug)),
+      suggest: text => this.slugService.suggest({ label: text }).pipe(map(r => r.slug)),
       fallback: () => this.nextTypeCode(),
       destroyRef: this.destroyRef,
       onPending: pending => this.isSuggesting.set(pending),

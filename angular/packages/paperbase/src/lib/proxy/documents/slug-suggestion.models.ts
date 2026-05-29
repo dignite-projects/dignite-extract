@@ -2,7 +2,7 @@
 // 显示名 → 机器标识（slug）建议，FieldDefinition 与 DocumentType 创建表单共用。
 
 export interface SuggestSlugInput {
-  displayName: string;
+  label: string;
 }
 
 // slug 已由服务端 sanitize 成 [a-z0-9_]（≤64），同时满足 Name 与 TypeCode 白名单。

@@ -28,7 +28,7 @@ namespace Dignite.Paperbase.Slugging;
 ///         FieldDefinitionAppService / DocumentTypeAppService 一致。</item>
 ///   <item>**无 DB 查询**：纯文本 → 文本，不落任何 <c>IRepository</c> / raw SQL，因而 Take(N) /
 ///         显式 TenantId 谓词不适用。</item>
-///   <item>**PromptBoundary**：用户派生自由文本 DisplayName 进 prompt 前经
+///   <item>**PromptBoundary**：用户派生自由文本 Label 进 prompt 前经
 ///         <see cref="PromptBoundary.WrapField"/> 包裹 + 追加 <see cref="PromptBoundary.BoundaryRule"/>。</item>
 ///   <item>**编译期常量 instructions**：<see cref="SlugSystemPrompt"/> 是 <c>const</c>，不拼接任何运行时字符串。</item>
 ///   <item>**不信任 LLM 输出**：结果经 <see cref="Sanitize"/> 限定为 <c>[a-z0-9_]</c>，且仅作为 admin 可改的
@@ -75,8 +75,8 @@ public class SlugSuggestionAppService : PaperbaseAppService, ISlugSuggestionAppS
         var messages = new List<ChatMessage>
         {
             new(ChatRole.System, SlugSystemPrompt + "\n\n" + PromptBoundary.BoundaryRule),
-            // DisplayName 是用户派生自由文本 —— 经 PromptBoundary.WrapField 显式标记为数据。
-            new(ChatRole.User, "Label:\n" + PromptBoundary.WrapField(input.DisplayName))
+            // Label 是用户派生自由文本 —— 经 PromptBoundary.WrapField 显式标记为数据。
+            new(ChatRole.User, "Label:\n" + PromptBoundary.WrapField(input.Label))
         };
 
         var options = new ChatOptions { ResponseFormat = ChatResponseFormat.Json };

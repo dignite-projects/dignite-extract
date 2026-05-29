@@ -47,7 +47,7 @@ public class SlugSuggestionAppService_Tests
     {
         var svc = CreateService(ChatClientReturning("{\"slug\": \"Contract Amount!\"}"));
 
-        var result = await svc.SuggestAsync(new SuggestSlugInput { DisplayName = "合同金额" });
+        var result = await svc.SuggestAsync(new SuggestSlugInput { Label = "合同金额" });
 
         // 服务端 sanitize：小写、非 [a-z0-9] 折叠为下划线、合并、去首尾。
         result.Slug.ShouldBe("contract_amount");
@@ -58,7 +58,7 @@ public class SlugSuggestionAppService_Tests
     {
         var svc = CreateService(ChatClientReturning("sorry, I cannot help with that"));
 
-        var result = await svc.SuggestAsync(new SuggestSlugInput { DisplayName = "合同金额" });
+        var result = await svc.SuggestAsync(new SuggestSlugInput { Label = "合同金额" });
 
         result.Slug.ShouldBe(string.Empty);
     }
@@ -68,7 +68,7 @@ public class SlugSuggestionAppService_Tests
     {
         var svc = CreateService(ChatClientReturning("{\"name\": \"contract_amount\"}"));
 
-        var result = await svc.SuggestAsync(new SuggestSlugInput { DisplayName = "合同金额" });
+        var result = await svc.SuggestAsync(new SuggestSlugInput { Label = "合同金额" });
 
         result.Slug.ShouldBe(string.Empty);
     }
@@ -79,7 +79,7 @@ public class SlugSuggestionAppService_Tests
         // LLM 未翻译，原样返回 CJK —— sanitize 后无合法字符 → 空 slug → 前端回退本地占位。
         var svc = CreateService(ChatClientReturning("{\"slug\": \"合同\"}"));
 
-        var result = await svc.SuggestAsync(new SuggestSlugInput { DisplayName = "合同金额" });
+        var result = await svc.SuggestAsync(new SuggestSlugInput { Label = "合同金额" });
 
         result.Slug.ShouldBe(string.Empty);
     }
@@ -89,7 +89,7 @@ public class SlugSuggestionAppService_Tests
     {
         var svc = CreateService(ChatClientThrowing(new InvalidOperationException("provider down")));
 
-        var result = await svc.SuggestAsync(new SuggestSlugInput { DisplayName = "合同金额" });
+        var result = await svc.SuggestAsync(new SuggestSlugInput { Label = "合同金额" });
 
         result.Slug.ShouldBe(string.Empty);
     }
@@ -101,7 +101,7 @@ public class SlugSuggestionAppService_Tests
         // 应降级为空 slug，而非向上抛。
         var svc = CreateService(ChatClientThrowing(new OperationCanceledException()));
 
-        var result = await svc.SuggestAsync(new SuggestSlugInput { DisplayName = "合同金额" });
+        var result = await svc.SuggestAsync(new SuggestSlugInput { Label = "合同金额" });
 
         result.Slug.ShouldBe(string.Empty);
     }
@@ -114,6 +114,6 @@ public class SlugSuggestionAppService_Tests
         var canceled = new CancellationToken(canceled: true);
 
         await Should.ThrowAsync<OperationCanceledException>(
-            () => svc.SuggestAsync(new SuggestSlugInput { DisplayName = "合同金额" }, canceled));
+            () => svc.SuggestAsync(new SuggestSlugInput { Label = "合同金额" }, canceled));
     }
 }
