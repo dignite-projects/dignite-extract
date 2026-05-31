@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dignite.Paperbase.Ai;
@@ -36,7 +37,11 @@ public class FieldExtractionWorkflow_Tests
     }
 
     private static FieldExtractionDescriptor Field(string name, FieldDataType type)
-        => new(System.Guid.NewGuid(), name, $"Extract {name}.", type, false);
+        => new(System.Guid.NewGuid(), name, $"Extract {name}.", type, false, false);
+
+    // #212：多值 String 字段（AllowMultiple）。
+    private static FieldExtractionDescriptor MultiField(string name)
+        => new(System.Guid.NewGuid(), name, $"Extract {name}.", FieldDataType.String, false, true);
 
     [Fact]
     public async Task Keeps_values_matching_declared_type()
@@ -161,6 +166,47 @@ public class FieldExtractionWorkflow_Tests
             "# doc");
 
         result["amount"].ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Multi_value_string_field_keeps_json_array_and_rejects_non_array()
+    {
+        // #212：多值 String 字段——返回 JSON 数组（每元素合法 string）保留；标量 / 含非字符串元素的数组判不合类型存 null。
+        var json = """
+        {
+          "tags": ["urgent", "legal", "2026"],
+          "scalar_tags": "urgent",
+          "bad_tags": ["ok", 123]
+        }
+        """;
+        var workflow = CreateWorkflow(json);
+
+        var result = await workflow.ExtractAsync(
+            new[]
+            {
+                MultiField("tags"),
+                MultiField("scalar_tags"),
+                MultiField("bad_tags"),
+            },
+            "# doc");
+
+        result["tags"]!.Value.ValueKind.ShouldBe(System.Text.Json.JsonValueKind.Array);
+        result["tags"]!.Value.GetArrayLength().ShouldBe(3);
+        result["scalar_tags"].ShouldBeNull();   // 多值字段收到标量 → 不合类型 → null
+        result["bad_tags"].ShouldBeNull();       // 数组含非 string 元素 → null
+    }
+
+    [Fact]
+    public async Task Multi_value_array_exceeding_count_cap_is_nulled()
+    {
+        // #212：超过 MaxMultiValueCount 的数组整组判不合法 → 存 null（防注入诱导行膨胀的硬护栏）。
+        var elements = string.Join(",", Enumerable.Range(0, DocumentExtractedFieldConsts.MaxMultiValueCount + 1)
+            .Select(i => $"\"t{i}\""));
+        var workflow = CreateWorkflow($$"""{ "tags": [{{elements}}] }""");
+
+        var result = await workflow.ExtractAsync(new[] { MultiField("tags") }, "# doc");
+
+        result["tags"].ShouldBeNull();
     }
 
     [Fact]

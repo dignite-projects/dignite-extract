@@ -23,4 +23,7 @@ public class UpdateFieldDefinitionDto
     public int DisplayOrder { get; set; }
 
     public bool IsRequired { get; set; }
+
+    /// <summary>是否允许多值（#212）——仅 <see cref="FieldDataType.String"/> 字段可为 true。multi→single 收窄对已有值字段由 AppService 拒绝。</summary>
+    public bool AllowMultiple { get; set; }
 }

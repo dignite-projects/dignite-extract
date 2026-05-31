@@ -27,4 +27,7 @@ public class CreateFieldDefinitionDto
     public int DisplayOrder { get; set; }
 
     public bool IsRequired { get; set; }
+
+    /// <summary>是否允许多值（#212）——仅 <see cref="FieldDataType.String"/> 字段可为 true，非 String 强行开多值由实体层 loud fail。</summary>
+    public bool AllowMultiple { get; set; }
 }

@@ -11,10 +11,11 @@ namespace Dignite.Paperbase.Documents;
 /// 类型绑定字段的<b>字段值行</b>（字段架构 v2）——<see cref="Document"/> 聚合的 child entity，
 /// 字段值查询与持久化的<b>唯一</b> truth source（替代旧的 <c>Document.ExtractedFields</c> JSON 列，Issue #206）。
 /// <para>
-/// 一行一个字段值。复合主键 <c>(DocumentId, FieldDefinitionId)</c> 即字段集自然键（Issue #207）——
+/// 一行一个字段值。复合主键 <c>(DocumentId, FieldDefinitionId, Order)</c>（Issue #207 + #212）——
 /// 内部用不可变 <see cref="FieldDefinitionId"/> 关联产生该值的 <see cref="FieldDefinition"/>，
-/// 不再冗余字段名 / TypeCode 字符串；<see cref="FieldDefinition.Name"/> rename 不级联本表。同文档同字段唯一，
-/// 整组重建 / 操作员手改走 reconcile（同字段原地更新），不留重复行。值按写入时的 <c>FieldDataType</c> 落到对应类型化列
+/// 不再冗余字段名 / TypeCode 字符串；<see cref="FieldDefinition.Name"/> rename 不级联本表。<see cref="Order"/> 是值在
+/// 多值集合内的 0-based 位序：单值字段恒为 0（同文档同字段唯一）；多值 String 字段（<c>AllowMultiple</c>）一字段多行、Order 递增。
+/// 整组重建 / 操作员手改走 reconcile（按 <c>(FieldDefinitionId, Order)</c> 原地更新），不留重复行。值按写入时的 <c>FieldDataType</c> 落到对应类型化列
 /// （<see cref="StringValue"/> / <see cref="NumberValue"/> / …）——类型由所引用的 <see cref="FieldDefinition"/> 决定、<b>不在本行持久化</b>（#208），
 /// 让 <c>GetFieldMatchedIdsAsync</c> 用普通列比较（等值 + 范围）跨任意关系型数据库可移植——不再依赖 SQL Server <c>JSON_VALUE</c> / <c>TRY_CONVERT</c> 方言。
 /// </para>
@@ -41,6 +42,12 @@ public class DocumentExtractedField : Entity, IMultiTenant
     /// <summary>产生该字段值的 <see cref="FieldDefinition"/>.Id（内部关联 / 查询索引键，#207）。</summary>
     public virtual Guid FieldDefinitionId { get; private set; }
 
+    /// <summary>
+    /// 值在所属字段多值集合内的 0-based 位序（#212），参与复合主键。单值字段恒为 0；
+    /// 多值 String 字段（<see cref="FieldDefinition.AllowMultiple"/>）按 JSON 数组元素顺序取 0,1,2…。
+    /// </summary>
+    public virtual int Order { get; private set; }
+
     // 类型化值列——按字段类型取用其一，其余为 null（类型由 FieldDefinition 决定、不在本行持久化，#208）。
     // 普通列即可建 B-tree 索引、支持等值 + 范围。Number（整数与小数统一）落 NumberValue。
     public virtual string? StringValue { get; private set; }
@@ -58,6 +65,7 @@ public class DocumentExtractedField : Entity, IMultiTenant
         DocumentId = documentId;
         TenantId = tenantId;
         FieldDefinitionId = value.FieldDefinitionId;
+        Order = value.Order;
         SetValue(value);
     }
 
@@ -114,5 +122,5 @@ public class DocumentExtractedField : Entity, IMultiTenant
         _ => throw new ArgumentOutOfRangeException(nameof(dataType), dataType, "Unsupported field data type.")
     };
 
-    public override object[] GetKeys() => new object[] { DocumentId, FieldDefinitionId };
+    public override object[] GetKeys() => new object[] { DocumentId, FieldDefinitionId, Order };
 }

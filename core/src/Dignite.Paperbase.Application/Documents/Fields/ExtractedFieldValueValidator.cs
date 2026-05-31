@@ -27,6 +27,41 @@ namespace Dignite.Paperbase.Documents.Fields;
 /// </summary>
 internal static class ExtractedFieldValueValidator
 {
+    /// <summary>
+    /// 多值感知校验（#212）。<paramref name="allowMultiple"/> 为 true 时（仅 <see cref="FieldDataType.String"/> 字段，
+    /// 由 <c>FieldDefinition</c> 实体层保证）：<paramref name="value"/> 必须是 JSON 数组，且每个元素都是合法标量值；
+    /// 空数组合法（零行）。为 false 时退化为标量校验（与原 <see cref="IsValid(JsonElement, FieldDataType)"/> 一致）。
+    /// </summary>
+    public static bool IsValid(JsonElement value, FieldDataType dataType, bool allowMultiple)
+    {
+        if (!allowMultiple)
+        {
+            return IsValid(value, dataType);
+        }
+
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        // 结果集硬上限（#212）：超过 MaxMultiValueCount 个值整组判不合法——防恶意文档诱导 LLM 吐超长数组造成行膨胀
+        // （LLM 路径据此存 null + log，操作员手改路径 loud fail）。schema 的 maxItems 是软提示，此处是硬护栏。
+        if (value.GetArrayLength() > DocumentExtractedFieldConsts.MaxMultiValueCount)
+        {
+            return false;
+        }
+
+        foreach (var element in value.EnumerateArray())
+        {
+            if (!IsValid(element, dataType))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public static bool IsValid(JsonElement value, FieldDataType dataType)
     {
         return dataType switch

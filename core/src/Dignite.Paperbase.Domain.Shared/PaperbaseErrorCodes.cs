@@ -36,6 +36,8 @@ public static class PaperbaseErrorCodes
         public const string RestoreConflict = "Paperbase:FieldDefinitionRestoreConflict";
         public const string ParentTypeMissing = "Paperbase:FieldDefinitionParentTypeMissing";
         public const string DataTypeChangeNotAllowed = "Paperbase:FieldDefinitionDataTypeChangeNotAllowed";
+        public const string MultiValueRequiresStringType = "Paperbase:FieldDefinitionMultiValueRequiresStringType";
+        public const string MultiValueChangeNotAllowed = "Paperbase:FieldDefinitionMultiValueChangeNotAllowed";
     }
 
     public static class ExtractedField

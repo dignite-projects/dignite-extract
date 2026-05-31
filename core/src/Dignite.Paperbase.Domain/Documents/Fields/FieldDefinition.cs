@@ -40,6 +40,13 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
 
     public virtual bool IsRequired { get; private set; }
 
+    /// <summary>
+    /// 是否允许多值（#212）——仅对 <see cref="FieldDataType.String"/> 字段有效。为 true 时该字段的抽取值落成
+    /// 多行 <see cref="DocumentExtractedField"/>（复合键含 <c>Order</c> 位序），出口 <c>ExtractedFields</c> 渲染为 JSON 数组；
+    /// LLM 抽取 schema 告知模型返回 <c>string[]</c>。非 String 类型强行开多值由实体层 loud fail（见 <see cref="ValidateMultiValue"/>）。
+    /// </summary>
+    public virtual bool AllowMultiple { get; private set; }
+
     protected FieldDefinition() { }
 
     public FieldDefinition(
@@ -51,7 +58,8 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
         string prompt,
         FieldDataType dataType,
         int displayOrder = 0,
-        bool isRequired = false)
+        bool isRequired = false,
+        bool allowMultiple = false)
         : base(id)
     {
         TenantId = tenantId;
@@ -62,13 +70,15 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
         DataType = dataType;
         DisplayOrder = displayOrder;
         IsRequired = isRequired;
+        AllowMultiple = ValidateMultiValue(allowMultiple, dataType);
     }
 
     /// <summary>
     /// 更新字段定义。rename <see cref="Name"/> 是契约级变更（下游 / LLM prompt schema 依赖），UI 应警示。
-    /// <paramref name="dataType"/> 对已有抽取值的字段禁止改类型（防 typed-column 错位）由 AppService 调用前断言。
+    /// <paramref name="dataType"/> 对已有抽取值的字段禁止改类型（防 typed-column 错位），
+    /// <paramref name="allowMultiple"/> 由 multi→single 收窄对已有值字段禁止（防 Order&gt;0 行变孤儿）——两者均由 AppService 调用前断言。
     /// </summary>
-    public void Update(string name, string displayName, string prompt, FieldDataType dataType, int displayOrder, bool isRequired)
+    public void Update(string name, string displayName, string prompt, FieldDataType dataType, int displayOrder, bool isRequired, bool allowMultiple)
     {
         Name = ValidateName(name);
         DisplayName = ValidateDisplayName(displayName);
@@ -76,6 +86,7 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
         DataType = dataType;
         DisplayOrder = displayOrder;
         IsRequired = isRequired;
+        AllowMultiple = ValidateMultiValue(allowMultiple, dataType);
     }
 
     private static string ValidateName(string name)
@@ -104,5 +115,21 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
         }
 
         return displayName;
+    }
+
+    /// <summary>
+    /// 多值仅对 <see cref="FieldDataType.String"/> 有意义（#212）：多值落多行（复合键含 Order）只有 String 是
+    /// "短结构化值列表"语义（标签 / 关键词 / 多当事人）；Number/Boolean/Date/DateTime 的多值无现实抽取场景，
+    /// 且会让类型化列查询语义含糊。非 String 强行开多值 → loud fail。
+    /// </summary>
+    private static bool ValidateMultiValue(bool allowMultiple, FieldDataType dataType)
+    {
+        if (allowMultiple && dataType != FieldDataType.String)
+        {
+            throw new BusinessException(PaperbaseErrorCodes.FieldDefinition.MultiValueRequiresStringType)
+                .WithData("dataType", dataType.ToString());
+        }
+
+        return allowMultiple;
     }
 }

@@ -105,6 +105,7 @@ public class FieldExtractionWorkflow : ITransientDependency
         "Boolean as JSON true or false; " +
         "String as the original text. " +
         "When a field cannot be confidently extracted or normalized to its declared type, set its value to null. " +
+        "A field whose schema type is array accepts multiple values: return a JSON array of strings (each a distinct value found in the document), or an empty array when none apply. " +
         "The input document is provided as Markdown — treat headings, tables, and lists as semantic structure signals.";
 
     private static string BuildSchemaUserMessage(IReadOnlyList<FieldExtractionDescriptor> fields)
@@ -116,7 +117,9 @@ public class FieldExtractionWorkflow : ITransientDependency
             // f.Name 已经在 FieldDefinition 实体层经白名单 regex 校验，仅含 [A-Za-z0-9_-]。
             // f.Prompt 来自 Host 编译期常量或租户用户输入 —— 经 PromptBoundary.WrapField 显式标记为数据，
             // BoundaryRule 让模型把它当指令以外的内容看待。
-            sb.AppendLine($"- \"{f.Name}\" ({f.DataType}, {(f.IsRequired ? "required" : "optional")}): {PromptBoundary.WrapField(f.Prompt)}");
+            // #212：多值字段在类型标注后追加 "[]"（如 "String[]"）提示模型返回数组。
+            var typeLabel = f.AllowMultiple ? $"{f.DataType}[]" : f.DataType.ToString();
+            sb.AppendLine($"- \"{f.Name}\" ({typeLabel}, {(f.IsRequired ? "required" : "optional")}): {PromptBoundary.WrapField(f.Prompt)}");
         }
         return sb.ToString();
     }
@@ -128,7 +131,7 @@ public class FieldExtractionWorkflow : ITransientDependency
 
         foreach (var field in fields)
         {
-            properties[field.Name] = BuildFieldValueSchema(field.DataType);
+            properties[field.Name] = BuildFieldValueSchema(field.DataType, field.AllowMultiple);
             required.Add(field.Name);
         }
 
@@ -147,8 +150,24 @@ public class FieldExtractionWorkflow : ITransientDependency
             schemaDescription: "Extracted Paperbase field values keyed by field name.");
     }
 
-    private static JsonObject BuildFieldValueSchema(FieldDataType dataType)
+    private static JsonObject BuildFieldValueSchema(FieldDataType dataType, bool allowMultiple)
     {
+        // #212：多值字段（仅 String，FieldDefinition 实体层保证）→ array-or-null，元素为限长 string。
+        if (allowMultiple)
+        {
+            return new JsonObject
+            {
+                ["type"] = JsonTypes("array", "null"),
+                ["maxItems"] = DocumentExtractedFieldConsts.MaxMultiValueCount,
+                ["items"] = new JsonObject
+                {
+                    ["type"] = "string",
+                    ["maxLength"] = DocumentExtractedFieldConsts.MaxStringValueLength
+                },
+                ["description"] = "A JSON array of short structured string values, or null/empty array when absent."
+            };
+        }
+
         var schema = new JsonObject
         {
             ["type"] = JsonTypes(JsonTypeName(dataType), "null")
@@ -236,11 +255,11 @@ public class FieldExtractionWorkflow : ITransientDependency
             // 归一化责任在 prompt（AI 输出规范形）；此处是兜底护栏，不做强制转换——
             // 不符声明类型的值写 null + log，保证字段值类型自洽
             // （让 DocumentExtractedField 的类型化列查询建立在干净数据上）。
-            if (!ExtractedFieldValueValidator.IsValid(prop, field.DataType))
+            if (!ExtractedFieldValueValidator.IsValid(prop, field.DataType, field.AllowMultiple))
             {
                 _logger.LogWarning(
-                    "Field extraction value for '{FieldName}' did not match declared type {DataType} (JSON kind {JsonValueKind}); storing null.",
-                    field.Name, field.DataType, prop.ValueKind);
+                    "Field extraction value for '{FieldName}' did not match declared type {DataType} (multi={AllowMultiple}, JSON kind {JsonValueKind}); storing null.",
+                    field.Name, field.DataType, field.AllowMultiple, prop.ValueKind);
                 result[field.Name] = null;
                 continue;
             }

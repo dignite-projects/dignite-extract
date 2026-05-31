@@ -198,7 +198,7 @@ public class FieldExtractionEventHandler
             }
 
             var descriptors = definitions.Select(d => new FieldExtractionDescriptor(
-                d.Id, d.Name, d.Prompt, d.DataType, d.IsRequired)).ToList();
+                d.Id, d.Name, d.Prompt, d.DataType, d.IsRequired, d.AllowMultiple)).ToList();
 
             // 阶段 2：外部 LLM 调用，**不在任何 UoW 内**（background-jobs.md 硬约束）。
             // handler 上 [UnitOfWork(IsDisabled = true)] 关掉了 ambient UoW；
@@ -287,33 +287,46 @@ public class FieldExtractionEventHandler
                     continue;
                 }
 
-                if (!ExtractedFieldValueValidator.IsValid(value.Value, currentDefinition.DataType))
+                // #212：AllowMultiple in-flight 变更——LLM 输出形状（标量 vs 数组）按本轮 descriptor 的 AllowMultiple 生成，
+                // 与写入前最新定义不一致时跳过（与 DataType-change 同类守卫；否则下方 IsValid 也会因形状不符 fail）。
+                if (currentDefinition.AllowMultiple != d.AllowMultiple)
                 {
                     _logger.LogWarning(
-                        "FieldExtractionWorkflow returned an invalid {DataType} value for field {FieldName} ({FieldDefinitionId}) on doc {DocumentId}; value skipped.",
-                        currentDefinition.DataType, currentDefinition.Name, currentDefinition.Id, eventData.DocumentId);
+                        "FieldDefinition {FieldDefinitionId} AllowMultiple changed during extraction for doc {DocumentId}: {OldAllowMultiple} -> {NewAllowMultiple}; stale value skipped.",
+                        d.FieldDefinitionId, eventData.DocumentId, d.AllowMultiple, currentDefinition.AllowMultiple);
                     continue;
                 }
 
-                fieldValues.Add(new DocumentFieldValue(
-                    currentDefinition.Id,
-                    currentDefinition.DataType,
-                    value.Value));
+                if (!ExtractedFieldValueValidator.IsValid(value.Value, currentDefinition.DataType, currentDefinition.AllowMultiple))
+                {
+                    _logger.LogWarning(
+                        "FieldExtractionWorkflow returned an invalid {DataType} (multi={AllowMultiple}) value for field {FieldName} ({FieldDefinitionId}) on doc {DocumentId}; value skipped.",
+                        currentDefinition.DataType, currentDefinition.AllowMultiple, currentDefinition.Name, currentDefinition.Id, eventData.DocumentId);
+                    continue;
+                }
+
+                // #212：单值 → 1 行（Order 0）；多值 String → 按 JSON 数组元素拆多行（Order 0,1,2…）。
+                fieldValues.AddRange(DocumentFieldValueFactory.Expand(
+                    currentDefinition.Id, currentDefinition.DataType, currentDefinition.AllowMultiple, value.Value));
             }
 
             document.SetFields(fieldValues);
+
+            // #212：FieldsExtractedEto.FieldCount 是逻辑字段数（拿到值的不同字段个数），非展开后的行数——
+            // 多值字段的多行不应膨胀该薄信号（下游回拉详细数据）。
+            var fieldCount = fieldValues.Select(v => v.FieldDefinitionId).Distinct().Count();
 
             await _documentRepository.UpdateAsync(document, autoSave: true);
 
             // 在 UoW 内 publish，让 ABP transactional outbox 把事件与字段值的写入原子地一起持久化——
             // 避免"字段写入成功但事件丢失"。
-            await PublishFieldsExtractedAsync(eventData, fieldValues.Count, documentTypeCode);
+            await PublishFieldsExtractedAsync(eventData, fieldCount, documentTypeCode);
 
             await writeUow.CompleteAsync();
 
             _logger.LogInformation(
-                "Field extraction for document {DocumentId} produced {NonNullCount}/{TotalCount} non-null values.",
-                eventData.DocumentId, fieldValues.Count, definitions.Count);
+                "Field extraction for document {DocumentId} produced {NonNullCount}/{TotalCount} non-null fields ({RowCount} value rows).",
+                eventData.DocumentId, fieldCount, definitions.Count, fieldValues.Count);
         }
     }
 

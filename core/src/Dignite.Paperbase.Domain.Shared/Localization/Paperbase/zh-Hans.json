@@ -12,6 +12,8 @@
     "Paperbase:FieldDefinitionRestoreConflict": "无法恢复字段 '{Name}'：文档类型 '{DocumentTypeCode}' 下已存在另一个未删除的同名字段。",
     "Paperbase:FieldDefinitionParentTypeMissing": "无法恢复字段 '{Name}'：父文档类型 '{DocumentTypeCode}' 不存在或仍处于已删除状态，请先恢复该类型。",
     "Paperbase:FieldDefinitionDataTypeChangeNotAllowed": "无法修改字段 '{Name}' 的数据类型：该字段已存在抽取值。请改为新建字段。",
+    "Paperbase:FieldDefinitionMultiValueRequiresStringType": "多值仅支持 String 类型字段，但请求的是 '{dataType}'。请将字段声明为 String 类型再开启多值。",
+    "Paperbase:FieldDefinitionMultiValueChangeNotAllowed": "无法关闭字段 '{Name}' 的多值：该字段已存在抽取值，收窄为单值会让多余的值变成孤儿行。请改为新建字段。",
     "Paperbase:InvalidFieldDefinitionName": "字段名 '{name}' 不合法。名称只能包含字母 / 数字 / 下划线 / 短横线，长度 1-64 字符。",
     "Paperbase:InvalidFieldDefinitionDisplayName": "字段显示名 '{displayName}' 包含换行 / 制表符等控制字符，不允许使用。",
     "Paperbase:InvalidDocumentTypeDisplayName": "文档类型显示名 '{displayName}' 包含换行 / 制表符等控制字符，不允许使用。",

@@ -15,4 +15,7 @@ public class FieldDefinitionDto : EntityDto<Guid>
     public FieldDataType DataType { get; set; }
     public int DisplayOrder { get; set; }
     public bool IsRequired { get; set; }
+
+    /// <summary>是否允许多值（#212）——仅 <see cref="FieldDataType.String"/> 字段为 true 时该字段出口渲染为 JSON 数组。</summary>
+    public bool AllowMultiple { get; set; }
 }

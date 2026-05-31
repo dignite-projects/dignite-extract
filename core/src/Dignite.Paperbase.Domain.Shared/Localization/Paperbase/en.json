@@ -202,6 +202,8 @@
     "Paperbase:FieldDefinitionRestoreConflict": "Cannot restore field '{Name}' on document type '{DocumentTypeCode}': another active field with the same name already exists.",
     "Paperbase:FieldDefinitionParentTypeMissing": "Cannot restore field '{Name}': the parent document type '{DocumentTypeCode}' is missing or still deleted. Restore the document type first.",
     "Paperbase:FieldDefinitionDataTypeChangeNotAllowed": "Cannot change the data type of field '{Name}': it already has extracted values stored. Create a new field instead.",
+    "Paperbase:FieldDefinitionMultiValueRequiresStringType": "Multi-value is only supported for String fields, but '{dataType}' was requested. Use a String field to allow multiple values.",
+    "Paperbase:FieldDefinitionMultiValueChangeNotAllowed": "Cannot turn off multi-value on field '{Name}': it already has extracted values stored, and narrowing to single-value would orphan the extra values. Create a new field instead.",
     "Paperbase:InvalidFieldDefinitionName": "Field name '{name}' is invalid. Names must match pattern '{pattern}' (letters, digits, underscore, hyphen; 1-64 chars).",
     "Paperbase:InvalidFieldDefinitionDisplayName": "Field display name '{displayName}' contains control characters (newlines, tabs, etc.), which are not allowed.",
     "Paperbase:InvalidDocumentTypeDisplayName": "Document type display name '{displayName}' contains control characters (newlines, tabs, etc.), which are not allowed.",

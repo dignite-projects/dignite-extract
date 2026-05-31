@@ -82,7 +82,8 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
             input.Prompt,
             input.DataType,
             input.DisplayOrder,
-            input.IsRequired);
+            input.IsRequired,
+            input.AllowMultiple);
 
         await _repository.InsertAsync(entity, autoSave: true);
         return ObjectMapper.Map<FieldDefinition, FieldDefinitionDto>(entity);
@@ -124,7 +125,16 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
                 .WithData("Name", entity.Name);
         }
 
-        entity.Update(input.Name, input.DisplayName, input.Prompt, input.DataType, input.DisplayOrder, input.IsRequired);
+        // 多值收窄守卫（#212）：multi→single 对已有抽取值的字段禁止——Order>0 行会变孤儿（出口只渲染 Order 0，
+        // 多余值被静默丢弃，存储行残留）。single→multi 是无损放宽（既有单值行即 1 元素列表），放行。
+        if (entity.AllowMultiple && !input.AllowMultiple
+            && await _documentRepository.AnyExtractedFieldValueAsync(entity.Id))
+        {
+            throw new BusinessException(PaperbaseErrorCodes.FieldDefinition.MultiValueChangeNotAllowed)
+                .WithData("Name", entity.Name);
+        }
+
+        entity.Update(input.Name, input.DisplayName, input.Prompt, input.DataType, input.DisplayOrder, input.IsRequired, input.AllowMultiple);
         await _repository.UpdateAsync(entity, autoSave: true);
         return ObjectMapper.Map<FieldDefinition, FieldDefinitionDto>(entity);
     }

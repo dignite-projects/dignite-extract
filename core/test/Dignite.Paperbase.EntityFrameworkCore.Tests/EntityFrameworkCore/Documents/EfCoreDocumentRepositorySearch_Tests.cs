@@ -421,6 +421,90 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
         });
     }
 
+    // ─── 多值 String 字段（#212） ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task Multi_value_string_field_persists_ordered_rows_and_matches_any_value()
+    {
+        await WithUnitOfWorkAsync(async () =>
+        {
+            // 多值字段一字段多行（复合键含 Order）。AllowMultiple 是 App 层展开闸门——EF 存储 / 查询层只看行，
+            // 故此处直接构造 3 个同 FieldDefinitionId、不同 Order 的值行验证存储 + 查询机制。
+            var tagsId = FieldId("tags");
+            var values = new[]
+            {
+                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("urgent"), 0),
+                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("legal"), 1),
+                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("2026"), 2),
+            };
+            var id = await InsertDocumentAsync(values);
+
+            // 3 行持久化，按 Order 还原。
+            var doc = await _documentRepository.GetAsync(id, includeDetails: true);
+            doc.ExtractedFieldValues.Count.ShouldBe(3);
+            doc.ExtractedFieldValues.OrderBy(f => f.Order).Select(f => f.StringValue)
+                .ShouldBe(new[] { "urgent", "legal", "2026" });
+
+            // 按任一值命中（.Any 跨多行；查询路径对多值天然兼容，无需改动）。
+            var byMiddle = await _documentRepository.GetFieldMatchedIdsAsync(
+                TypeId(TypeCode), new[] { Query("tags", FieldDataType.String, value: "legal") });
+            byMiddle.ShouldHaveSingleItem().ShouldBe(id);
+
+            var byLast = await _documentRepository.GetFieldMatchedIdsAsync(
+                TypeId(TypeCode), new[] { Query("tags", FieldDataType.String, value: "2026") });
+            byLast.ShouldHaveSingleItem().ShouldBe(id);
+
+            // 未抽到的值不命中。
+            var miss = await _documentRepository.GetFieldMatchedIdsAsync(
+                TypeId(TypeCode), new[] { Query("tags", FieldDataType.String, value: "archived") });
+            miss.ShouldBeEmpty();
+        });
+    }
+
+    [Fact]
+    public async Task Multi_value_field_shrinks_via_reconcile_without_orphan_rows()
+    {
+        Guid id = Guid.NewGuid();
+        var tagsId = FieldId("tags");
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var values = new[]
+            {
+                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("a"), 0),
+                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("b"), 1),
+                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("c"), 2),
+            };
+            await EnsureSchemaAsync(TypeCode, values);
+            await _documentRepository.InsertAsync(
+                CreateDocument(id, _currentTenant.Id, TypeCode, values), autoSave: true);
+        });
+
+        // ["a","b","c"] → ["x","y"]：Order 0/1 原地改、Order 2 删除（reconcile，无键碰撞 / 孤儿行）。
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var doc = await _documentRepository.GetAsync(id, includeDetails: true);
+            doc.SetFields(new[]
+            {
+                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("x"), 0),
+                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("y"), 1),
+            });
+            await _documentRepository.UpdateAsync(doc, autoSave: true);
+        });
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var reloaded = await _documentRepository.GetAsync(id, includeDetails: true);
+            reloaded.ExtractedFieldValues.OrderBy(f => f.Order).Select(f => f.StringValue)
+                .ShouldBe(new[] { "x", "y" });
+
+            // 被删除的 Order 2 旧值（"c"）查不到。
+            var oldHits = await _documentRepository.GetFieldMatchedIdsAsync(
+                TypeId(TypeCode), new[] { Query("tags", FieldDataType.String, value: "c") });
+            oldHits.ShouldBeEmpty();
+        });
+    }
+
     // ─── 整组替换 / 原地更新（reconcile） ───────────────────────────────────────
 
     [Fact]
@@ -476,7 +560,7 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
                 autoSave: true);
         });
 
-        // 操作员手改：同字段值改 100 → 200（复合键 (DocumentId, FieldDefinitionId) 下 reconcile 原地更新，不产生重复行 / PK 冲突）。
+        // 操作员手改：同字段值改 100 → 200（复合键 (DocumentId, FieldDefinitionId, Order) 下单值字段 Order 0 reconcile 原地更新，不产生重复行 / PK 冲突）。
         await WithUnitOfWorkAsync(async () =>
         {
             var doc = await _documentRepository.GetAsync(id, includeDetails: true);

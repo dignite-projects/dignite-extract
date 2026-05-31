@@ -223,9 +223,11 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// 调用方提交该文档当前的全部字段值（已校验值类型与 <see cref="DocumentFieldValue.DataType"/> 对齐，
     /// 且每个 <see cref="DocumentFieldValue.FieldDefinitionId"/> 解析自该文档所属层 / 类型下的 <c>FieldDefinition</c>）。
     /// <para>
-    /// 用 <b>reconcile</b> 而非 clear+add：同字段（按 <see cref="DocumentFieldValue.FieldDefinitionId"/>）<b>原地更新</b>、
-    /// 消失的删除、新增的插入。原因——复合主键 <c>(DocumentId, FieldDefinitionId)</c> 下，clear+add 会在单次 SaveChanges 内
-    /// 对同键产生 delete+insert，触发唯一冲突 / EF 操作排序风险（操作员把 <c>amount=100</c> 改 <c>200</c> 即同字段替换）。
+    /// 用 <b>reconcile</b> 而非 clear+add：同字段值行（按 <see cref="DocumentFieldValue.FieldDefinitionId"/> +
+    /// <see cref="DocumentFieldValue.Order"/>，#212）<b>原地更新</b>、消失的删除、新增的插入。原因——复合主键
+    /// <c>(DocumentId, FieldDefinitionId, Order)</c> 下，clear+add 会在单次 SaveChanges 内对同键产生 delete+insert，
+    /// 触发唯一冲突 / EF 操作排序风险（操作员把 <c>amount=100</c> 改 <c>200</c> 即同字段同 Order 替换；多值 String
+    /// 字段 <c>["a","b","c"] → ["x","y"]</c> 时 Order 0/1 原地改、Order 2 删除，无键碰撞）。
     /// </para>
     /// 原子状态变更，无需经 DomainService 中转（与 <see cref="SetMarkdown"/> 等必须与 pipeline 完成事务组合的 internal setter 不同）。
     /// <b>前置条件</b>：<see cref="DocumentTypeId"/> 非空（字段挂在文档类型下；两条调用路径均在分类完成后调用）。
@@ -235,12 +237,12 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         var incoming = values?.ToList() ?? new List<DocumentFieldValue>();
 
         _extractedFieldValues.RemoveAll(existing =>
-            incoming.All(v => v.FieldDefinitionId != existing.FieldDefinitionId));
+            incoming.All(v => v.FieldDefinitionId != existing.FieldDefinitionId || v.Order != existing.Order));
 
         foreach (var value in incoming)
         {
             var existing = _extractedFieldValues.FirstOrDefault(
-                f => f.FieldDefinitionId == value.FieldDefinitionId);
+                f => f.FieldDefinitionId == value.FieldDefinitionId && f.Order == value.Order);
             if (existing != null)
             {
                 existing.SetValue(value);

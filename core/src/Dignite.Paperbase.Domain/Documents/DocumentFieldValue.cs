@@ -15,9 +15,15 @@ namespace Dignite.Paperbase.Documents;
 /// JsonElement → typed 的转换集中在子实体内）。
 /// </para>
 /// <para>
-/// <paramref name="Value"/> 必须是与 <paramref name="DataType"/> 对齐的规范 JSON 形（数字裸 number、
+/// <paramref name="Value"/> 必须是与 <paramref name="DataType"/> 对齐的规范 JSON <b>标量</b>形（数字裸 number、
 /// 布尔 true/false、Date 为 <c>"yyyy-MM-dd"</c> 字符串、DateTime 为无偏移 <c>"yyyy-MM-ddThh:mm:ss"</c>
 /// 字符串）；不对齐的值在 App 层已被滤掉 / loud fail，绝不到达此处。
 /// </para>
+/// <para>
+/// <paramref name="Order"/>（#212）是该值在所属字段多值集合内的 0-based 位序，参与 <see cref="DocumentExtractedField"/>
+/// 复合主键 <c>(DocumentId, FieldDefinitionId, Order)</c>。单值字段恒为 0；多值 String 字段（<c>FieldDefinition.AllowMultiple</c>）
+/// 的 JSON 数组由 App 层拆成多个本记录（<c>Order = 0,1,2…</c>，每元素一个标量）。<see cref="Document.SetFields"/> 按
+/// <c>(FieldDefinitionId, Order)</c> reconcile。
+/// </para>
 /// </summary>
-public sealed record DocumentFieldValue(Guid FieldDefinitionId, FieldDataType DataType, JsonElement Value);
+public sealed record DocumentFieldValue(Guid FieldDefinitionId, FieldDataType DataType, JsonElement Value, int Order = 0);

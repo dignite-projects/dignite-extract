@@ -81,7 +81,7 @@ public class FieldDefinitionTests
     {
         var def = CreateDefinition("amount", "Amount");
         Should.Throw<BusinessException>(() =>
-                def.Update("amount", "Bad\nName", "Extract", FieldDataType.String, 0, false))
+                def.Update("amount", "Bad\nName", "Extract", FieldDataType.String, 0, false, false))
             .Code.ShouldBe(PaperbaseErrorCodes.FieldDefinition.InvalidDisplayName);
     }
 
@@ -92,7 +92,7 @@ public class FieldDefinitionTests
         var def = CreateDefinition("amt", "Amount");
         def.Name.ShouldBe("amt");
 
-        def.Update("total_amount", "Amount", "Extract", FieldDataType.String, 0, false);
+        def.Update("total_amount", "Amount", "Extract", FieldDataType.String, 0, false, false);
 
         def.Name.ShouldBe("total_amount");
     }
@@ -103,8 +103,43 @@ public class FieldDefinitionTests
         // rename 解锁不等于跳过 regex 白名单——非法 Name 仍被拒。
         var def = CreateDefinition("amount", "Amount");
         Should.Throw<BusinessException>(() =>
-                def.Update("bad name", "Amount", "Extract", FieldDataType.String, 0, false))
+                def.Update("bad name", "Amount", "Extract", FieldDataType.String, 0, false, false))
             .Code.ShouldBe(PaperbaseErrorCodes.FieldDefinition.InvalidName);
+    }
+
+    // ─── AllowMultiple 不变量（#212：仅 String 字段可多值） ───────────────────────
+
+    [Fact]
+    public void Should_Accept_AllowMultiple_On_String_Field()
+    {
+        var def = new FieldDefinition(
+            Guid.NewGuid(), null, Guid.NewGuid(), "tags", "Tags", "Extract tags.",
+            FieldDataType.String, allowMultiple: true);
+
+        def.AllowMultiple.ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData(FieldDataType.Number)]
+    [InlineData(FieldDataType.Boolean)]
+    [InlineData(FieldDataType.Date)]
+    [InlineData(FieldDataType.DateTime)]
+    public void Should_Reject_AllowMultiple_On_Non_String_Field(FieldDataType dataType)
+    {
+        var ex = Should.Throw<BusinessException>(() => new FieldDefinition(
+            Guid.NewGuid(), null, Guid.NewGuid(), "f", "F", "Extract.",
+            dataType, allowMultiple: true));
+
+        ex.Code.ShouldBe(PaperbaseErrorCodes.FieldDefinition.MultiValueRequiresStringType);
+    }
+
+    [Fact]
+    public void Update_Should_Reject_AllowMultiple_On_Non_String_Field()
+    {
+        var def = CreateDefinition("amount", "Amount");
+        Should.Throw<BusinessException>(() =>
+                def.Update("amount", "Amount", "Extract", FieldDataType.Number, 0, false, allowMultiple: true))
+            .Code.ShouldBe(PaperbaseErrorCodes.FieldDefinition.MultiValueRequiresStringType);
     }
 
     private static FieldDefinition CreateDefinition(string name, string displayName = "Amount") =>

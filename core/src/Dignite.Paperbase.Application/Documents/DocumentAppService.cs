@@ -445,8 +445,9 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         var definitionsByName = definitions.ToDictionary(d => d.Name, StringComparer.Ordinal);
         var fields = input.Fields ?? new Dictionary<string, JsonElement>();
 
-        // 校验每个值符合声明类型后，构造 typed DocumentFieldValue（FieldDefinitionId + DataType 来自 FieldDefinition）。
+        // 校验每个值符合声明类型后，展开成 typed DocumentFieldValue（FieldDefinitionId + DataType 来自 FieldDefinition）。
         // 校验通过即可直接交给聚合根，不再经 JSON 字典中转——值类型与列对齐的转换集中在 DocumentExtractedField 内。
+        // #212：多值 String 字段的 JSON 数组由 DocumentFieldValueFactory 拆成多行（Order 0,1,2…），单值字段 1 行（Order 0）。
         var fieldValues = new List<DocumentFieldValue>(fields.Count);
         foreach (var (key, value) in fields)
         {
@@ -457,22 +458,25 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
                     .WithData("DocumentTypeCode", documentTypeCode ?? string.Empty);
             }
 
-            if (!ExtractedFieldValueValidator.IsValid(value, definition.DataType))
+            if (!ExtractedFieldValueValidator.IsValid(value, definition.DataType, definition.AllowMultiple))
             {
                 throw new BusinessException(PaperbaseErrorCodes.ExtractedField.InvalidValue)
                     .WithData("FieldName", key)
                     .WithData("DocumentTypeCode", documentTypeCode ?? string.Empty)
                     .WithData("DataType", definition.DataType.ToString())
+                    .WithData("AllowMultiple", definition.AllowMultiple.ToString())
                     .WithData("JsonValueKind", value.ValueKind.ToString());
             }
 
-            fieldValues.Add(new DocumentFieldValue(definition.Id, definition.DataType, value));
+            fieldValues.AddRange(DocumentFieldValueFactory.Expand(
+                definition.Id, definition.DataType, definition.AllowMultiple, value));
         }
 
         // 整组替换（与 FieldExtractionEventHandler 一致：空则清空全部字段行）。
         document.SetFields(fieldValues);
         await _documentRepository.UpdateAsync(document, autoSave: true);
 
+        // FieldsExtractedEto.FieldCount 是逻辑字段数（输入 key 数），非展开后的行数（#212：多值字段不膨胀该薄信号）。
         // 复用 FieldsExtractedEto 重发——手改与 LLM 抽取对下游是同一种"字段已更新"信号，
         // 下游按 (DocumentId, EventType, EventTime) 幂等、回拉最新字段值（出口契约：薄载荷）。
         await _distributedEventBus.PublishAsync(
@@ -482,7 +486,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
                 TenantId = document.TenantId,
                 EventTime = Clock.Now,
                 DocumentTypeCode = documentTypeCode,
-                FieldCount = fieldValues.Count
+                FieldCount = fields.Count
             });
 
         return await MapToDtoAsync(document);
@@ -670,15 +674,23 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
             return null;
         }
 
-        var dict = new Dictionary<string, JsonElement>(values.Count, StringComparer.Ordinal);
-        foreach (var v in values)
+        // 按 FieldDefinitionId 分组（#212）：多值 String 字段一字段多行（Order 0,1,2…），单值一字段一行（Order 0）。
+        var dict = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var group in values.GroupBy(v => v.FieldDefinitionId))
         {
             // FK RESTRICT 保证被引用字段定义不会被硬删；软删的由穿透 join 解析。极端缺失则跳过（不吐半成品 key）。
             // 出口 JSON 类型由 FieldDefinition.DataType 决定（#208：不在字段值行持久化）。
-            if (fieldDefs.TryGetValue(v.FieldDefinitionId, out var def))
+            if (!fieldDefs.TryGetValue(group.Key, out var def))
             {
-                dict[def.Name] = v.ToJsonElement(def.DataType);
+                continue;
             }
+
+            // #212 范围限定：出口 ExtractedFields 字典格式本期不变（用户明确"出口契约可以不做"）——多值字段
+            // 取 Order 最小行渲染标量，wire-shape 与多值前完全一致（既有消费方 / MCP ProjectFields / 导出列零感知）。
+            // 多值的完整集合当前经字段过滤查询消费（GetFieldMatchedIdsAsync 的 .Any 跨全部行命中任一值）；
+            // 数组出口形态（含 MCP 逐元素 PromptBoundary 包裹、导出列 join）留作后续出口契约增量。
+            var primary = group.OrderBy(v => v.Order).First();
+            dict[def.Name] = primary.ToJsonElement(def.DataType);
         }
 
         return dict.Count > 0 ? dict : null;

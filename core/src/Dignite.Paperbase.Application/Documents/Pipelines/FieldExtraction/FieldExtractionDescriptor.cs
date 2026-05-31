@@ -17,4 +17,5 @@ public sealed record FieldExtractionDescriptor(
     string Name,
     string Prompt,
     FieldDataType DataType,
-    bool IsRequired);
+    bool IsRequired,
+    bool AllowMultiple);

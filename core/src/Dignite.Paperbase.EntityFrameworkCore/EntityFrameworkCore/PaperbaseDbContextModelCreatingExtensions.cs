@@ -125,9 +125,10 @@ public static class PaperbaseDbContextModelCreatingExtensions
             b.ToTable(PaperbaseDbProperties.DbTablePrefix + "DocumentExtractedFields", PaperbaseDbProperties.DbSchema);
             b.ConfigureByConvention();
 
-            // 复合主键 (DocumentId, FieldDefinitionId) = 字段集自然键（#207）：同文档同字段唯一，reconcile 整组替换不留重复行。
+            // 复合主键 (DocumentId, FieldDefinitionId, Order)（#207 + #212）：单值字段 Order 恒 0（同文档同字段唯一）；
+            // 多值 String 字段（AllowMultiple）一字段多行、Order 0/1/2…。reconcile 按 (FieldDefinitionId, Order) 原地替换不留重复行。
             // DocumentId 同时是指向 Document 聚合根的外键（identifying relationship）。
-            b.HasKey(x => new { x.DocumentId, x.FieldDefinitionId });
+            b.HasKey(x => new { x.DocumentId, x.FieldDefinitionId, x.Order });
 
             // 字段类型不在本行持久化（#208）：由所引用 FieldDefinition.DataType 决定，读 / 导出路径已 load 该实体。
             // StringValue 限长 nvarchar(256)（#209）：类型绑定 String 字段是从 Markdown 抽取的结构化短值（姓名 / 编号 /

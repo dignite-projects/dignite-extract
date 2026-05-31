@@ -16,4 +16,16 @@ public static class DocumentExtractedFieldConsts
     /// </para>
     /// </summary>
     public static int MaxStringValueLength { get; set; } = 256;
+
+    /// <summary>
+    /// 多值字段（<c>FieldDefinition.AllowMultiple</c>，#212）单字段的最大值个数 = 单文档单字段展开行数硬上限。
+    /// <para>
+    /// 这是 LLM 触发写入路径的「结果集硬上限」（CLAUDE.md 安全约定 / <c>llm-call-anti-patterns.md</c> § 2.9 在写入侧的同构）：
+    /// 恶意文档可诱导 LLM 对多值字段吐超长数组，逐元素落 <c>DocumentExtractedField</c> 行造成行膨胀。
+    /// 双层护栏——LLM schema 下发 <c>maxItems</c> 软约束 + <c>ExtractedFieldValueValidator</c> 硬校验（超限整组判不合法 → LLM 路径存 null、
+    /// 操作员手改路径 loud fail），与项目「schema 提示 + validator 兜底」既有风格一致。多值仅承载短结构化值列表
+    /// （标签 / 关键词 / 多当事人），100 是充裕上限。
+    /// </para>
+    /// </summary>
+    public static int MaxMultiValueCount { get; set; } = 100;
 }
