@@ -58,8 +58,8 @@ public class DocumentPipelineRunAggregatePersistence_Tests
         return new Document(
             id,
             tenantId: null,
-            originalFileBlobName: "blobs/test.pdf",
             fileOrigin: new FileOrigin(
+                blobName: "blobs/test.pdf",
                 uploadedByUserName: "test-user",
                 contentType: "application/pdf",
                 contentHash: $"{Guid.NewGuid():N}{Guid.NewGuid():N}",

@@ -109,8 +109,7 @@ public class DocumentReadAssembly_Tests : PaperbaseEntityFrameworkCoreTestBase
         var doc = new Document(
             id,
             tenantId: null,
-            originalFileBlobName: $"blobs/{id:N}.pdf",
-            fileOrigin: new FileOrigin("test-user", "application/pdf", $"{Guid.NewGuid():N}{Guid.NewGuid():N}", 1024, "f.pdf"));
+            fileOrigin: new FileOrigin($"blobs/{id:N}.pdf", "test-user", "application/pdf", $"{Guid.NewGuid():N}{Guid.NewGuid():N}", 1024, "f.pdf"));
         typeof(Document).GetProperty(nameof(Document.DocumentTypeId))!.SetValue(doc, TypeId(TypeCode));
         if (fields.Length > 0)
         {

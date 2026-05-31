@@ -272,8 +272,8 @@ public class DocumentAppService_Retry_Tests
         return new Document(
             Guid.NewGuid(),
             tenantId,
-            $"blobs/{Guid.NewGuid():N}.pdf",
             new FileOrigin(
+                blobName: $"blobs/{Guid.NewGuid():N}.pdf",
                 uploadedByUserName: "test-user",
                 contentType: "application/pdf",
                 contentHash: $"{Guid.NewGuid():N}{Guid.NewGuid():N}",

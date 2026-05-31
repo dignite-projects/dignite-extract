@@ -62,8 +62,8 @@ public class DocumentPipelineRunAccessorTests
         return new Document(
             Guid.NewGuid(),
             tenantId: Guid.NewGuid(),
-            originalFileBlobName: $"blobs/{Guid.NewGuid():N}.pdf",
             fileOrigin: new FileOrigin(
+                blobName: $"blobs/{Guid.NewGuid():N}.pdf",
                 uploadedByUserName: "test-user",
                 contentType: "application/pdf",
                 contentHash: $"{Guid.NewGuid():N}{Guid.NewGuid():N}",

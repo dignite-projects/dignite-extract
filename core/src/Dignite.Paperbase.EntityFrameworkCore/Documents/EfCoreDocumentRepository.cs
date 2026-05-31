@@ -33,7 +33,7 @@ public class EfCoreDocumentRepository
         var dbSet = await GetDbSetAsync();
         return await dbSet
             .FirstOrDefaultAsync(
-                d => d.OriginalFileBlobName == blobName,
+                d => d.FileOrigin.BlobName == blobName,
                 GetCancellationToken(cancellationToken));
     }
 

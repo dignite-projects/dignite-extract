@@ -514,8 +514,8 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
         var doc = new Document(
             id,
             tenantId,
-            originalFileBlobName: $"blobs/{id:N}.pdf",
             fileOrigin: new FileOrigin(
+                blobName: $"blobs/{id:N}.pdf",
                 uploadedByUserName: "test-user",
                 contentType: "application/pdf",
                 contentHash: $"{Guid.NewGuid():N}{Guid.NewGuid():N}",

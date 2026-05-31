@@ -16,9 +16,6 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     // 多租户
     public virtual Guid? TenantId { get; private set; }
 
-    /// <summary>BlobStore 中的 Key，写入后不可修改</summary>
-    public virtual string OriginalFileBlobName { get; private set; } = default!;
-
     /// <summary>文件来源信息（不可变）</summary>
     public virtual FileOrigin FileOrigin { get; private set; } = default!;
 
@@ -62,7 +59,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// <summary>
     /// 文档展示标题（文本提取流水线 Run 成功后写入，不可变）。
     /// 由 <see cref="MarkdownTitleExtractor"/> 从 <see cref="Markdown"/> 提取，失败时上游回退为不带扩展名的文件名。
-    /// 迁移之前的历史记录可能为 null；读路径需回退到 <see cref="FileOrigin"/>.OriginalFileName / <see cref="OriginalFileBlobName"/>。
+    /// 迁移之前的历史记录可能为 null；读路径需回退到 <see cref="FileOrigin"/>.OriginalFileName / <see cref="FileOrigin"/>.BlobName。
     /// </summary>
     public virtual string? Title { get; private set; }
 
@@ -132,13 +129,11 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     public Document(
         Guid id,
         Guid? tenantId,
-        string originalFileBlobName,
         FileOrigin fileOrigin,
         Guid? cabinetId = null)
         : base(id)
     {
         TenantId = tenantId;
-        OriginalFileBlobName = Check.NotNullOrWhiteSpace(originalFileBlobName, nameof(originalFileBlobName));
         FileOrigin = Check.NotNull(fileOrigin, nameof(fileOrigin));
         CabinetId = cabinetId;
         LifecycleStatus = DocumentLifecycleStatus.Uploaded;

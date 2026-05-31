@@ -9,6 +9,9 @@ namespace Dignite.Paperbase.Documents;
 /// </summary>
 public class FileOrigin : ValueObject
 {
+    /// <summary>BlobStore 中的 Key，写入后不可修改</summary>
+    public string BlobName { get; private set; } = default!;
+
     /// <summary>上传操作人名称快照（冗余存储，防止用户删除后丢失信息）</summary>
     public string UploadedByUserName { get; private set; } = default!;
 
@@ -27,12 +30,14 @@ public class FileOrigin : ValueObject
     protected FileOrigin() { }
 
     public FileOrigin(
+        string blobName,
         string uploadedByUserName,
         string contentType,
         string contentHash,
         long fileSize,
         string? originalFileName = null)
     {
+        BlobName = Check.NotNullOrWhiteSpace(blobName, nameof(blobName), FileOriginConsts.MaxBlobNameLength);
         UploadedByUserName = Check.NotNullOrWhiteSpace(
             uploadedByUserName,
             nameof(uploadedByUserName),
@@ -45,6 +50,7 @@ public class FileOrigin : ValueObject
 
     protected override IEnumerable<object> GetAtomicValues()
     {
+        yield return BlobName;
         yield return UploadedByUserName;
         yield return OriginalFileName ?? string.Empty;
         yield return ContentType;

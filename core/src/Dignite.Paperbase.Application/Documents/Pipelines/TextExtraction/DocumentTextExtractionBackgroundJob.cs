@@ -77,7 +77,7 @@ public class DocumentTextExtractionBackgroundJob
 
         try
         {
-            var blobStream = await _blobContainer.GetAsync(workItem.OriginalFileBlobName);
+            var blobStream = await _blobContainer.GetAsync(workItem.BlobName);
             var ctx = new TextExtractionContext
             {
                 ContentType = workItem.ContentType,
@@ -117,7 +117,7 @@ public class DocumentTextExtractionBackgroundJob
 
         return new TextExtractionWorkItem(
             run.Id,
-            document.OriginalFileBlobName,
+            document.FileOrigin.BlobName,
             document.FileOrigin.ContentType,
             document.FileOrigin.OriginalFileName);
     }
@@ -295,7 +295,7 @@ public class DocumentTextExtractionBackgroundJob
 
     private sealed record TextExtractionWorkItem(
         Guid RunId,
-        string OriginalFileBlobName,
+        string BlobName,
         string ContentType,
         string? OriginalFileName);
 }

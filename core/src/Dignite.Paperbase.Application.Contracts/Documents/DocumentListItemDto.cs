@@ -8,7 +8,6 @@ namespace Dignite.Paperbase.Documents;
 public class DocumentListItemDto : EntityDto<Guid>
 {
     public Guid? TenantId { get; set; }
-    public string OriginalFileBlobName { get; set; } = default!;
     public FileOriginDto FileOrigin { get; set; } = default!;
 
     /// <summary>所属文件柜（#194）。null = 未归类。柜名由前端用柜列表 map 显示。</summary>

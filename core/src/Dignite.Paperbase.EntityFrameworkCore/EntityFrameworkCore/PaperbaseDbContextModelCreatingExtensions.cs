@@ -54,7 +54,6 @@ public static class PaperbaseDbContextModelCreatingExtensions
             b.ToTable(PaperbaseDbProperties.DbTablePrefix + "Documents", PaperbaseDbProperties.DbSchema);
             b.ConfigureByConvention();
 
-            b.Property(x => x.OriginalFileBlobName).IsRequired().HasMaxLength(DocumentConsts.MaxOriginalFileBlobNameLength);
             b.Property(x => x.LifecycleStatus).IsRequired();
             b.Property(x => x.ReviewStatus).IsRequired();
             b.Property(x => x.ClassificationReason);
@@ -77,6 +76,9 @@ public static class PaperbaseDbContextModelCreatingExtensions
 
             b.OwnsOne(x => x.FileOrigin, fo =>
             {
+                fo.Property(x => x.BlobName)
+                    .IsRequired()
+                    .HasMaxLength(FileOriginConsts.MaxBlobNameLength);
                 fo.Property(x => x.UploadedByUserName)
                     .IsRequired()
                     .HasMaxLength(FileOriginConsts.MaxUploadedByUserNameLength);

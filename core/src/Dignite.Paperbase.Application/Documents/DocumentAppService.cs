@@ -226,6 +226,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         }
 
         var fileOrigin = new FileOrigin(
+            blobName,
             CurrentUser.UserName ?? string.Empty,
             contentType,
             contentHash,
@@ -235,7 +236,6 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         var document = new Document(
             GuidGenerator.Create(),
             CurrentTenant.Id,
-            blobName,
             fileOrigin,
             cabinetId: input.CabinetId);
 
@@ -263,7 +263,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
 
         // 只取 blob 流——仅需标量 + owned FileOrigin（随实体加载），不需要任何子集合。
         var document = await _documentRepository.GetAsync(id, includeDetails: false);
-        var stream = await _blobContainer.GetAsync(document.OriginalFileBlobName);
+        var stream = await _blobContainer.GetAsync(document.FileOrigin.BlobName);
 
         return new RemoteStreamContent(
             stream,
@@ -303,13 +303,13 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
 
         try
         {
-            await _blobContainer.DeleteAsync(document.OriginalFileBlobName);
+            await _blobContainer.DeleteAsync(document.FileOrigin.BlobName);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex,
                 "Failed to delete blob {BlobName} for document {DocumentId}.",
-                document.OriginalFileBlobName, id);
+                document.FileOrigin.BlobName, id);
         }
 
         // #210：永久删除时一并删归档的原生 payload blob（按 manifest 的稳定 key，不做 prefix 清理）。
@@ -388,7 +388,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         if (document.IsDeleted)
         {
             throw new BusinessException(PaperbaseErrorCodes.Document.InRecycleBin)
-                .WithData("FileName", document.OriginalFileBlobName);
+                .WithData("FileName", document.FileOrigin.BlobName);
         }
 
         var latestRun = document.GetLatestRun(input.PipelineCode);

@@ -4,6 +4,7 @@ import type { DocumentReviewStatus } from './document-review-status.enum';
 import type { PipelineRunStatus } from './pipeline-run-status.enum';
 
 export interface FileOriginDto {
+  blobName: string;
   uploadedByUserName: string;
   originalFileName?: string;
   contentType: string;
@@ -37,7 +38,6 @@ export interface DocumentPipelineRunDto extends ExtensibleObject {
 // pipeline run history. The list endpoint returns the slim DocumentListItemDto.
 export interface DocumentDto extends EntityDto<string> {
   tenantId?: string;
-  originalFileBlobName: string;
   fileOrigin: FileOriginDto;
   // 所属文件柜（#194）。null = 未归类。柜名由前端用柜列表 map 显示。
   cabinetId?: string | null;
@@ -62,7 +62,6 @@ export interface DocumentDto extends EntityDto<string> {
 // Returned by GetListAsync — deliberately slim (no Markdown, no pipelineRuns).
 export interface DocumentListItemDto extends EntityDto<string> {
   tenantId?: string;
-  originalFileBlobName: string;
   fileOrigin: FileOriginDto;
   // 所属文件柜（#194）。null = 未归类。柜名由前端用柜列表 map 显示。
   cabinetId?: string | null;

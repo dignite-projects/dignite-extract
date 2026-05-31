@@ -23,6 +23,7 @@ public class DocumentPipelineRunManagerTests : PaperbaseDomainTestBase<Paperbase
     private static Document CreateDocument()
     {
         var fileOrigin = new FileOrigin(
+            blobName: "blobs/test.pdf",
             uploadedByUserName: "test-user",
             contentType: "application/pdf",
             contentHash: $"{Guid.NewGuid():N}{Guid.NewGuid():N}",
@@ -32,7 +33,6 @@ public class DocumentPipelineRunManagerTests : PaperbaseDomainTestBase<Paperbase
         return new Document(
             id: Guid.NewGuid(),
             tenantId: null,
-            originalFileBlobName: "blobs/test.pdf",
             fileOrigin: fileOrigin);
     }
 

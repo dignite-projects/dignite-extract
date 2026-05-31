@@ -295,8 +295,8 @@ public class DocumentClassificationBackgroundJob_Tests
     {
         var doc = new Document(
             Guid.NewGuid(), null,
-            $"blobs/{Guid.NewGuid():N}.pdf",
             new FileOrigin(
+                blobName: $"blobs/{Guid.NewGuid():N}.pdf",
                 uploadedByUserName: "test-user",
                 contentType: "application/pdf",
                 contentHash: $"{Guid.NewGuid():N}{Guid.NewGuid():N}",

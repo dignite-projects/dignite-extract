@@ -69,7 +69,7 @@ public class DocumentAppService_Delete_Tests
 
         await _appService.DeleteAsync(doc.Id);
 
-        await _blobContainer.DidNotReceive().DeleteAsync(doc.OriginalFileBlobName, Arg.Any<CancellationToken>());
+        await _blobContainer.DidNotReceive().DeleteAsync(doc.FileOrigin.BlobName, Arg.Any<CancellationToken>());
         await _documentRepository.Received(1).DeleteAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
@@ -202,8 +202,8 @@ public class DocumentAppService_Delete_Tests
         return new Document(
             Guid.NewGuid(),
             Guid.NewGuid(),
-            $"blobs/{Guid.NewGuid():N}.pdf",
             new FileOrigin(
+                blobName: $"blobs/{Guid.NewGuid():N}.pdf",
                 uploadedByUserName: "test-user",
                 contentType: "application/pdf",
                 contentHash: $"{Guid.NewGuid():N}{Guid.NewGuid():N}",
@@ -219,8 +219,8 @@ public class DocumentAppService_Delete_Tests
         return new Document(
             Guid.NewGuid(),
             Guid.NewGuid(),
-            $"blobs/{Guid.NewGuid():N}.pdf",
             new FileOrigin(
+                blobName: $"blobs/{Guid.NewGuid():N}.pdf",
                 uploadedByUserName: "test-user",
                 contentType: "application/pdf",
                 contentHash: contentHash,
