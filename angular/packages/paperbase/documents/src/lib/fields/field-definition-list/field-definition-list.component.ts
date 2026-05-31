@@ -79,7 +79,13 @@ export class FieldDefinitionListComponent implements OnInit {
     dataType: [FieldDataType.String, [Validators.required]],
     displayOrder: [0, [Validators.required]],
     isRequired: [false],
+    // #212：多值仅 String 有效（镜像后端 FieldDefinition.ValidateMultiValue 不变量）。
+    // 非 String 时由 applyAllowMultiplePolicy 强制置 false 并 disable，提交前 getRawValue 仍带回 false。
+    allowMultiple: [false],
   });
+
+  // 驱动模板：dataType === String 时才允许勾选"多值"。
+  readonly isStringType = signal(true);
 
   ngOnInit(): void {
     this.documentTypeId = this.route.snapshot.paramMap.get('typeId') ?? '';
@@ -92,7 +98,25 @@ export class FieldDefinitionListComponent implements OnInit {
       destroyRef: this.destroyRef,
       onPending: pending => this.isSuggesting.set(pending),
     });
+    // #212：dataType 变化时实时套用"多值仅 String"策略（镜像后端不变量，避免提交非法组合被后端 loud fail）。
+    this.form.controls.dataType.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(dataType => this.applyAllowMultiplePolicy(dataType));
     this.load();
+  }
+
+  // 非 String 字段强制 allowMultiple=false 且禁用勾选框；切回 String 时重新启用（保留当前值）。
+  // 仅 String + 多值是后端实体层允许的组合（FieldDefinition.MultiValueRequiresStringType），客户端镜像该约束做 UX 防呆。
+  private applyAllowMultiplePolicy(dataType: FieldDataType): void {
+    const isString = dataType === FieldDataType.String;
+    this.isStringType.set(isString);
+    const control = this.form.controls.allowMultiple;
+    if (isString) {
+      control.enable({ emitEvent: false });
+    } else {
+      control.setValue(false, { emitEvent: false });
+      control.disable({ emitEvent: false });
+    }
   }
 
   // header 徽标展示用：按不可变 Id 在当前层可见类型里解析当前 TypeCode（穿透重命名）。
@@ -150,8 +174,10 @@ export class FieldDefinitionListComponent implements OnInit {
       dataType: FieldDataType.String,
       displayOrder: nextOrder,
       isRequired: false,
+      allowMultiple: false,
     });
     this.form.controls.name.enable();
+    this.applyAllowMultiplePolicy(FieldDataType.String);
     // 必须在 form.reset()/enable() 之后调用：二者触发的 valueChanges 会误标"手动编辑"，
     // reset() 清掉该标记并复位建议状态（含 spinner）。
     this.slugHandle?.reset();
@@ -169,8 +195,10 @@ export class FieldDefinitionListComponent implements OnInit {
       dataType: field.dataType,
       displayOrder: field.displayOrder,
       isRequired: field.isRequired,
+      allowMultiple: field.allowMultiple,
     });
     this.form.controls.name.enable();
+    this.applyAllowMultiplePolicy(field.dataType);
     this.slugHandle?.markManual();
     this.editing.set(field);
   }
@@ -199,6 +227,8 @@ export class FieldDefinitionListComponent implements OnInit {
         dataType: raw.dataType,
         displayOrder: raw.displayOrder,
         isRequired: raw.isRequired,
+        // 非 String 时 control 被 disable，但 getRawValue 仍带回（已被策略置 false）。
+        allowMultiple: raw.allowMultiple,
       };
       this.service.create(input)
         .pipe(takeUntilDestroyed(this.destroyRef))
@@ -214,6 +244,7 @@ export class FieldDefinitionListComponent implements OnInit {
         dataType: raw.dataType,
         displayOrder: raw.displayOrder,
         isRequired: raw.isRequired,
+        allowMultiple: raw.allowMultiple,
       })
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({

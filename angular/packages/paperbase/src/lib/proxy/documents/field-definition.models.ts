@@ -13,6 +13,8 @@ export interface FieldDefinitionDto extends EntityDto<string> {
   dataType: FieldDataType;
   displayOrder: number;
   isRequired: boolean;
+  // #212：是否允许多值。仅 dataType === String 时有效（后端实体层 loud fail 非 String + 多值）。
+  allowMultiple: boolean;
 }
 
 export interface CreateFieldDefinitionDto {
@@ -23,6 +25,7 @@ export interface CreateFieldDefinitionDto {
   dataType: FieldDataType;
   displayOrder: number;
   isRequired: boolean;
+  allowMultiple: boolean;
 }
 
 export interface UpdateFieldDefinitionDto {
@@ -32,6 +35,7 @@ export interface UpdateFieldDefinitionDto {
   dataType: FieldDataType;
   displayOrder: number;
   isRequired: boolean;
+  allowMultiple: boolean;
 }
 
 // Mirrors C# Dignite.Paperbase.Documents.Fields.GetFieldDefinitionListInput.

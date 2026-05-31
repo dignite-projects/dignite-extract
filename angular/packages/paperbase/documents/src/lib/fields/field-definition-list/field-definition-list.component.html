@@ -78,7 +78,7 @@
                 <td class="text-muted">{{ field.displayOrder }}</td>
                 <td><code>{{ field.name }}</code></td>
                 <td class="fw-semibold">{{ field.displayName }}</td>
-                <td><span class="badge bg-light text-dark border">{{ dataTypeLabel(field.dataType) }}</span></td>
+                <td><span class="badge bg-light text-dark border">{{ dataTypeLabel(field.dataType) }}{{ field.allowMultiple ? '[]' : '' }}</span></td>
                 <td>
                   @if (field.isRequired) {
                     <span class="badge bg-warning text-dark">{{ '::FieldDefinition:Required' | abpLocalization }}</span>
@@ -187,7 +187,7 @@
               ></textarea>
             </div>
 
-            <div class="row g-3 align-items-end">
+            <div class="row g-3 align-items-start">
               <div class="col-md-5">
                 <label class="form-label">{{ '::FieldDefinition:DataType' | abpLocalization }}</label>
                 <select class="form-select" formControlName="dataType">
@@ -196,17 +196,26 @@
                   }
                 </select>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="form-label">{{ '::FieldDefinition:DisplayOrder' | abpLocalization }}</label>
                 <input type="number" class="form-control" formControlName="displayOrder" step="1" />
               </div>
-              <div class="col-md-3">
+              <div class="col-md-4">
                 <div class="form-check mt-2">
                   <input type="checkbox" class="form-check-input" id="isRequired" formControlName="isRequired" />
                   <label class="form-check-label" for="isRequired">
                     {{ '::FieldDefinition:Required' | abpLocalization }}
                   </label>
                 </div>
+                <!-- #212：多值仅 String 有效——非 String 时 control 被 applyAllowMultiplePolicy 禁用（自动置灰），
+                     hint 常驻说明约束（与后端 FieldDefinition.MultiValueRequiresStringType 一致）。 -->
+                <div class="form-check">
+                  <input type="checkbox" class="form-check-input" id="allowMultiple" formControlName="allowMultiple" />
+                  <label class="form-check-label" for="allowMultiple">
+                    {{ '::FieldDefinition:AllowMultiple' | abpLocalization }}
+                  </label>
+                </div>
+                <div class="form-text">{{ '::FieldDefinition:AllowMultipleHint' | abpLocalization }}</div>
               </div>
             </div>
           </div>
