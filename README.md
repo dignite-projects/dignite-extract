@@ -23,9 +23,8 @@ physical paper / scans / photos / PDF images / Office files
 ```
 dignite-paperbase/
 ├── core/      # Channel implementation — ABP layers (Abstractions / Domain.Shared / Domain / Application / EntityFrameworkCore / HttpApi)
-├── host/      # Host application — provider wiring (OCR + AI) and middleware
-│   ├── src/       # ASP.NET Core API
-│   └── angular/   # Angular SPA
+├── host/      # Host application — provider wiring (OCR + AI) and middleware (ASP.NET Core API)
+├── angular/   # Angular SPA (operator UI)
 └── docs/      # Operator-facing documentation (design decisions go to GitHub Issues, not here)
 ```
 
@@ -36,7 +35,7 @@ Business modules (contract management / invoice management / HR records / etc.) 
 | Requirement | Minimum version | Notes |
 |-------------|----------------|-------|
 | [.NET SDK](https://dotnet.microsoft.com/download/dotnet) | 10.0 | |
-| [Node.js](https://nodejs.org) | 18 | Required for the Angular frontend |
+| [Node.js](https://nodejs.org) | 20 | Required for the Angular frontend (Angular 21 needs Node 20.19+ / 22.12+) |
 | SQL Server | 2019+ | LocalDB works for development; production runs full SQL Server |
 | [Docker Desktop](https://www.docker.com/products/docker-desktop) | any recent | Optional but recommended — runs the PaddleOCR sidecar and the local OpenTelemetry dashboard |
 
