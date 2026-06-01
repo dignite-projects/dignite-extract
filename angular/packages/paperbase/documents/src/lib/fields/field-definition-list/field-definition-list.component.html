@@ -78,7 +78,7 @@
                 <td class="text-muted">{{ field.displayOrder }}</td>
                 <td><code>{{ field.name }}</code></td>
                 <td class="fw-semibold">{{ field.displayName }}</td>
-                <td><span class="badge bg-light text-dark border">{{ dataTypeLabel(field.dataType) }}{{ field.allowMultiple ? '[]' : '' }}</span></td>
+                <td><span class="badge bg-light text-dark border">{{ dataTypeLabel(field.dataType) | abpLocalization }}{{ field.allowMultiple ? '[]' : '' }}</span></td>
                 <td>
                   @if (field.isRequired) {
                     <span class="badge bg-warning text-dark">{{ '::FieldDefinition:Required' | abpLocalization }}</span>
@@ -192,7 +192,7 @@
                 <label class="form-label">{{ '::FieldDefinition:DataType' | abpLocalization }}</label>
                 <select class="form-select" formControlName="dataType">
                   @for (opt of dataTypeOptions; track opt.value) {
-                    <option [ngValue]="opt.value">{{ opt.key }}</option>
+                    <option [ngValue]="opt.value">{{ opt.key | abpLocalization }}</option>
                   }
                 </select>
               </div>

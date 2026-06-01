@@ -203,6 +203,7 @@ export class DocumentTypeListComponent implements OnInit {
               this.toaster.success('::DocumentType:DeletedSuccessfully', '::Success');
               this.load();
             },
+            error: () => this.toaster.error('::DocumentType:DeleteFailed', '::Error'),
           });
       });
   }

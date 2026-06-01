@@ -55,7 +55,7 @@
             @for (t of templates(); track t.id) {
               <tr>
                 <td class="fw-semibold">{{ t.name }}</td>
-                <td><span class="badge bg-secondary">{{ formatLabel(t.format) }}</span></td>
+                <td><span class="badge bg-secondary">{{ formatLabel(t.format) | abpLocalization }}</span></td>
                 <td>
                   @if (documentTypeLabel(t.documentTypeId); as code) {
                     <span class="badge bg-info text-dark">{{ code }}</span>
@@ -135,7 +135,7 @@
                 <label class="form-label">{{ '::ExportTemplate:Format' | abpLocalization }}</label>
                 <select class="form-select" formControlName="format">
                   @for (opt of formatOptions; track opt.value) {
-                    <option [ngValue]="opt.value">{{ opt.key }}</option>
+                    <option [ngValue]="opt.value">{{ opt.key | abpLocalization }}</option>
                   }
                 </select>
               </div>

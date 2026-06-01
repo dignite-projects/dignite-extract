@@ -276,6 +276,7 @@ export class FieldDefinitionListComponent implements OnInit {
               this.toaster.success('::FieldDefinition:DeletedSuccessfully', '::Success');
               this.load();
             },
+            error: () => this.toaster.error('::FieldDefinition:DeleteFailed', '::Error'),
           });
       });
   }

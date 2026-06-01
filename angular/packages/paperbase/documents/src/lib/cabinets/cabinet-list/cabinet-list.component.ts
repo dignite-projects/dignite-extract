@@ -135,6 +135,7 @@ export class CabinetListComponent implements OnInit {
               this.toaster.success('::Cabinet:DeletedSuccessfully', '::Success');
               this.load();
             },
+            error: () => this.toaster.error('::Cabinet:DeleteFailed', '::Error'),
           });
       });
   }

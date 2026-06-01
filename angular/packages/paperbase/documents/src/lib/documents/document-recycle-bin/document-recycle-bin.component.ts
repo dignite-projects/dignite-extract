@@ -84,6 +84,7 @@ export class DocumentRecycleBinComponent implements OnInit {
               this.toaster.success('::Document:RestoredSuccessfully', '::Success');
               this.loadList();
             },
+            error: () => this.toaster.error('::Document:RestoreFailed', '::Error'),
           });
       });
   }
@@ -103,6 +104,7 @@ export class DocumentRecycleBinComponent implements OnInit {
               this.toaster.success('::Document:PermanentlyDeletedSuccessfully', '::Success');
               this.loadList();
             },
+            error: () => this.toaster.error('::Document:PermanentDeleteFailed', '::Error'),
           });
       });
   }

@@ -325,6 +325,7 @@ export class DocumentListComponent implements OnInit {
               this.toaster.success('::Document:DeletedSuccessfully', '::Success');
               this.loadList();
             },
+            error: () => this.toaster.error('::Document:DeleteFailed', '::Error'),
           });
         }
       });

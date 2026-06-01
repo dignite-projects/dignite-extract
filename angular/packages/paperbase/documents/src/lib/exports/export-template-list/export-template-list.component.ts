@@ -235,6 +235,7 @@ export class ExportTemplateListComponent implements OnInit {
               this.toaster.success('::ExportTemplate:DeletedSuccessfully', '::Success');
               this.load();
             },
+            error: () => this.toaster.error('::ExportTemplate:DeleteFailed', '::Error'),
           });
       });
   }
@@ -262,7 +263,9 @@ export class ExportTemplateListComponent implements OnInit {
     anchor.href = url;
     anchor.download = fileName;
     anchor.click();
-    URL.revokeObjectURL(url);
+    // Defer revoke so the browser's download handler has taken ownership of the
+    // blob before its backing URL is released (avoids a race on large files).
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   formatLabel(format: ExportFormat): string {
