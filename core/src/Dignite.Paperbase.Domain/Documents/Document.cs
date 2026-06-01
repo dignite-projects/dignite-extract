@@ -241,7 +241,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     {
         DocumentTypeId = null;
         ClassificationConfidence = 0;
-        ClassificationReason = reason;
+        ClassificationReason = TruncateReason(reason);
         ReviewStatus = DocumentReviewStatus.PendingReview;
     }
 
@@ -266,7 +266,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// </summary>
     public void RejectReview(string? reason = null)
     {
-        ClassificationReason = reason ?? ClassificationReason;
+        ClassificationReason = TruncateReason(reason) ?? ClassificationReason;
         TransitionLifecycle(DocumentLifecycleStatus.Failed);
     }
 
@@ -279,4 +279,9 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         LifecycleStatus = newStatus;
         AddLocalEvent(new DocumentLifecycleStatusChangedEvent(Id, oldStatus, newStatus));
     }
+
+    private static string? TruncateReason(string? value) =>
+        value is null || value.Length <= DocumentConsts.MaxClassificationReasonLength
+            ? value
+            : value[..DocumentConsts.MaxClassificationReasonLength];
 }

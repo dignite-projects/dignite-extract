@@ -40,6 +40,24 @@ public class PaperbasePermissions
         public const string Delete = Default + ".Delete";
     }
 
+    // 文档类型 schema 管理（#217）——admin 级操作，独立于文档 CRUD。
+    public static class DocumentTypes
+    {
+        public const string Default = GroupName + ".DocumentTypes";
+        public const string Create = Default + ".Create";
+        public const string Update = Default + ".Update";
+        public const string Delete = Default + ".Delete";
+    }
+
+    // 字段定义 schema 管理（#217）——admin 级操作，独立于文档 CRUD。
+    public static class FieldDefinitions
+    {
+        public const string Default = GroupName + ".FieldDefinitions";
+        public const string Create = Default + ".Create";
+        public const string Update = Default + ".Update";
+        public const string Delete = Default + ".Delete";
+    }
+
     public static string[] GetAll()
     {
         return ReflectionHelper.GetPublicConstantsRecursively(typeof(PaperbasePermissions));

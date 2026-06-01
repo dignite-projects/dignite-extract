@@ -10,7 +10,7 @@ using Volo.Abp.Domain.Entities;
 
 namespace Dignite.Paperbase.Documents.Fields;
 
-[Authorize(PaperbasePermissions.Documents.ConfirmClassification)]
+[Authorize(PaperbasePermissions.FieldDefinitions.Default)]
 public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAppService
 {
     private readonly IFieldDefinitionRepository _repository;
@@ -51,6 +51,7 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
         return ObjectMapper.Map<List<FieldDefinition>, List<FieldDefinitionDto>>(list);
     }
 
+    [Authorize(PaperbasePermissions.FieldDefinitions.Create)]
     public virtual async Task<FieldDefinitionDto> CreateAsync(CreateFieldDefinitionDto input)
     {
         // 父类型必须存在于当前层（#207 FieldDefinition.DocumentTypeId FK RESTRICT；IMultiTenant + ISoftDelete 过滤保证跨层/已删返回 null）。
@@ -89,6 +90,7 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
         return ObjectMapper.Map<FieldDefinition, FieldDefinitionDto>(entity);
     }
 
+    [Authorize(PaperbasePermissions.FieldDefinitions.Update)]
     public virtual async Task<FieldDefinitionDto> UpdateAsync(Guid id, UpdateFieldDefinitionDto input)
     {
         var entity = await _repository.GetAsync(id);
@@ -142,6 +144,7 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
         return ObjectMapper.Map<FieldDefinition, FieldDefinitionDto>(entity);
     }
 
+    [Authorize(PaperbasePermissions.FieldDefinitions.Delete)]
     public virtual async Task DeleteAsync(Guid id)
     {
         var entity = await _repository.GetAsync(id);
@@ -152,6 +155,7 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
         await _repository.DeleteAsync(entity);
     }
 
+    [Authorize(PaperbasePermissions.FieldDefinitions.Delete)]
     public virtual async Task<FieldDefinitionDto> RestoreAsync(Guid id)
     {
         using (DataFilter.Disable<ISoftDelete>())

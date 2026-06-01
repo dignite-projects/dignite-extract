@@ -10,7 +10,7 @@ using Volo.Abp.Domain.Entities;
 
 namespace Dignite.Paperbase.Documents.DocumentTypes;
 
-[Authorize(PaperbasePermissions.Documents.ConfirmClassification)]
+[Authorize(PaperbasePermissions.DocumentTypes.Default)]
 public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppService
 {
     private readonly IDocumentTypeRepository _repository;
@@ -52,6 +52,7 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
         }
     }
 
+    [Authorize(PaperbasePermissions.DocumentTypes.Create)]
     public virtual async Task<DocumentTypeDto> CreateAsync(CreateDocumentTypeDto input)
     {
         // 严格单层判重——TypeCode 是 per-layer 命名空间，Host 与 tenant 各自独立，
@@ -82,6 +83,7 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
         return ObjectMapper.Map<DocumentType, DocumentTypeDto>(entity);
     }
 
+    [Authorize(PaperbasePermissions.DocumentTypes.Update)]
     public virtual async Task<DocumentTypeDto> UpdateAsync(Guid id, UpdateDocumentTypeDto input)
     {
         var entity = await _repository.GetAsync(id);
@@ -113,6 +115,7 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
         return ObjectMapper.Map<DocumentType, DocumentTypeDto>(entity);
     }
 
+    [Authorize(PaperbasePermissions.DocumentTypes.Delete)]
     public virtual async Task DeleteAsync(Guid id)
     {
         var entity = await _repository.GetAsync(id);
@@ -140,6 +143,7 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
         await _repository.DeleteAsync(entity);
     }
 
+    [Authorize(PaperbasePermissions.DocumentTypes.Delete)]
     public virtual async Task<DocumentTypeDto> RestoreAsync(Guid id)
     {
         // 整段恢复在禁用 ISoftDelete 的 scope 里执行：查询能看到已删除行，写入能把 IsDeleted=false。

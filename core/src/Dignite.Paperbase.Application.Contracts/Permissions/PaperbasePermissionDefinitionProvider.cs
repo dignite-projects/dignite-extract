@@ -30,6 +30,16 @@ public class PaperbasePermissionDefinitionProvider : PermissionDefinitionProvide
         cabinets.AddChild(PaperbasePermissions.Cabinets.Create, L("Permission:Cabinets.Create"));
         cabinets.AddChild(PaperbasePermissions.Cabinets.Update, L("Permission:Cabinets.Update"));
         cabinets.AddChild(PaperbasePermissions.Cabinets.Delete, L("Permission:Cabinets.Delete"));
+
+        var documentTypes = group.AddPermission(PaperbasePermissions.DocumentTypes.Default, L("Permission:DocumentTypes"));
+        documentTypes.AddChild(PaperbasePermissions.DocumentTypes.Create, L("Permission:DocumentTypes.Create"));
+        documentTypes.AddChild(PaperbasePermissions.DocumentTypes.Update, L("Permission:DocumentTypes.Update"));
+        documentTypes.AddChild(PaperbasePermissions.DocumentTypes.Delete, L("Permission:DocumentTypes.Delete"));
+
+        var fieldDefinitions = group.AddPermission(PaperbasePermissions.FieldDefinitions.Default, L("Permission:FieldDefinitions"));
+        fieldDefinitions.AddChild(PaperbasePermissions.FieldDefinitions.Create, L("Permission:FieldDefinitions.Create"));
+        fieldDefinitions.AddChild(PaperbasePermissions.FieldDefinitions.Update, L("Permission:FieldDefinitions.Update"));
+        fieldDefinitions.AddChild(PaperbasePermissions.FieldDefinitions.Delete, L("Permission:FieldDefinitions.Delete"));
     }
 
     private static LocalizableString L(string name)

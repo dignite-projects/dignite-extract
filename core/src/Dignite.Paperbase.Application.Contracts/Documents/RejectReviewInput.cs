@@ -1,9 +1,9 @@
-using System.ComponentModel.DataAnnotations;
+using Volo.Abp.Validation;
 
 namespace Dignite.Paperbase.Documents;
 
 public class RejectReviewInput
 {
-    [StringLength(512)]
+    [DynamicStringLength(typeof(DocumentConsts), nameof(DocumentConsts.MaxClassificationReasonLength))]
     public string? Reason { get; set; }
 }
