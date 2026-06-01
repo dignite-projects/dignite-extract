@@ -36,10 +36,12 @@ This avoids holding database connections, locks, or transactions while external 
 
 `DocumentPipelineRun` 本身就是 `AggregateRoot<Guid>`，通过 `IDocumentPipelineRunRepository` 直接操作，**不再经 `Document` 聚合根**。后台作业（`DocumentTextExtractionBackgroundJob` / `DocumentClassificationBackgroundJob`）三阶段 UoW 的 BeginRun / CompleteRun / FailRun 都按这个模式：
 
-- 用 `_documentRepository.GetAsync(id, includeDetails: false)` 加载 Document（**不再** `GetWithPipelineRunsAsync`）
-- 用 `_runRepository.FindAsync(runId)` 加载具体的 run（**不再** `document.GetRun(runId)`）
+- 用 `DocumentRepository.GetAsync(id, includeDetails: false)` 加载 Document（**不再** `GetWithPipelineRunsAsync`）
+- 用 `RunRepository.FindAsync(runId)` 加载具体的 run（**不再** `document.GetRun(runId)`）
 - 通过 `DocumentPipelineRunManager` 修改 run 状态（manager 内部 `_runRepo.UpdateAsync` 显式持久化）
 - 同 UoW commit 时 Document 主行 UPDATE + PipelineRun 行 UPDATE / INSERT 一并 flush
+
+CompleteRun / FailRun 阶段共享的「加载 Document + 按 runId 定位 run（找不到则 fallback 重建）」前导，以及两类作业完全一致的失败收尾，收敛在基类 `DocumentPipelineBackgroundJobBase<TArgs>`（`LoadDocumentAndRunAsync` / `FailRunAsync`，#216 follow-up #2）；两个作业各自只实现差异化的 Begin / Complete 主体。
 
 **这是该实体的唯一例外**——其他流水线相关 child 实体（如未来的 ChunkBlock）仍按"通过聚合根访问"的标准模式管理。具体决策详见 Issue #216。
 
