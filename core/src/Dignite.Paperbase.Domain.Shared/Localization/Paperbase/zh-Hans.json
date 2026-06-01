@@ -22,6 +22,8 @@
     "Document:ContinueToDocuments": "继续查看文档",
     "Paperbase:DocumentDuplicate": "该文件已经上传过 ({FileName})。",
     "Paperbase:DocumentInRecycleBin": "该文件已在回收站中 ({FileName})。",
+    "Paperbase:DocumentFileTooLarge": "文件 '{FileName}' 超过了允许的最大大小 {MaxBytes} 字节。",
+    "Paperbase:DocumentUnsupportedFileType": "文件 '{FileName}' 的类型 ('{ContentType}') 不受支持。请上传受支持的图片或 PDF。",
     "Paperbase:UnknownPipelineCode": "流水线 '{PipelineCode}' 不支持重试。",
     "Paperbase:PipelineNeverRan": "流水线 '{PipelineCode}' 尚未运行。",
     "Paperbase:PipelineRetryInProgress": "流水线 '{PipelineCode}' 已有进行中的尝试。",

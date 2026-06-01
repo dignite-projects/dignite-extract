@@ -16,6 +16,9 @@ public static class PaperbaseErrorCodes
         public const string Duplicate = "Paperbase:DocumentDuplicate";
         public const string InRecycleBin = "Paperbase:DocumentInRecycleBin";
         public const string NotClassified = "Paperbase:DocumentNotClassified";
+        // #221：上传 fail-closed 校验失败码（大小超限 / content-type + 扩展名不在白名单）。
+        public const string FileTooLarge = "Paperbase:DocumentFileTooLarge";
+        public const string UnsupportedFileType = "Paperbase:DocumentUnsupportedFileType";
     }
 
     public static class DocumentType

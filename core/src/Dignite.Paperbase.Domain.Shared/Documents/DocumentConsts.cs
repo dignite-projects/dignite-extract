@@ -1,9 +1,42 @@
+using System;
+using System.Collections.Generic;
+
 namespace Dignite.Paperbase.Documents;
 
 public static class DocumentConsts
 {
     public static int MaxTitleLength { get; set; } = 256;
     public static int MaxClassificationReasonLength { get; set; } = 2048;
+
+    /// <summary>
+    /// 上传文件大小硬上限（字节，默认 20 MiB，#221）。fail-closed 安全门：
+    /// 超限 → loud <c>BusinessException</c>（<c>Document.FileTooLarge</c>），不落 blob、不触发任何 pipeline。
+    /// 与前端 document-upload 组件的 20 MB 客户端校验对齐（前端是体验，服务端是边界）。
+    /// static mutable——host 可按部署算力 / OCR provider 在启动期上调（与 <see cref="MaxNativePayloadArchiveBytes"/> 同例）。
+    /// 上调时需同步上调 host 的 Kestrel <c>MaxRequestBodySize</c> / <c>FormOptions.MultipartBodyLengthLimit</c>。
+    /// </summary>
+    public static long MaxUploadFileBytes { get; set; } = 20L * 1024 * 1024;
+
+    /// <summary>
+    /// 允许上传的 content-type 白名单（不区分大小写，#221）。fail-closed 安全门：
+    /// 不在白名单 → loud <c>BusinessException</c>（<c>Document.UnsupportedFileType</c>），不落 blob、不触发 pipeline。
+    /// 默认与前端 document-upload 组件 + "SupportedFormats" 文案对齐（图片 + PDF）。
+    /// static mutable——host 若启用 MarkItDown 数字版文档（Word / HTML / CSV 等）按需扩充，并同步 <see cref="AllowedUploadExtensions"/>。
+    /// </summary>
+    public static ISet<string> AllowedUploadContentTypes { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"
+    };
+
+    /// <summary>
+    /// 允许上传的文件扩展名白名单（含前导点，不区分大小写，#221）。与 <see cref="AllowedUploadContentTypes"/> 双重校验：
+    /// content-type 客户端可伪造，而扩展名决定 blobName 后缀 + <c>DefaultTextExtractor</c> 的 dispatch
+    /// （图片走 OCR / 其他走 Markdown），故二者都要 fail-closed 校验。默认集合与白名单 content-type 对应。
+    /// </summary>
+    public static ISet<string> AllowedUploadExtensions { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"
+    };
 
     /// <summary>OCR / 抽取阶段检测到的语言 tag（ISO 639-1 或 IETF）。</summary>
     public static int MaxLanguageLength { get; set; } = 16;

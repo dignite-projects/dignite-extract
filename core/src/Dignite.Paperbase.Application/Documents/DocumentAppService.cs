@@ -202,14 +202,43 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         var contentType = input.File.ContentType ?? "application/octet-stream";
         var extension = Path.GetExtension(fileName);
 
-        await using var source = input.File.GetStream();
-        using var buffer = new MemoryStream();
-        await source.CopyToAsync(buffer);
-        var bytes = buffer.ToArray();
+        // fail-closed 文件校验（#221）：content-type + 扩展名双重白名单。任意类型都会落 blob 并触发
+        // 文本提取 / 分类 job，浪费算力且行为不确定——故不在通道允许集内立即 loud fail，不落 blob、不入队。
+        // content-type 客户端可伪造，扩展名又决定 blob 后缀 + DefaultTextExtractor dispatch，故二者都校验。
+        if (string.IsNullOrEmpty(extension) ||
+            !DocumentConsts.AllowedUploadExtensions.Contains(extension) ||
+            !DocumentConsts.AllowedUploadContentTypes.Contains(contentType))
+        {
+            throw new BusinessException(PaperbaseErrorCodes.Document.UnsupportedFileType)
+                .WithData("FileName", fileName)
+                .WithData("ContentType", contentType);
+        }
+
+        // 客户端声明的长度先做廉价拒绝（不可信，攻击者可少报或不报）——真正的边界是下方流式拷贝按
+        // 实际字节数施加的硬上限，超限即刻中止，不把超大 body 全量缓冲进内存。
+        if (input.File.ContentLength is > 0 and var declared && declared > DocumentConsts.MaxUploadFileBytes)
+        {
+            throw new BusinessException(PaperbaseErrorCodes.Document.FileTooLarge)
+                .WithData("FileName", fileName)
+                .WithData("MaxBytes", DocumentConsts.MaxUploadFileBytes);
+        }
+
+        // 在独立 using 作用域内缓冲：拿到 bytes 后立即释放 buffer，使 SaveAsync 期间只驻留 bytes（1×），
+        // 消除此前 buffer + bytes 同时驻留的 ~2× 内存放大（#221 复审补充 1）。哈希需全量字节，无法完全流式。
+        byte[] bytes;
+        await using (var source = input.File.GetStream())
+        using (var buffer = new MemoryStream())
+        {
+            await CopyWithLimitAsync(source, buffer, DocumentConsts.MaxUploadFileBytes, fileName);
+            bytes = buffer.ToArray();
+        }
         var fileSize = bytes.LongLength;
 
         var contentHash = ContentHasher.Sha256Hex(bytes);
 
+        // 内容哈希去重是 check-then-act（ContentHash 仅非唯一索引）。两个并发的同文件上传可能双双通过检查 →
+        // 产生重复 Document。本期有意接受该 race（#221 复审补充 2）：概率低、危害低（最多一份重复，可后续删），
+        // 而给 ContentHash 加唯一索引会把 race 失败方变成一次 500——通道层不为低概率重复付这个代价。
         var existing = await _documentRepository.FindByContentHashAsync(contentHash);
         if (existing != null)
         {
@@ -258,6 +287,30 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         await _pipelineJobScheduler.QueueAsync(document, PaperbasePipelines.TextExtraction);
 
         return await MapToDtoAsync(document);
+    }
+
+    /// <summary>
+    /// 把 <paramref name="source"/> 拷贝进 <paramref name="destination"/>，按实际读取字节数施加硬上限（#221）。
+    /// 一旦累计超过 <paramref name="maxBytes"/> 立即抛 <c>Document.FileTooLarge</c>——不依赖客户端声明的
+    /// ContentLength（可伪造），也不把超大 body 全量缓冲进内存。
+    /// </summary>
+    protected static async Task CopyWithLimitAsync(Stream source, Stream destination, long maxBytes, string fileName)
+    {
+        var rented = new byte[81920];
+        long total = 0;
+        int read;
+        while ((read = await source.ReadAsync(rented)) > 0)
+        {
+            total += read;
+            if (total > maxBytes)
+            {
+                throw new BusinessException(PaperbaseErrorCodes.Document.FileTooLarge)
+                    .WithData("FileName", fileName)
+                    .WithData("MaxBytes", maxBytes);
+            }
+
+            await destination.WriteAsync(rented.AsMemory(0, read));
+        }
     }
 
     public virtual async Task<IRemoteStreamContent> GetBlobAsync(Guid id)

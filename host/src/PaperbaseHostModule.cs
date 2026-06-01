@@ -1,4 +1,5 @@
 using Dignite.Paperbase.Ai;
+using Dignite.Paperbase.Documents;
 using Dignite.Paperbase.Host.Data;
 using Dignite.Paperbase.EntityFrameworkCore;
 using Dignite.Paperbase.Host.HealthChecks;
@@ -16,6 +17,8 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.OpenApi;
@@ -209,6 +212,26 @@ public class PaperbaseHostModule : AbpModule
         ConfigureDistributedEventBus();
         ConfigureAI(context, configuration);
         ConfigureOpenTelemetry(context, configuration);
+        ConfigureRequestLimits(context);
+    }
+
+    // #221：上传请求体上限作为 Kestrel / Form 层 backstop。真正的 fail-closed 友好错误在
+    // DocumentAppService.UploadAsync（按 DocumentConsts.MaxUploadFileBytes 校验后抛 BusinessException）；
+    // 此处留一段 multipart 信封余量（+1 MiB），使正常的最大尺寸文件不会在到达应用层前被 413 截断，
+    // 同时把 ASP.NET Core 默认的隐式 ~28.6 MB（Kestrel）/ 128 MB（Form）上限收敛为显式、可审计的边界。
+    private static void ConfigureRequestLimits(ServiceConfigurationContext context)
+    {
+        var bodyLimit = DocumentConsts.MaxUploadFileBytes + 1024 * 1024;
+
+        context.Services.Configure<KestrelServerOptions>(options =>
+        {
+            options.Limits.MaxRequestBodySize = bodyLimit;
+        });
+
+        context.Services.Configure<FormOptions>(options =>
+        {
+            options.MultipartBodyLengthLimit = bodyLimit;
+        });
     }
 
     // 启用 ABP transactional outbox + inbox（issue #188）：

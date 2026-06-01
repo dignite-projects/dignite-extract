@@ -222,6 +222,8 @@
     "Paperbase:MarkdownIsImmutable": "Extracted markdown has already been set and cannot be changed.",
     "Paperbase:DocumentDuplicate": "This file has already been uploaded ({FileName}).",
     "Paperbase:DocumentInRecycleBin": "This file already exists in the recycle bin ({FileName}).",
+    "Paperbase:DocumentFileTooLarge": "File '{FileName}' exceeds the maximum allowed size of {MaxBytes} bytes.",
+    "Paperbase:DocumentUnsupportedFileType": "File '{FileName}' has an unsupported type ('{ContentType}'). Please upload a supported image or PDF.",
     "Paperbase:UnknownPipelineCode": "Pipeline '{PipelineCode}' is not retryable.",
     "Paperbase:PipelineNeverRan": "Pipeline '{PipelineCode}' has not started yet.",
     "Paperbase:PipelineRetryInProgress": "Pipeline '{PipelineCode}' already has an attempt in progress.",

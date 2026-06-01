@@ -197,6 +197,84 @@ public class DocumentAppService_Delete_Tests
         exception.Code.ShouldBe(PaperbaseErrorCodes.Cabinet.InvalidId);
     }
 
+    [Fact]
+    public async Task UploadAsync_Throws_UnsupportedFileType_When_ContentType_Not_Allowed()
+    {
+        // #221：扩展名合法但 content-type 不在白名单 → fail-closed，不落 blob、不入队。
+        var input = CreateUploadInput([1, 2, 3], fileName: "A.pdf", contentType: "application/zip");
+
+        var exception = await Should.ThrowAsync<BusinessException>(async () =>
+            await _appService.UploadAsync(input));
+
+        exception.Code.ShouldBe(PaperbaseErrorCodes.Document.UnsupportedFileType);
+        await _documentRepository.DidNotReceive().InsertAsync(
+            Arg.Any<Document>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _blobContainer.DidNotReceive().SaveAsync(
+            Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UploadAsync_Throws_UnsupportedFileType_When_Extension_Not_Allowed()
+    {
+        // #221：content-type 合法但扩展名不在白名单（决定 blob 后缀 + DefaultTextExtractor dispatch）→ fail-closed。
+        var input = CreateUploadInput([1, 2, 3], fileName: "A.exe", contentType: "application/pdf");
+
+        var exception = await Should.ThrowAsync<BusinessException>(async () =>
+            await _appService.UploadAsync(input));
+
+        exception.Code.ShouldBe(PaperbaseErrorCodes.Document.UnsupportedFileType);
+    }
+
+    [Fact]
+    public async Task UploadAsync_Throws_FileTooLarge_When_Declared_ContentLength_Exceeds_Limit()
+    {
+        // #221：客户端声明的 ContentLength 超限 → 廉价快速拒绝（不读流）。
+        var input = new UploadDocumentInput
+        {
+            File = new RemoteStreamContent(
+                new MemoryStream([1, 2, 3]),
+                "A.pdf",
+                "application/pdf",
+                readOnlyLength: DocumentConsts.MaxUploadFileBytes + 1,
+                disposeStream: true)
+        };
+
+        var exception = await Should.ThrowAsync<BusinessException>(async () =>
+            await _appService.UploadAsync(input));
+
+        exception.Code.ShouldBe(PaperbaseErrorCodes.Document.FileTooLarge);
+    }
+
+    [Fact]
+    public async Task UploadAsync_Throws_FileTooLarge_When_Streamed_Bytes_Exceed_Limit_Despite_Underreported_Length()
+    {
+        // #221：声明的 ContentLength 少报（不可信），但流式拷贝按实际字节数施加的硬上限仍兜住——
+        // 不依赖客户端声明，也不把超大 body 全量缓冲。临时下调 static 上限（finally 复原，类内串行执行）。
+        var original = DocumentConsts.MaxUploadFileBytes;
+        try
+        {
+            DocumentConsts.MaxUploadFileBytes = 4;
+            var input = new UploadDocumentInput
+            {
+                File = new RemoteStreamContent(
+                    new MemoryStream(new byte[10]),
+                    "A.pdf",
+                    "application/pdf",
+                    readOnlyLength: 3, // 少报，绕过廉价 ContentLength 检查
+                    disposeStream: true)
+            };
+
+            var exception = await Should.ThrowAsync<BusinessException>(async () =>
+                await _appService.UploadAsync(input));
+
+            exception.Code.ShouldBe(PaperbaseErrorCodes.Document.FileTooLarge);
+        }
+        finally
+        {
+            DocumentConsts.MaxUploadFileBytes = original;
+        }
+    }
+
     private static Document CreateDocument()
     {
         return new Document(
@@ -228,14 +306,15 @@ public class DocumentAppService_Delete_Tests
                 originalFileName: "test.pdf"));
     }
 
-    private static UploadDocumentInput CreateUploadInput(byte[] bytes)
+    private static UploadDocumentInput CreateUploadInput(
+        byte[] bytes, string fileName = "A.pdf", string contentType = "application/pdf")
     {
         return new UploadDocumentInput
         {
             File = new RemoteStreamContent(
                 new MemoryStream(bytes),
-                "A.pdf",
-                "application/pdf",
+                fileName,
+                contentType,
                 disposeStream: true)
         };
     }
