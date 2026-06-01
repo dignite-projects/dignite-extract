@@ -6,11 +6,13 @@ using Dignite.Paperbase.Permissions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Logging;
 using Volo.Abp;
+using Volo.Abp.Authorization;
 using Volo.Abp.Domain.Entities;
 
 namespace Dignite.Paperbase.Documents.DocumentTypes;
 
-[Authorize(PaperbasePermissions.DocumentTypes.Default)]
+// 授权按方法粒度声明（#223）：读 schema（GetVisibleAsync）与管理 schema 解耦，
+// 故不在类级 [Authorize]——每个方法显式声明自己的权限门（与 DocumentAppService 同源 programmatic 模式）。
 public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppService
 {
     private readonly IDocumentTypeRepository _repository;
@@ -29,6 +31,15 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
 
     public virtual async Task<List<DocumentTypeDto>> GetVisibleAsync()
     {
+        // 读 schema 与管理 schema 解耦（#223）：文档操作者（Documents.Default）需要读类型来驱动
+        // 类型筛选 / 分类指派 / 动态字段列；schema 管理员（DocumentTypes.Default）需要读自己的管理列表。
+        // 二者任一即可——fail-closed OR 断言（programmatic：反射 / 非 HTTP 路径下 [Authorize] 不触发）。
+        if (!await AuthorizationService.IsGrantedAsync(PaperbasePermissions.Documents.Default) &&
+            !await AuthorizationService.IsGrantedAsync(PaperbasePermissions.DocumentTypes.Default))
+        {
+            throw new AbpAuthorizationException();
+        }
+
         // 不做 Host ∪ Tenant union；租户隔离由 ambient IMultiTenant 过滤器施加。
         // Priority DESC + TypeCode ASC 排序在内存中保持。
         var list = (await _repository.GetListAsync())
@@ -38,8 +49,10 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
         return ObjectMapper.Map<List<DocumentType>, List<DocumentTypeDto>>(list);
     }
 
+    [Authorize(PaperbasePermissions.DocumentTypes.Default)]
     public virtual async Task<List<DocumentTypeDto>> GetDeletedAsync()
     {
+        // 回收站视图仅 schema 管理屏幕消费——保持 admin 门（#223）。
         // 仅关闭 ISoftDelete 看到已删除行；租户隔离仍由 ambient IMultiTenant 过滤器施加，不跨层。
         using (DataFilter.Disable<ISoftDelete>())
         {

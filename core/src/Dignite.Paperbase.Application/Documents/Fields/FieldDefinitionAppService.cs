@@ -6,11 +6,13 @@ using Dignite.Paperbase.Documents.DocumentTypes;
 using Dignite.Paperbase.Permissions;
 using Microsoft.AspNetCore.Authorization;
 using Volo.Abp;
+using Volo.Abp.Authorization;
 using Volo.Abp.Domain.Entities;
 
 namespace Dignite.Paperbase.Documents.Fields;
 
-[Authorize(PaperbasePermissions.FieldDefinitions.Default)]
+// 授权按方法粒度声明（#223）：读字段 schema（活跃 GetListAsync）与管理 schema 解耦，
+// 故不在类级 [Authorize]——每个方法显式声明自己的权限门（与 DocumentAppService 同源 programmatic 模式）。
 public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAppService
 {
     private readonly IFieldDefinitionRepository _repository;
@@ -33,6 +35,9 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
         // 按不可变 DocumentTypeId 精确匹配单层（#207）；类型不存在时自然返回空集。
         if (input.OnlyDeleted)
         {
+            // 回收站视图仅 schema 管理屏幕消费——保持 admin 门（#223）。
+            await CheckPolicyAsync(PaperbasePermissions.FieldDefinitions.Default);
+
             // 回收站视图：穿透 soft-delete 过滤，仅取 IsDeleted，按删除时间倒序。
             using (DataFilter.Disable<ISoftDelete>())
             {
@@ -45,6 +50,15 @@ public class FieldDefinitionAppService : PaperbaseAppService, IFieldDefinitionAp
                         .OrderByDescending(f => f.DeletionTime));
                 return ObjectMapper.Map<List<FieldDefinition>, List<FieldDefinitionDto>>(deleted);
             }
+        }
+
+        // 活跃字段读 schema 与管理 schema 解耦（#223）：文档操作者（Documents.Default）需要读字段定义
+        // 驱动动态字段列 / 详情字段编辑 / 导出列选择；字段管理员（FieldDefinitions.Default）读自己的管理列表。
+        // 二者任一即可——fail-closed OR 断言。
+        if (!await AuthorizationService.IsGrantedAsync(PaperbasePermissions.Documents.Default) &&
+            !await AuthorizationService.IsGrantedAsync(PaperbasePermissions.FieldDefinitions.Default))
+        {
+            throw new AbpAuthorizationException();
         }
 
         var list = await _repository.GetListAsync(input.DocumentTypeId);
