@@ -11,7 +11,7 @@
     </h5>
     @if (document()) {
       <span class="ms-2 fw-semibold text-truncate" style="max-width: 480px;" [title]="document()!.title || document()!.fileOrigin?.originalFileName">
-        {{ document()!.title || document()!.fileOrigin?.originalFileName || document()!.fileOrigin?.blobName }}
+        {{ document()!.title || document()!.fileOrigin?.originalFileName }}
       </span>
       <span [class]="getDocumentStatusBadgeClass(document()!)" class="ms-2">
         @if (isProcessing()) {

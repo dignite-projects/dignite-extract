@@ -68,6 +68,9 @@ export class DocumentListComponent implements OnInit {
   readonly canConfirm = this.permissionService.getGrantedPolicy(
     PAPERBASE_PERMISSIONS.Documents.ConfirmClassification,
   );
+  readonly canUpload = this.permissionService.getGrantedPolicy(
+    PAPERBASE_PERMISSIONS.Documents.Upload,
+  );
   readonly canViewCabinets = this.permissionService.getGrantedPolicy(
     PAPERBASE_PERMISSIONS.Cabinets.Default,
   );

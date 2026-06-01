@@ -31,7 +31,7 @@ Upload → DocumentTextExtractionBackgroundJob
               └─→ image / scan?
                     └─→ IOcrProvider (PaddleOCR / Azure Document Intelligence)
 
-Both paths write the same shape: TextExtractionResult { Markdown, Confidence, ... }
+Both paths write the same shape: TextExtractionResult { Markdown, DetectedLanguage, NativePayload, ... }
                                   → Document.Markdown
 ```
 
@@ -79,9 +79,9 @@ Default for development. `PP-StructureV3` runs on CPU and emits native Markdown 
 
 Paperbase does not auto-switch OCR profiles per document. The OCR provider runs once with the host-configured model; there is no second OCR pass with a guessed specialized mode, and OCR average confidence is no longer a quality gate (#196).
 
-OCR completion always advances the document to classification. `OcrConfidence` is surfaced on `OCRCompletedEto` / `DocumentReadyEto` as an informational quality metric (for downstream secondary gating), but it gates no Paperbase stage. A document reaches the review queue only via low classification confidence / no matching type, where the operator reclassifies, rejects (Paperbase keeps the original file, Markdown, OCR confidence, and rejection reason for audit, then marks the document failed — no "rerun OCR" or source-replacement path), or re-uploads a better source.
+OCR completion always advances the document to classification. OCR average confidence was removed (#196) — it did not reliably predict real quality (skewed pages, blurry scans, layout issues are not reflected in average scores). A document reaches the review queue only via low classification confidence / no matching type, where the operator reclassifies, rejects (Paperbase keeps the original file, Markdown, and rejection reason for audit, then marks the document failed — no "rerun OCR" or source-replacement path), or re-uploads a better source.
 
-`ReviewStatus` is the current routing state, not a durable audit ledger: `None` (no human action needed), `PendingReview` (classification needs an operator), or `Reviewed` (operator confirmed a type). Automatic re-classification may reset it; OCR confidence and pipeline history remain available if a dedicated audit/event model is later needed.
+`ReviewStatus` is the current routing state, not a durable audit ledger: `None` (no human action needed), `PendingReview` (classification needs an operator), or `Reviewed` (operator confirmed a type). Automatic re-classification may reset it; pipeline history remains available if a dedicated audit/event model is later needed.
 
 **Bring up the sidecar:**
 

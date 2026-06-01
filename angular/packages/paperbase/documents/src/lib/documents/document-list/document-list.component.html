@@ -27,17 +27,19 @@
           <span class="badge bg-danger ms-1">{{ pendingReviewCount() }}</span>
         }
       </button>
-      <!-- Bulk upload -->
-      <label class="btn btn-outline-primary mb-0" [class.disabled]="isBulkUploading()">
-        <i class="fas fa-upload me-1"></i>
-        {{ isBulkUploading() ? ('AbpUi::Loading' | abpLocalization) : ('::Document:BulkUpload' | abpLocalization) }}
-        <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg" class="d-none"
-               (change)="onBulkFileChange($event)" [disabled]="isBulkUploading()">
-      </label>
-      <button class="btn btn-primary" (click)="uploadNew()">
-        <i class="fas fa-upload me-1"></i>
-        {{ '::Document:Upload' | abpLocalization }}
-      </button>
+      @if (canUpload) {
+        <!-- Bulk upload -->
+        <label class="btn btn-outline-primary mb-0" [class.disabled]="isBulkUploading()">
+          <i class="fas fa-upload me-1"></i>
+          {{ isBulkUploading() ? ('AbpUi::Loading' | abpLocalization) : ('::Document:BulkUpload' | abpLocalization) }}
+          <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg" class="d-none"
+                 (change)="onBulkFileChange($event)" [disabled]="isBulkUploading()">
+        </label>
+        <button class="btn btn-primary" (click)="uploadNew()">
+          <i class="fas fa-upload me-1"></i>
+          {{ '::Document:Upload' | abpLocalization }}
+        </button>
+      }
     </div>
   </div>
 
@@ -159,7 +161,7 @@
                 </td>
                 <td>
                   <span class="fw-semibold">
-                    {{ doc.title || doc.fileOrigin?.originalFileName || doc.fileOrigin?.blobName }}
+                    {{ doc.title || doc.fileOrigin?.originalFileName }}
                   </span>
                 </td>
                 <td>

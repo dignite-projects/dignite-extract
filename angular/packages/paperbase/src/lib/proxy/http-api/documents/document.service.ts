@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { RestService } from '@abp/ng.core';
 import type { PagedResultDto } from '@abp/ng.core';
 import { Observable } from 'rxjs';
-import type { DocumentDto, DocumentListItemDto, GetDocumentListInput } from '../../documents/models';
+import type { DocumentDto, DocumentFieldFilter, DocumentListItemDto, GetDocumentListInput } from '../../documents/models';
 
 @Injectable({ providedIn: 'root' })
 export class DocumentService {
@@ -30,6 +30,7 @@ export class DocumentService {
           reviewStatus: input.reviewStatus ?? undefined,
           isDeleted: input.isDeleted ?? undefined,
           cabinetId: input.cabinetId ?? undefined,
+          ...this.serializeFieldFilters(input.fieldFilters),
         },
       },
       { apiName: this.apiName }
@@ -116,4 +117,18 @@ export class DocumentService {
       { method: 'GET', url: `${this.basePath}/${id}/blob`, responseType: 'blob' as any },
       { apiName: this.apiName }
     );
+
+  private serializeFieldFilters(
+    filters?: DocumentFieldFilter[] | null,
+  ): Record<string, string | undefined> {
+    if (!filters?.length) return {};
+    const params: Record<string, string | undefined> = {};
+    filters.forEach((f, i) => {
+      if (f.name) params[`fieldFilters[${i}].name`] = f.name;
+      if (f.value != null) params[`fieldFilters[${i}].value`] = f.value;
+      if (f.min != null) params[`fieldFilters[${i}].min`] = f.min;
+      if (f.max != null) params[`fieldFilters[${i}].max`] = f.max;
+    });
+    return params;
+  }
 }
