@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Dignite.Paperbase.Documents;
 using Dignite.Paperbase.Documents.DocumentTypes;
-using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.Data;
 using Volo.Abp.Domain.Services;
@@ -28,20 +27,22 @@ namespace Dignite.Paperbase.Documents.Pipelines;
 /// 合并 change-tracker 的 Local entries 补上 post-change 视图——派生逻辑因此无需调用方传入"刚改动的 run"。
 /// </para>
 /// <para>
-/// <b>AttemptNumber 并发安全</b>（#216 D2）：拆分前 Document 主行 UPDATE 提供隐式行级锁；拆分后无此互斥。
-/// 防御分两层：
-/// (1) DB 层 <b>unique index</b> <c>(DocumentId, PipelineCode, AttemptNumber)</c> 硬约束；
-/// (2) <see cref="QueueAsync"/> 内捕获撞键异常 → 经
-/// <see cref="IDocumentPipelineRunRepository.DetachAsync"/> 从 EF tracker 移除失败实体 → 重新读 latest +
-/// 重算 attempt + 重试（最多 <see cref="MaxAttemptNumberRetries"/> 次）。HTTP 同步路径（<c>RetryPipelineAsync</c>）
-/// 不再裸 500。仅当超过重试上限才抛——此时通常是真实病态并发或 DB 不可用。
+/// <b>AttemptNumber 并发安全</b>（#216 D2 / #239）：拆分前 Document 主行 UPDATE 提供隐式行级锁；拆分后无此互斥。
+/// 防御靠 DB 层 <b>unique index</b> <c>(DocumentId, PipelineCode, AttemptNumber)</c> 硬约束——它是数据完整性的
+/// 唯一保证，且 <b>完全 DB 无关</b>（SqlServer / PostgreSQL / MySQL 一致）。<see cref="QueueAsync"/> 经
+/// <see cref="IDocumentPipelineRunRepository.InsertNewAttemptAsync"/> 插入：撞键的唯一现实成因是同一 Failed
+/// pipeline 被并发重试（操作员双击 / 两操作员 / 客户端 timeout-重发），由仓储把 provider 无关的
+/// <c>DbUpdateException</c> 翻译成 <c>RetryInProgress</c>（此刻赢家的新 run 正是 Pending）。HTTP 同步路径
+/// （<c>RetryPipelineAsync</c>）因此拿到友好 BusinessException 而非裸 500。
+/// <para>
+/// #239 起移除了"捕获撞键 → 重读重算 → 重试"的应用层兜底循环：它非但非必要（完整性已由 unique index 兜住），
+/// 还会让并发双击重试在赢家落库后算出更大的 AttemptNumber、再插一条 run + 再入队一个 job，制造重复 pipeline 重跑。
+/// 撞键直接失败（loser 拿 RetryInProgress、只产生一条 run）是更优结果。
+/// </para>
 /// </para>
 /// </summary>
 public class DocumentPipelineRunManager : DomainService
 {
-    /// <summary>AttemptNumber 撞 unique 索引时 QueueAsync 的最大重试次数（含首发；总尝试上限）。</summary>
-    public const int MaxAttemptNumberRetries = 3;
-
     private readonly IDocumentPipelineRunRepository _runRepo;
 
     public DocumentPipelineRunManager(IDocumentPipelineRunRepository runRepo)
@@ -54,73 +55,24 @@ public class DocumentPipelineRunManager : DomainService
         string pipelineCode,
         Guid? pipelineRunId = null)
     {
-        Exception? lastCollision = null;
-        DocumentPipelineRun? failedAttempt = null;
+        var latest = await _runRepo.FindLatestByDocumentAndCodeAsync(document.Id, pipelineCode);
+        var attemptNumber = (latest?.AttemptNumber ?? 0) + 1;
 
-        for (var attempt = 0; attempt < MaxAttemptNumberRetries; attempt++)
-        {
-            // Retry 前先把上一次撞键失败的实体从 EF tracker 移除——SaveChanges 失败后 EF 把它留在 Added 状态，
-            // 不 detach 的话下一次 SaveChanges 会重新尝试同一个失败实体（且持有原冲突的 AttemptNumber）。
-            if (failedAttempt != null)
-            {
-                await _runRepo.DetachAsync(failedAttempt);
-                failedAttempt = null;
-            }
+        var run = new DocumentPipelineRun(
+            pipelineRunId ?? GuidGenerator.Create(),
+            document.Id,
+            document.TenantId,
+            pipelineCode,
+            attemptNumber);
 
-            var latest = await _runRepo.FindLatestByDocumentAndCodeAsync(document.Id, pipelineCode);
-            var attemptNumber = (latest?.AttemptNumber ?? 0) + 1;
+        run.MarkPending(Clock.Now);
 
-            var run = new DocumentPipelineRun(
-                pipelineRunId ?? GuidGenerator.Create(),
-                document.Id,
-                document.TenantId,
-                pipelineCode,
-                attemptNumber);
-
-            run.MarkPending(Clock.Now);
-
-            try
-            {
-                // autoSave:true → 触发本 UoW 立即 SaveChanges，撞键当场抛 DbUpdateException 而非延后到外层 commit。
-                // 同 UoW / 同事务：成功的 INSERT 仍由外层 UoW commit 才真正可见给其他事务；失败 / 外层回滚一并撤销。
-                await _runRepo.InsertAsync(run, autoSave: true);
-                await DeriveLifecycleAsync(document);
-                return run;
-            }
-            catch (Exception ex) when (IsAttemptNumberUniqueViolation(ex)
-                                       && attempt < MaxAttemptNumberRetries - 1)
-            {
-                Logger.LogWarning(ex,
-                    "AttemptNumber collision on document {DocumentId} pipeline {PipelineCode} attempt {AttemptNumber}; retrying ({Retry}/{Max}).",
-                    document.Id, pipelineCode, attemptNumber, attempt + 1, MaxAttemptNumberRetries);
-                lastCollision = ex;
-                failedAttempt = run;
-            }
-        }
-
-        throw new BusinessException(PaperbaseErrorCodes.Pipeline.AttemptNumberRetryExhausted, innerException: lastCollision)
-            .WithData("DocumentId", document.Id)
-            .WithData("PipelineCode", pipelineCode);
-    }
-
-    /// <summary>
-    /// 判断异常链是否表征 (DocumentId, PipelineCode, AttemptNumber) unique 索引撞键。
-    /// 不引用 EF Core / Microsoft.Data.SqlClient（Domain 层禁止）——按异常链 message 字符串 / SQL Server 错误码侦测，
-    /// 误判面窄到只剩"消息恰好含 UNIQUE / duplicate key / 2601 / 2627 之一"的其他场景，可接受。
-    /// </summary>
-    private static bool IsAttemptNumberUniqueViolation(Exception ex)
-    {
-        for (var current = ex; current != null; current = current.InnerException)
-        {
-            var msg = current.Message ?? string.Empty;
-            if (msg.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("duplicate key", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("2601") || msg.Contains("2627"))
-            {
-                return true;
-            }
-        }
-        return false;
+        // 撞 (DocumentId, PipelineCode, AttemptNumber) 唯一索引 → 仓储翻译成 RetryInProgress（见类注释）。
+        // 唯一约束冲突的识别收敛在 EF Core 层（抓 provider 无关的 DbUpdateException 类型，不嗅探 message /
+        // SQL Server 错误码），Domain 层不再引用 EF Core / SqlClient，跨库一致（#239）。
+        await _runRepo.InsertNewAttemptAsync(run);
+        await DeriveLifecycleAsync(document);
+        return run;
     }
 
     public virtual async Task<DocumentPipelineRun> StartAsync(

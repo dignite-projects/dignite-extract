@@ -181,9 +181,11 @@ public static class PaperbaseDbContextModelCreatingExtensions
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName(DocumentPipelineRunDocumentForeignKey);
 
-            // #216 D2：原非唯一索引升级为 UNIQUE——并发 worker 撞同 (Doc, Pipeline, Attempt) 时
-            // DB 抛 DbUpdateException 兜底，避免静默产生重复 AttemptNumber。背景作业由 job 框架自动重试；
-            // HTTP 同步路径罕见场景 500 是可接受 fail-fast。索引名保持不变，迁移上理论只是 IsUnique 标志改动。
+            // #216 D2 / #239：UNIQUE 索引是 AttemptNumber 并发安全的唯一数据完整性保证，完全 DB 无关
+            // （SqlServer / PostgreSQL / MySQL 一致）。并发撞同 (Doc, Pipeline, Attempt) 时 DB 抛
+            // DbUpdateException，由 EfCoreDocumentPipelineRunRepository.InsertNewAttemptAsync 抓住该 provider
+            // 无关异常类型（不嗅探 message / 错误码）→ 翻译成 RetryInProgress BusinessException。背景作业由
+            // job 框架自动重试；HTTP 同步重试的 loser 拿到友好的"已有进行中的尝试"而非裸 500。
             b.HasIndex(x => new { x.DocumentId, x.PipelineCode, x.AttemptNumber })
                 .IsUnique();
         });

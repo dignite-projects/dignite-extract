@@ -28,7 +28,6 @@
     "Paperbase:PipelineNeverRan": "流水线 '{PipelineCode}' 尚未运行。",
     "Paperbase:PipelineRetryInProgress": "流水线 '{PipelineCode}' 已有进行中的尝试。",
     "Paperbase:PipelineNotRetryable": "流水线 '{PipelineCode}' 当前状态为 '{Status}'，无法重试。",
-    "Paperbase:PipelineAttemptNumberRetryExhausted": "为文档 '{DocumentId}' 入队流水线 '{PipelineCode}' 时多次撞 AttemptNumber 唯一索引，重试上限已耗尽，请稍后再试。",
     "Paperbase:DocumentNotClassified": "该文档尚无文档类型。请先完成分类再编辑抽取字段。",
     "Paperbase:UnknownExtractedField": "字段 '{FieldName}' 未在文档类型 '{DocumentTypeCode}' 下定义。",
     "Paperbase:InvalidExtractedFieldValue": "文档类型 '{DocumentTypeCode}' 下字段 '{FieldName}' 的值必须是有效的 {DataType}。",

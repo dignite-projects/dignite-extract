@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Dignite.Paperbase.Documents;
 using Dignite.Paperbase.Documents.Pipelines;
 using Shouldly;
+using Volo.Abp;
 using Volo.Abp.Guids;
 using Xunit;
 
@@ -88,6 +89,46 @@ public class DocumentPipelineRunAggregatePersistence_Tests
             latest[PaperbasePipelines.Classification].Id.ShouldBe(run.Id);
             latest[PaperbasePipelines.Classification].Status.ShouldBe(PipelineRunStatus.Pending);
         });
+    }
+
+    [Fact]
+    public async Task InsertNewAttempt_Translates_Unique_Collision_To_RetryInProgress()
+    {
+        // #239：撞 (DocumentId, PipelineCode, AttemptNumber) 唯一索引时，仓储抓 provider 无关的
+        // DbUpdateException 类型（不嗅探 message / 错误码）→ 翻译成 RetryInProgress。此处用真实 SQLite
+        // 的 UNIQUE 约束触发冲突，验证翻译路径端到端生效，且不依赖任何 SQL Server 专属错误文本。
+        var documentId = _guidGenerator.Create();
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            await _documentRepository.InsertAsync(CreateDocument(documentId), autoSave: true);
+        });
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            await _runRepository.InsertNewAttemptAsync(NewRun(documentId, attemptNumber: 1));
+        });
+
+        var ex = await Should.ThrowAsync<BusinessException>(async () =>
+        {
+            await WithUnitOfWorkAsync(async () =>
+            {
+                // 同 (doc, pipeline, attempt) 的另一条 run（新 Id）——并发重试的 loser 视角。
+                await _runRepository.InsertNewAttemptAsync(NewRun(documentId, attemptNumber: 1));
+            });
+        });
+
+        ex.Code.ShouldBe(PaperbaseErrorCodes.Pipeline.RetryInProgress);
+    }
+
+    private DocumentPipelineRun NewRun(Guid documentId, int attemptNumber)
+    {
+        return new DocumentPipelineRun(
+            _guidGenerator.Create(),
+            documentId,
+            tenantId: null,
+            PaperbasePipelines.Classification,
+            attemptNumber);
     }
 
     private static Document CreateDocument(Guid id)
