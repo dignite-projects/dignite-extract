@@ -68,3 +68,27 @@ CLAUDE.md "两层文档类型体系" enforces **strict per-layer isolation** (Ho
 - [ ] Deleting a `DocumentType` with active documents → behavior matches `Paperbase:DocumentTypeInUse` policy (verify expected error code surfaces in admin UI)
 - [ ] Restoring a soft-deleted `FieldDefinition` whose parent `DocumentType` is also deleted → `Paperbase:FieldDefinitionParentTypeMissing` blocks the restore; parent must be restored first
 - [ ] After restoring a soft-deleted `DocumentType`, classification candidate set picks it up immediately (no admin restart needed)
+
+---
+
+## Migration safety — large-table index builds + pre-deploy data probes (#225)
+
+Re-run before applying EF Core migrations to a database that already holds production data. **On a fresh / empty DB every check below is a no-op** — apply forward in one pass. Migrations live under `host/src/Migrations/`; the concerns below come from the migration-safety review of the field-architecture-v2 + pipeline-aggregate series.
+
+### Pre-deploy table-size probe
+
+- [ ] Record row counts before applying: `SELECT COUNT(*)` on `PaperbaseDocuments`, `PaperbaseDocumentExtractedFields`, `PaperbaseDocumentPipelineRuns`. If all are small (early deployment) the index-lock and `ALTER COLUMN` concerns below are moot.
+
+### Large-table index builds (offline `CREATE INDEX` holds a schema-modification lock)
+
+Each of these migrations creates an index on a hot channel table; on a large table the default offline build blocks reads/writes on that table until it finishes:
+
+- [ ] `Add_FileOrigin_Indexes` — two indexes on `PaperbaseDocuments` (`FileOrigin_BlobName`, `FileOrigin_ContentHash`)
+- [ ] `Limit_DocumentExtractedField_StringValue_Length` — composite index on `PaperbaseDocumentExtractedFields`
+- [ ] `Pipelines_AggregateRoot_Split` — rebuilds the unique index on `PaperbaseDocumentPipelineRuns`
+- [ ] On a large table + SQL Server Enterprise: rewrite as `CREATE INDEX ... WITH (ONLINE = ON)` in a **new** migration / hand-written `migrationBuilder.Sql` (do **not** edit already-applied migrations). On Standard/Web Edition (no ONLINE): schedule a maintenance window / low-traffic period.
+
+### Lossy / blocking operations
+
+- [ ] `Limit_DocumentExtractedField_StringValue_Length` narrows `StringValue` from `nvarchar(max)` → `nvarchar(256)`. On data with existing values longer than 256, `ALTER COLUMN` **aborts the migration** (fail-fast, not silent truncation). Probe first — `SELECT COUNT(*) FROM PaperbaseDocumentExtractedFields WHERE LEN(StringValue) > 256` must be `0` (the write-side validator already caps new values at 256, so this is historical-data-only risk).
+- [ ] Forward-only awareness: `Merge_FieldDataType_Integer_Decimal_Into_Number` and `Add_DocumentExtractedField_Order_And_FieldDefinition_AllowMultiple` have **lossy `Down()`** (the first collapses the Integer/Decimal distinction; the second deletes multi-value rows where `Order <> 0`). Prefer a forward-only rollback strategy in production; do not rely on these `Down()` to restore data.
