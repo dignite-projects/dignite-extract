@@ -1,11 +1,8 @@
 using System.Linq;
-using Dignite.Paperbase.Documents;
+using Dignite.Paperbase.Documents.DocumentTypes;
 using Dignite.Paperbase.Mcp.Documents;
-using Dignite.Paperbase.Permissions;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
-using Volo.Abp.Authorization;
 using Volo.Abp.Modularity;
 
 namespace Dignite.Paperbase;
@@ -15,9 +12,10 @@ namespace Dignite.Paperbase;
 /// 把通道文档暴露为 MCP 资源 + 检索 tool，供 Claude Desktop / Cursor / 任意 MCP 客户端消费。
 /// MCP SDK 依赖只进本项目，不渗入 Application；端点映射（<c>MapMcp</c>）仍只在 host。
 /// 认证复用 host 现有 OpenIddict Bearer（端点上 RequireAuthorization）；订阅 + lifecycle 通知是后续增量（#197）。
+/// 出口只依赖 <c>Application.Contracts</c>（与 REST 出口对称）：所有读路径走 AppService 接口、不捅 Domain（#222）。
 /// </summary>
 [DependsOn(
-    typeof(PaperbaseApplicationModule))]
+    typeof(PaperbaseApplicationContractsModule))]
 public class PaperbaseMcpModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -36,14 +34,12 @@ public class PaperbaseMcpModule : AbpModule
             // list 与 read 职责分离：本 handler 只填充 resources/list，template read 不受影响。
             .WithListResourcesHandler(async (ctx, ct) =>
             {
-                // fail-closed 安全门：枚举前同样断言权限（与 ReadAsync 一致，MCP dispatch 不经 HTTP [Authorize]）。
-                var authorizationService = ctx.Services!.GetRequiredService<IAuthorizationService>();
-                await authorizationService.CheckAsync(PaperbasePermissions.Documents.Default);
-
-                // 租户隔离由 ambient IMultiTenant 过滤器施加：GetListAsync 只返回当前主体那一层的类型
-                // （两层独立单层模型）。文档类型数量有限且应被看见，故枚举进 resources/list。
-                var documentTypeRepository = ctx.Services!.GetRequiredService<IDocumentTypeRepository>();
-                var types = await documentTypeRepository.GetListAsync(cancellationToken: ct);
+                // 委托 IDocumentTypeAppService.GetVisibleAsync：fail-closed 权限断言（方法体内 OR 断言，
+                // MCP dispatch 不经 HTTP [Authorize] 但进程内 AppService 调用照常触发）+ ambient 租户隔离
+                // （两层独立单层模型，只返回当前主体那一层的类型）都在 AppService 内统一执行。
+                // 文档类型数量有限且应被看见，故枚举进 resources/list。
+                var documentTypeAppService = ctx.Services!.GetRequiredService<IDocumentTypeAppService>();
+                var types = await documentTypeAppService.GetVisibleAsync();
 
                 return new ListResourcesResult
                 {

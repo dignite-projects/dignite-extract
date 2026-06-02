@@ -53,6 +53,8 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
 
     public virtual async Task<DocumentDto> GetAsync(Guid id)
     {
+        // 方法体内 programmatic 权限断言——同时是 MCP 出口（DocumentResources 委托此方法，#222）的权限防线：
+        // MCP / 反射 / tool-dispatch 路径不经 HTTP [Authorize]，故此断言不得改写为类/方法级 [Authorize] 属性。
         await CheckPolicyAsync(PaperbasePermissions.Documents.Default);
         var document = await _documentRepository.GetAsync(id, includeDetails: true);
         return await MapToDtoAsync(document);

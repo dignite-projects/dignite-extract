@@ -34,6 +34,11 @@ public class DocumentDto : EntityDto<Guid>
     public string? Markdown { get; set; }
 
     /// <summary>
+    /// 文档语言（ISO 639-1 / IETF tag，文本提取阶段检测后写入）。未检测到时为 null。
+    /// </summary>
+    public string? Language { get; set; }
+
+    /// <summary>
     /// 类型绑定字段抽取结果（字段架构 v2）。键 = FieldName（与 <see cref="FieldDefinitionDto.Name"/> 同形）。
     /// 来源层由 <see cref="TenantId"/> 决定（Host 文档 → Host 字段定义；租户文档 → 该租户字段定义）。
     /// 尚未抽取或无类型绑定字段时为 null。

@@ -14,7 +14,11 @@
 
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol.AspNetCore" />
-    <ProjectReference Include="..\Dignite.Paperbase.Application\Dignite.Paperbase.Application.csproj" />
+    <!-- 仅为把 AppService.GetAsync 抛出的 EntityNotFoundException 翻译成干净的 McpException（资源 not-found 协议错误）。
+         这是 ABP 框架的 DDD abstractions 包，REST 出口 HttpApi 经 AspNetCore.Mvc 同样透传持有——与 #222
+         "出口不依赖 Paperbase.Application 实现项目" 不冲突（不引入 OCR/LLM/pipeline 等实现传递依赖）。 -->
+    <PackageReference Include="Volo.Abp.Ddd.Domain" />
+    <ProjectReference Include="..\Dignite.Paperbase.Application.Contracts\Dignite.Paperbase.Application.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,11 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
 using Dignite.Paperbase.Ai;
 using Dignite.Paperbase.Documents;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
@@ -21,52 +19,60 @@ public class DocumentTypeResourcesTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        // ReadAsync 直接 CheckAsync(IAuthorizationService)——用 always-allow 让授权通过，聚焦 schema 投影行为。
-        context.Services.AddAlwaysAllowAuthorization();
-        context.Services.AddSingleton(Substitute.For<IDocumentTypeRepository>());
-        context.Services.AddSingleton(Substitute.For<IFieldDefinitionRepository>());
+        // 出口是薄壳，委托 AppService（权限断言 / 租户隔离在 AppService 内、此处以 mock 替身）；
+        // 以 mock 注入断言 code 过滤、schema 投影、PromptBoundary 包裹、not-found 行为。
+        context.Services.AddSingleton(Substitute.For<IDocumentTypeAppService>());
+        context.Services.AddSingleton(Substitute.For<IFieldDefinitionAppService>());
     }
 }
 
 /// <summary>
 /// <see cref="DocumentTypeResources"/> read 行为：按 type code 返回字段 schema——DisplayName（类型 + 字段）
 /// 经 <c>PromptBoundary</c> 包裹、字段按 DisplayOrder 排序、找不到类型抛 <see cref="McpException"/>。
-/// 权限断言 / 租户隔离在框架层（此处 always-allow + mock 仓储），由其它测试覆盖、不在此重复。
+/// 权限断言、参数校验、租户隔离都在 AppService 内（此处以 mock 替身），故那些行为由 AppService 测试覆盖、不在此重复。
 /// resources/list 动态枚举是 MCP server 集成行为，不在单元测试范畴。
 /// </summary>
 public class DocumentTypeResources_Tests : PaperbaseTestBase<DocumentTypeResourcesTestModule>
 {
-    private readonly IDocumentTypeRepository _documentTypeRepository;
-    private readonly IFieldDefinitionRepository _fieldDefinitionRepository;
-    private readonly IAuthorizationService _authorizationService;
+    private readonly IDocumentTypeAppService _documentTypeAppService;
+    private readonly IFieldDefinitionAppService _fieldDefinitionAppService;
 
     public DocumentTypeResources_Tests()
     {
-        _documentTypeRepository = GetRequiredService<IDocumentTypeRepository>();
-        _fieldDefinitionRepository = GetRequiredService<IFieldDefinitionRepository>();
-        _authorizationService = GetRequiredService<IAuthorizationService>();
+        _documentTypeAppService = GetRequiredService<IDocumentTypeAppService>();
+        _fieldDefinitionAppService = GetRequiredService<IFieldDefinitionAppService>();
     }
 
     [Fact]
     public async Task Returns_schema_with_wrapped_display_names_ordered_by_display_order()
     {
-        // #207：ReadAsync 先 FindByTypeCodeAsync 拿类型 Id，再 GetListAsync(id) 取字段。
+        // #222：ReadAsync 委托 GetVisibleAsync 按 code 过滤拿类型，再 GetListAsync(DocumentTypeId) 取字段（#207）。
         var typeId = Guid.NewGuid();
-        _documentTypeRepository
-            .FindByTypeCodeAsync("contract.general", Arg.Any<CancellationToken>())
-            .Returns(new DocumentType(typeId, null, "contract.general", "合同"));
-        _fieldDefinitionRepository
-            .GetListAsync(typeId, Arg.Any<CancellationToken>())
-            .Returns(new List<FieldDefinition>
+        _documentTypeAppService
+            .GetVisibleAsync()
+            .Returns(new List<DocumentTypeDto>
             {
-                new(Guid.NewGuid(), null, typeId, "amount", "合同金额",
-                    "Extract the total contract amount", FieldDataType.Number, displayOrder: 1, isRequired: true),
-                new(Guid.NewGuid(), null, typeId, "partyName", "甲方",
-                    "Extract party A name", FieldDataType.String, displayOrder: 0)
+                new() { Id = typeId, TypeCode = "contract.general", DisplayName = "合同" }
+            });
+        _fieldDefinitionAppService
+            .GetListAsync(Arg.Is<GetFieldDefinitionListInput>(i => i.DocumentTypeId == typeId))
+            .Returns(new List<FieldDefinitionDto>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(), DocumentTypeId = typeId, Name = "amount", DisplayName = "合同金额",
+                    Prompt = "Extract the total contract amount", DataType = FieldDataType.Number,
+                    DisplayOrder = 1, IsRequired = true
+                },
+                new()
+                {
+                    Id = Guid.NewGuid(), DocumentTypeId = typeId, Name = "partyName", DisplayName = "甲方",
+                    Prompt = "Extract party A name", DataType = FieldDataType.String, DisplayOrder = 0
+                }
             });
 
         var result = await DocumentTypeResources.ReadAsync(
-            "contract.general", _documentTypeRepository, _fieldDefinitionRepository, _authorizationService);
+            "contract.general", _documentTypeAppService, _fieldDefinitionAppService);
 
         var schema = JsonSerializer.Deserialize<DocumentTypeSchema>(((TextResourceContents)result).Text)!;
 
@@ -89,21 +95,31 @@ public class DocumentTypeResources_Tests : PaperbaseTestBase<DocumentTypeResourc
         // #212：多值字段在检索结果 extractedFields 里是 string[]——schema 必须透出 AllowMultiple，
         // 否则 MCP 客户端按"String 标量"解析数组会出错。
         var typeId = Guid.NewGuid();
-        _documentTypeRepository
-            .FindByTypeCodeAsync("contract.general", Arg.Any<CancellationToken>())
-            .Returns(new DocumentType(typeId, null, "contract.general", "合同"));
-        _fieldDefinitionRepository
-            .GetListAsync(typeId, Arg.Any<CancellationToken>())
-            .Returns(new List<FieldDefinition>
+        _documentTypeAppService
+            .GetVisibleAsync()
+            .Returns(new List<DocumentTypeDto>
             {
-                new(Guid.NewGuid(), null, typeId, "tags", "标签", "Extract tags",
-                    FieldDataType.String, displayOrder: 0, isRequired: false, allowMultiple: true),
-                new(Guid.NewGuid(), null, typeId, "partyName", "甲方", "Extract party A name",
-                    FieldDataType.String, displayOrder: 1)
+                new() { Id = typeId, TypeCode = "contract.general", DisplayName = "合同" }
+            });
+        _fieldDefinitionAppService
+            .GetListAsync(Arg.Is<GetFieldDefinitionListInput>(i => i.DocumentTypeId == typeId))
+            .Returns(new List<FieldDefinitionDto>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(), DocumentTypeId = typeId, Name = "tags", DisplayName = "标签",
+                    Prompt = "Extract tags", DataType = FieldDataType.String, DisplayOrder = 0,
+                    IsRequired = false, AllowMultiple = true
+                },
+                new()
+                {
+                    Id = Guid.NewGuid(), DocumentTypeId = typeId, Name = "partyName", DisplayName = "甲方",
+                    Prompt = "Extract party A name", DataType = FieldDataType.String, DisplayOrder = 1
+                }
             });
 
         var result = await DocumentTypeResources.ReadAsync(
-            "contract.general", _documentTypeRepository, _fieldDefinitionRepository, _authorizationService);
+            "contract.general", _documentTypeAppService, _fieldDefinitionAppService);
 
         var schema = JsonSerializer.Deserialize<DocumentTypeSchema>(((TextResourceContents)result).Text)!;
 
@@ -116,13 +132,13 @@ public class DocumentTypeResources_Tests : PaperbaseTestBase<DocumentTypeResourc
     [Fact]
     public async Task Throws_when_type_not_found()
     {
-        // 跨租户 / 不存在的 code → FindByTypeCodeAsync 返回 null（租户隔离由 ambient 过滤器施加）。
-        _documentTypeRepository
-            .FindByTypeCodeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((DocumentType?)null);
+        // 跨租户 / 不存在的 code → 不在 GetVisibleAsync 返回的当前层类型集中（租户隔离由 ambient 过滤器施加）。
+        _documentTypeAppService
+            .GetVisibleAsync()
+            .Returns(new List<DocumentTypeDto>());
 
         await Should.ThrowAsync<McpException>(async () =>
             await DocumentTypeResources.ReadAsync(
-                "nonexistent", _documentTypeRepository, _fieldDefinitionRepository, _authorizationService));
+                "nonexistent", _documentTypeAppService, _fieldDefinitionAppService));
     }
 }
