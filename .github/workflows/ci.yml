@@ -71,6 +71,8 @@ jobs:
         run: npx nx run-many -t lint
         working-directory: angular
 
-      # Test step intentionally disabled — no *.spec.ts / *.test.ts files exist in the
-      # workspace yet, so vitest fails with "No tests found" before any rule runs.
-      # Re-enable when the first Angular spec lands.
+      # Unit tests run on plain Vitest (jsdom) via vitest.config.mts, not the
+      # `@angular/build:unit-test` builder — see vitest.setup.ts for the rationale.
+      - name: Unit tests
+        run: npx vitest run
+        working-directory: angular

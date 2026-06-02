@@ -11,10 +11,11 @@
     "build": "nx run-many -t build",
     "build:paperbase": "nx build paperbase",
     "build:host": "nx build host",
-    "test": "nx run-many -t test",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "nx run-many -t lint",
     "affected:build": "nx affected -t build",
-    "affected:test": "nx affected -t test"
+    "affected:test": "vitest run"
   },
   "dependencies": {
     "@abp/ng.account": "~10.2.0",
