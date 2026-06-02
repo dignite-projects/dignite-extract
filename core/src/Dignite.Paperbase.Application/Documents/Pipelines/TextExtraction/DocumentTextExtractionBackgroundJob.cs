@@ -22,16 +22,11 @@ namespace Dignite.Paperbase.Documents.Pipelines.TextExtraction;
 
 [BackgroundJobName("Paperbase.DocumentTextExtraction")]
 public class DocumentTextExtractionBackgroundJob
-    : AsyncBackgroundJob<DocumentTextExtractionJobArgs>, ITransientDependency
+    : DocumentPipelineBackgroundJobBase<DocumentTextExtractionJobArgs>, ITransientDependency
 {
-    private readonly IDocumentRepository _documentRepository;
-    private readonly IDocumentPipelineRunRepository _runRepository;
-    private readonly DocumentPipelineRunManager _pipelineRunManager;
-    private readonly DocumentPipelineRunAccessor _pipelineRunAccessor;
     private readonly DocumentPipelineJobScheduler _pipelineJobScheduler;
     private readonly ITextExtractor _textExtractor;
     private readonly IBlobContainer<PaperbaseDocumentContainer> _blobContainer;
-    private readonly IUnitOfWorkManager _unitOfWorkManager;
     private readonly IDistributedEventBus _distributedEventBus;
     private readonly IClock _clock;
     /// <summary>
@@ -49,24 +44,20 @@ public class DocumentTextExtractionBackgroundJob
         IDocumentPipelineRunRepository runRepository,
         DocumentPipelineRunManager pipelineRunManager,
         DocumentPipelineRunAccessor pipelineRunAccessor,
+        IUnitOfWorkManager unitOfWorkManager,
         DocumentPipelineJobScheduler pipelineJobScheduler,
         ITextExtractor textExtractor,
         IBlobContainer<PaperbaseDocumentContainer> blobContainer,
-        IUnitOfWorkManager unitOfWorkManager,
         IDistributedEventBus distributedEventBus,
         IClock clock,
         [FromKeyedServices(PaperbaseAIConsts.TitleGeneratorChatClientKey)] IChatClient titleGeneratorChatClient,
         IPromptProvider promptProvider,
         IOptions<PaperbaseAIBehaviorOptions> behaviorOptions)
+        : base(documentRepository, runRepository, pipelineRunManager, pipelineRunAccessor, unitOfWorkManager)
     {
-        _documentRepository = documentRepository;
-        _runRepository = runRepository;
-        _pipelineRunManager = pipelineRunManager;
-        _pipelineRunAccessor = pipelineRunAccessor;
         _pipelineJobScheduler = pipelineJobScheduler;
         _textExtractor = textExtractor;
         _blobContainer = blobContainer;
-        _unitOfWorkManager = unitOfWorkManager;
         _distributedEventBus = distributedEventBus;
         _clock = clock;
         _titleGeneratorChatClient = titleGeneratorChatClient;
@@ -103,19 +94,19 @@ public class DocumentTextExtractionBackgroundJob
         }
         catch (Exception ex)
         {
-            await FailRunAsync(args.DocumentId, workItem.RunId, ex.Message);
+            await FailRunAsync(args.DocumentId, workItem.RunId, ex.Message, PaperbasePipelines.TextExtraction);
             throw;
         }
     }
 
     private async Task<TextExtractionWorkItem> BeginRunAsync(DocumentTextExtractionJobArgs args)
     {
-        using var uow = _unitOfWorkManager.Begin(requiresNew: true);
+        using var uow = UnitOfWorkManager.Begin(requiresNew: true);
 
-        var document = await _documentRepository.GetAsync(args.DocumentId, includeDetails: false);
-        var run = await _pipelineRunAccessor.BeginOrStartAsync(
+        var document = await DocumentRepository.GetAsync(args.DocumentId, includeDetails: false);
+        var run = await PipelineRunAccessor.BeginOrStartAsync(
             document, args.PipelineRunId, PaperbasePipelines.TextExtraction);
-        await _documentRepository.UpdateAsync(document, autoSave: true);
+        await DocumentRepository.UpdateAsync(document, autoSave: true);
 
         await uow.CompleteAsync();
 
@@ -133,14 +124,12 @@ public class DocumentTextExtractionBackgroundJob
         string? title,
         DocumentTextExtractionMetadata extractionMetadata)
     {
-        using var uow = _unitOfWorkManager.Begin(requiresNew: true);
+        using var uow = UnitOfWorkManager.Begin(requiresNew: true);
 
-        var document = await _documentRepository.GetAsync(documentId, includeDetails: false);
-        var run = await _runRepository.FindAsync(runId)
-            ?? await _pipelineRunAccessor.BeginOrStartAsync(
-                document, runId, PaperbasePipelines.TextExtraction);
+        var (document, run) = await LoadDocumentAndRunAsync(
+            documentId, runId, PaperbasePipelines.TextExtraction);
 
-        await _pipelineRunManager.CompleteTextExtractionAsync(
+        await PipelineRunManager.CompleteTextExtractionAsync(
             document, run, result.Markdown, title,
             language: result.DetectedLanguage,
             extractionMetadata: extractionMetadata);
@@ -281,21 +270,6 @@ public class DocumentTextExtractionBackgroundJob
         return trimmed.Length <= DocumentConsts.MaxTitleLength
             ? trimmed
             : trimmed[..DocumentConsts.MaxTitleLength];
-    }
-
-    private async Task FailRunAsync(Guid documentId, Guid runId, string errorMessage)
-    {
-        using var uow = _unitOfWorkManager.Begin(requiresNew: true);
-
-        var document = await _documentRepository.GetAsync(documentId, includeDetails: false);
-        var run = await _runRepository.FindAsync(runId)
-            ?? await _pipelineRunAccessor.BeginOrStartAsync(
-                document, runId, PaperbasePipelines.TextExtraction);
-
-        await _pipelineRunManager.FailAsync(document, run, errorMessage);
-        await _documentRepository.UpdateAsync(document, autoSave: true);
-
-        await uow.CompleteAsync();
     }
 
     private sealed record TextExtractionWorkItem(

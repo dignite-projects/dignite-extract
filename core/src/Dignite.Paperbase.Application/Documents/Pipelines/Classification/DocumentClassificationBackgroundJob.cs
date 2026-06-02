@@ -18,44 +18,35 @@ namespace Dignite.Paperbase.Documents.Pipelines.Classification;
 
 [BackgroundJobName("Paperbase.DocumentClassification")]
 public class DocumentClassificationBackgroundJob
-    : AsyncBackgroundJob<DocumentClassificationJobArgs>, ITransientDependency
+    : DocumentPipelineBackgroundJobBase<DocumentClassificationJobArgs>, ITransientDependency
 {
-    private readonly IDocumentRepository _documentRepository;
-    private readonly IDocumentPipelineRunRepository _runRepository;
     private readonly IDocumentTypeRepository _documentTypeRepository;
-    private readonly DocumentPipelineRunManager _pipelineRunManager;
-    private readonly DocumentPipelineRunAccessor _pipelineRunAccessor;
     private readonly DocumentClassificationWorkflow _workflow;
     private readonly IDistributedEventBus _distributedEventBus;
     private readonly IClock _clock;
     private readonly PaperbaseAIBehaviorOptions _aiOptions;
     private readonly ICurrentTenant _currentTenant;
-    private readonly IUnitOfWorkManager _unitOfWorkManager;
 
     public DocumentClassificationBackgroundJob(
         IDocumentRepository documentRepository,
         IDocumentPipelineRunRepository runRepository,
-        IDocumentTypeRepository documentTypeRepository,
         DocumentPipelineRunManager pipelineRunManager,
         DocumentPipelineRunAccessor pipelineRunAccessor,
+        IUnitOfWorkManager unitOfWorkManager,
+        IDocumentTypeRepository documentTypeRepository,
         DocumentClassificationWorkflow workflow,
         IDistributedEventBus distributedEventBus,
         IClock clock,
         IOptions<PaperbaseAIBehaviorOptions> aiOptions,
-        ICurrentTenant currentTenant,
-        IUnitOfWorkManager unitOfWorkManager)
+        ICurrentTenant currentTenant)
+        : base(documentRepository, runRepository, pipelineRunManager, pipelineRunAccessor, unitOfWorkManager)
     {
-        _documentRepository = documentRepository;
-        _runRepository = runRepository;
         _documentTypeRepository = documentTypeRepository;
-        _pipelineRunManager = pipelineRunManager;
-        _pipelineRunAccessor = pipelineRunAccessor;
         _workflow = workflow;
         _distributedEventBus = distributedEventBus;
         _clock = clock;
         _aiOptions = aiOptions.Value;
         _currentTenant = currentTenant;
-        _unitOfWorkManager = unitOfWorkManager;
     }
 
     public override async Task ExecuteAsync(DocumentClassificationJobArgs args)
@@ -69,16 +60,16 @@ public class DocumentClassificationBackgroundJob
         }
         catch (Exception ex)
         {
-            await FailRunAsync(workItem.DocumentId, workItem.RunId, ex.Message);
+            await FailRunAsync(workItem.DocumentId, workItem.RunId, ex.Message, PaperbasePipelines.Classification);
             throw;
         }
     }
 
     private async Task<ClassificationWorkItem> BeginRunAsync(DocumentClassificationJobArgs args)
     {
-        using var uow = _unitOfWorkManager.Begin(requiresNew: true);
+        using var uow = UnitOfWorkManager.Begin(requiresNew: true);
 
-        var document = await _documentRepository.GetAsync(args.DocumentId, includeDetails: false);
+        var document = await DocumentRepository.GetAsync(args.DocumentId, includeDetails: false);
 
         // 候选集组装：按 Document.TenantId 匹配单层文档类型，不跨层 union；按 Priority DESC + 截断。
         List<DocumentType> candidates;
@@ -92,9 +83,9 @@ public class DocumentClassificationBackgroundJob
                 .ToList();
         }
 
-        var run = await _pipelineRunAccessor.BeginOrStartAsync(
+        var run = await PipelineRunAccessor.BeginOrStartAsync(
             document, args.PipelineRunId, PaperbasePipelines.Classification);
-        await _documentRepository.UpdateAsync(document, autoSave: true);
+        await DocumentRepository.UpdateAsync(document, autoSave: true);
 
         await uow.CompleteAsync();
 
@@ -131,30 +122,13 @@ public class DocumentClassificationBackgroundJob
         ClassificationWorkItem workItem,
         DocumentClassificationOutcome outcome)
     {
-        using var uow = _unitOfWorkManager.Begin(requiresNew: true);
+        using var uow = UnitOfWorkManager.Begin(requiresNew: true);
 
-        var document = await _documentRepository.GetAsync(workItem.DocumentId, includeDetails: false);
-        var run = await _runRepository.FindAsync(workItem.RunId)
-            ?? await _pipelineRunAccessor.BeginOrStartAsync(
-                document, workItem.RunId, PaperbasePipelines.Classification);
+        var (document, run) = await LoadDocumentAndRunAsync(
+            workItem.DocumentId, workItem.RunId, PaperbasePipelines.Classification);
 
         await ApplyClassificationResultAsync(document, run, outcome);
-        await _documentRepository.UpdateAsync(document, autoSave: true);
-
-        await uow.CompleteAsync();
-    }
-
-    private async Task FailRunAsync(Guid documentId, Guid runId, string errorMessage)
-    {
-        using var uow = _unitOfWorkManager.Begin(requiresNew: true);
-
-        var document = await _documentRepository.GetAsync(documentId, includeDetails: false);
-        var run = await _runRepository.FindAsync(runId)
-            ?? await _pipelineRunAccessor.BeginOrStartAsync(
-                document, runId, PaperbasePipelines.Classification);
-
-        await _pipelineRunManager.FailAsync(document, run, errorMessage);
-        await _documentRepository.UpdateAsync(document, autoSave: true);
+        await DocumentRepository.UpdateAsync(document, autoSave: true);
 
         await uow.CompleteAsync();
     }
@@ -179,7 +153,7 @@ public class DocumentClassificationBackgroundJob
 
         if (typeDef != null && outcome.ConfidenceScore >= typeDef.ConfidenceThreshold)
         {
-            await _pipelineRunManager.CompleteClassificationAsync(
+            await PipelineRunManager.CompleteClassificationAsync(
                 document, run, typeDef, outcome.ConfidenceScore);
 
             await _distributedEventBus.PublishAsync(
@@ -195,7 +169,7 @@ public class DocumentClassificationBackgroundJob
             return;
         }
 
-        await _pipelineRunManager.CompleteClassificationWithLowConfidenceAsync(
+        await PipelineRunManager.CompleteClassificationWithLowConfidenceAsync(
             document, run, outcome.Reason, outcome.Candidates);
     }
 
