@@ -56,8 +56,6 @@ public static class PaperbaseErrorCodes
         public const string RetryInProgress = "Paperbase:PipelineRetryInProgress";
         public const string NeverRan = "Paperbase:PipelineNeverRan";
         public const string UnknownCode = "Paperbase:UnknownPipelineCode";
-        // QueueAsync 重试上限耗尽（病态并发或 DB 不可用）。#216 D2 应用层 retry 兜底失败时抛。
-        public const string AttemptNumberRetryExhausted = "Paperbase:PipelineAttemptNumberRetryExhausted";
     }
 
     public static class Export

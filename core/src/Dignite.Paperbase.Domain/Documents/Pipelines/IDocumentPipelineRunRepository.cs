@@ -50,10 +50,16 @@ public interface IDocumentPipelineRunRepository : IRepository<DocumentPipelineRu
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 把实体从当前 UoW 的 EF Core change tracker 中移除（不删 DB 行）。
-    /// 用于：<see cref="DocumentPipelineRunManager.QueueAsync"/> 的 AttemptNumber 唯一索引撞键 retry——
-    /// 失败的 InsertAsync 把实体留在 tracker 的 Added 状态，retry 前必须先 detach 让 SaveChanges 不再重试它。
-    /// 持久化层 no-op 实现可（in-memory fake）：无 tracker 概念则方法本身就无意义。
+    /// 插入一条全新的 pipeline 尝试（attempt），并立即落库（autoSave）。
+    /// 若撞 <c>(DocumentId, PipelineCode, AttemptNumber)</c> 唯一索引（唯一现实成因：同一 Failed pipeline
+    /// 被并发重试——见 <see cref="DocumentPipelineRunManager.QueueAsync"/>），抛
+    /// <c>BusinessException(PaperbaseErrorCodes.Pipeline.RetryInProgress)</c>——此刻赢家的新 run 正是 Pending，
+    /// "已有进行中的尝试"语义精确命中。
+    /// <para>
+    /// <b>跨库纪律（#239）</b>：唯一约束冲突的识别收敛在持久化层，抓的是 EF Core <b>provider 无关</b>的
+    /// <c>DbUpdateException</c> 类型（所有 provider 都把唯一约束冲突包成它），<b>不</b>嗅探异常 message /
+    /// SQL Server 错误码。Domain 层因此不再引用任何 EF Core / SqlClient 类型，也不做字符串侦测。
+    /// </para>
     /// </summary>
-    Task DetachAsync(DocumentPipelineRun entity, CancellationToken cancellationToken = default);
+    Task InsertNewAttemptAsync(DocumentPipelineRun run, CancellationToken cancellationToken = default);
 }

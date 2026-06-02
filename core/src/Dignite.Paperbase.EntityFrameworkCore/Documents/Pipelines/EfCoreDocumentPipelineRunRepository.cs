@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Dignite.Paperbase.Documents.Pipelines;
 using Dignite.Paperbase.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Volo.Abp;
 using Volo.Abp.Domain.Repositories.EntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore;
 
@@ -105,11 +106,35 @@ public class EfCoreDocumentPipelineRunRepository
             .ToListAsync(GetCancellationToken(cancellationToken));
     }
 
-    public virtual async Task DetachAsync(
-        DocumentPipelineRun entity,
+    public virtual async Task InsertNewAttemptAsync(
+        DocumentPipelineRun run,
         CancellationToken cancellationToken = default)
     {
-        var dbContext = await GetDbContextAsync();
-        dbContext.Entry(entity).State = EntityState.Detached;
+        try
+        {
+            // autoSave:true → 立即 SaveChanges，撞键当场抛 DbUpdateException 而非延后到外层 commit。
+            await InsertAsync(run, autoSave: true, GetCancellationToken(cancellationToken));
+        }
+        catch (DbUpdateException ex) when (IsAttemptNumberCollision(ex, run))
+        {
+            // #239：唯一约束冲突识别收敛在持久化层，抓 provider 无关的 DbUpdateException 类型——不嗅探
+            // message / SQL Server 错误码，跨 SqlServer / PostgreSQL / MySQL 一致。唯一现实成因是同一
+            // Failed pipeline 被并发重试：赢家已插入下一 AttemptNumber 并把 run 置 Pending，输家撞键 →
+            // 翻译成 RetryInProgress（"已有进行中的尝试"），与 EnsureRetryableAsync 的并发护栏同语义。
+            throw new BusinessException(PaperbaseErrorCodes.Pipeline.RetryInProgress, innerException: ex)
+                .WithData("PipelineCode", run.PipelineCode)
+                .WithData("DocumentId", run.DocumentId);
+        }
+    }
+
+    /// <summary>
+    /// 判断本次 <see cref="DbUpdateException"/> 是否由 <paramref name="run"/> 的插入触发——靠 EF Core
+    /// <see cref="DbUpdateException.Entries"/>（provider 无关）定位失败实体，不依赖任何数据库错误码 / 文本。
+    /// 该插入唯一可能违反的约束就是 <c>(DocumentId, PipelineCode, AttemptNumber)</c> 唯一索引
+    /// （DocumentId FK 必然存在、各列非空已在领域层保证），故命中即视为 AttemptNumber 撞键。
+    /// </summary>
+    protected virtual bool IsAttemptNumberCollision(DbUpdateException ex, DocumentPipelineRun run)
+    {
+        return ex.Entries.Any(e => ReferenceEquals(e.Entity, run));
     }
 }

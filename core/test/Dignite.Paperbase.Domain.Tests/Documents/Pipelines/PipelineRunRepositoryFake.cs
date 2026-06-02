@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dignite.Paperbase.Documents.Pipelines;
 using NSubstitute;
+using Volo.Abp;
 
 namespace Dignite.Paperbase.Documents.Pipelines;
 
@@ -31,6 +32,27 @@ public static class PipelineRunRepositoryFake
                 var run = call.Arg<DocumentPipelineRun>();
                 runs.Add(run);
                 return Task.FromResult(run);
+            });
+
+        // InsertNewAttemptAsync：模拟 (DocumentId, PipelineCode, AttemptNumber) 唯一索引——撞键时
+        // 抛 RetryInProgress（与 EfCoreDocumentPipelineRunRepository 翻译 DbUpdateException 后的行为对齐），
+        // 否则等价于普通 InsertAsync 入列。happy-path 测试每个 Fact 用新 doc.Id，正常态不会撞。
+        mock.InsertNewAttemptAsync(Arg.Any<DocumentPipelineRun>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var run = call.Arg<DocumentPipelineRun>();
+                var collides = runs.Any(r =>
+                    r.DocumentId == run.DocumentId
+                    && r.PipelineCode == run.PipelineCode
+                    && r.AttemptNumber == run.AttemptNumber);
+                if (collides)
+                {
+                    throw new BusinessException(PaperbaseErrorCodes.Pipeline.RetryInProgress)
+                        .WithData("PipelineCode", run.PipelineCode)
+                        .WithData("DocumentId", run.DocumentId);
+                }
+                runs.Add(run);
+                return Task.CompletedTask;
             });
 
         mock.UpdateAsync(Arg.Any<DocumentPipelineRun>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
@@ -81,12 +103,6 @@ public static class PipelineRunRepositoryFake
                 var match = runs.FirstOrDefault(r => r.Id == runId);
                 return Task.FromResult<DocumentPipelineRun?>(match);
             });
-
-        // DetachAsync 在 in-memory fake 下是 no-op：无 EF change tracker 概念。真实 InsertAsync 撞
-        // unique 索引时 Manager 通过 detach 让 tracker 不再 retry 该实体——fake 不抛 SQL 异常，
-        // happy-path 测试触发不到这条路径。
-        mock.DetachAsync(Arg.Any<DocumentPipelineRun>(), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
 
         return mock;
     }
