@@ -116,7 +116,7 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
       new Set(
         allRuns
           .map(r => r.pipelineCode)
-          .filter(code => !!code && !KNOWN_PIPELINE_CODES.includes(code as typeof KNOWN_PIPELINE_CODES[number]))
+          .filter((code): code is string => !!code && !KNOWN_PIPELINE_CODES.includes(code as typeof KNOWN_PIPELINE_CODES[number]))
       )
     );
 
@@ -206,7 +206,7 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
     // doc + runs 互相独立（#216 后），并行拉一次；fieldDefinitions 依赖 doc.documentTypeCode 仍串行。
     forkJoin({
       doc: this.documentService.get(this.documentId),
-      runs: this.documentPipelineRunService.getListByDocument(this.documentId),
+      runs: this.documentPipelineRunService.getList(this.documentId),
     })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -245,7 +245,7 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: defs => this.fieldDefinitions.set(
-          [...defs].sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name)),
+          [...defs].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || (a.name ?? '').localeCompare(b.name ?? '')),
         ),
         error: () => this.fieldDefinitions.set([]),
       });
@@ -321,7 +321,7 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
       });
   }
 
-  getStatusBadgeClass(status: DocumentLifecycleStatus): string {
+  getStatusBadgeClass(status: DocumentLifecycleStatus | undefined): string {
     switch (status) {
       case DocumentLifecycleStatus.Uploaded:   return 'badge bg-secondary';
       case DocumentLifecycleStatus.Processing: return 'badge bg-warning text-dark';
@@ -339,7 +339,7 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
     return this.getStatusBadgeClass(doc.lifecycleStatus);
   }
 
-  getStatusLabel(status: DocumentLifecycleStatus): string {
+  getStatusLabel(status: DocumentLifecycleStatus | undefined): string {
     switch (status) {
       case DocumentLifecycleStatus.Uploaded:   return '::Document:Status:Uploaded';
       case DocumentLifecycleStatus.Processing: return '::Document:Status:Processing';
@@ -391,7 +391,7 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
     if (this.retryingPipeline() !== null) return;
 
     this.retryingPipeline.set(pipelineCode);
-    this.documentService.retryPipeline(this.documentId, pipelineCode)
+    this.documentService.retryPipeline(this.documentId, { pipelineCode })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
       next: () => {
@@ -436,14 +436,14 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
 
     const fields: Record<string, unknown> = {};
     for (const def of this.fieldDefinitions()) {
-      const key = def.name;
+      const key = def.name ?? '';
       const value = formValue[key];
 
       if (this.shouldOmitFieldValue(value)) continue;
       fields[key] = this.coerceValue(def, value);
     }
 
-    this.documentService.updateExtractedFields(doc.id!, fields)
+    this.documentService.updateExtractedFields(doc.id!, { fields })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: updated => {
@@ -465,11 +465,11 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
 
     return this.fieldDefinitions().map(def => {
       const config: FormFieldConfig = {
-        key: def.name,
+        key: def.name ?? '',
         label: `${def.displayName} (${def.name})`,
         // 多值字段（#212，仅文本）用 textarea 每行一个值；单值按 DataType 选输入类型。
         type: def.allowMultiple ? 'textarea' : this.toFormFieldType(def.dataType),
-        value: this.toFormInitialValue(def, values[def.name]),
+        value: this.toFormInitialValue(def, values[def.name ?? '']),
         required: def.isRequired,
         order: def.displayOrder,
         gridSize: 12,
@@ -495,7 +495,7 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
     });
   }
 
-  private toFormFieldType(dataType: FieldDataType): FormFieldConfig['type'] {
+  private toFormFieldType(dataType: FieldDataType | undefined): FormFieldConfig['type'] {
     switch (dataType) {
       // 长文本（摘要 / 描述等）用多行编辑框；toFormInitialValue 的 default 分支已把它当字符串原样回填。
       case FieldDataType.LongText:
@@ -611,6 +611,6 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
   protected pickLatestRun(runs: DocumentPipelineRunDto[], pipelineCode: string): DocumentPipelineRunDto | null {
     const matches = runs.filter(r => r.pipelineCode === pipelineCode);
     if (matches.length === 0) return null;
-    return matches.reduce((prev, curr) => (curr.attemptNumber > prev.attemptNumber ? curr : prev));
+    return matches.reduce((prev, curr) => ((curr.attemptNumber ?? 0) > (prev.attemptNumber ?? 0) ? curr : prev));
   }
 }

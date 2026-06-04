@@ -278,7 +278,8 @@ dotnet run --project ../MyProject.DbMigrator  # Apply migration + seed data
 
 ### Generate Angular Proxies
 ```bash
-abp generate-proxy -t ng
+cd angular
+npm run generate-proxy
 ```
 
 ## Checklist for New Features

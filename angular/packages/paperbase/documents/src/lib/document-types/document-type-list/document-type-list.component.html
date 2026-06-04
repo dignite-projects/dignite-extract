@@ -70,7 +70,7 @@
               <tr>
                 <td><span class="badge bg-info text-dark">{{ type.typeCode }}</span></td>
                 <td class="fw-semibold">{{ type.displayName }}</td>
-                <td class="text-muted">{{ (type.confidenceThreshold * 100).toFixed(0) }}%</td>
+                <td class="text-muted">{{ ((type.confidenceThreshold ?? 0) * 100).toFixed(0) }}%</td>
                 <td class="text-muted">{{ type.priority }}</td>
                 <td class="text-end">
                   <div class="d-flex gap-1 justify-content-end">

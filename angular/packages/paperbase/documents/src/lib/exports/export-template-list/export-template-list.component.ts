@@ -121,8 +121,8 @@ export class ExportTemplateListComponent implements OnInit {
       documentTypeId: template.documentTypeId,
     });
     this.loadFieldDefinitions(template.documentTypeId);
-    [...template.columns]
-      .sort((a, b) => a.order - b.order)
+    [...(template.columns ?? [])]
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       .forEach(c => this.addColumn(c.fieldDefinitionId, c.columnName));
     this.editing.set(template);
   }
@@ -147,7 +147,7 @@ export class ExportTemplateListComponent implements OnInit {
     this.loadFieldDefinitions(documentTypeId);
   }
 
-  private loadFieldDefinitions(documentTypeId: string): void {
+  private loadFieldDefinitions(documentTypeId: string | undefined): void {
     if (!documentTypeId) {
       this.fieldDefinitions.set([]);
       return;
@@ -268,11 +268,11 @@ export class ExportTemplateListComponent implements OnInit {
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
-  formatLabel(format: ExportFormat): string {
+  formatLabel(format: ExportFormat | undefined): string {
     return this.formatOptions.find(o => o.value === format)?.key ?? String(format);
   }
 
-  documentTypeLabel(documentTypeId: string): string | null {
+  documentTypeLabel(documentTypeId: string | undefined): string | null {
     return this.documentTypes().find(dt => dt.id === documentTypeId)?.typeCode ?? null;
   }
 }

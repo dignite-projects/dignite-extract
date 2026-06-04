@@ -25,6 +25,7 @@ import {
   DocumentService,
   DocumentTypeDto,
   DocumentTypeService,
+  DocumentUploadService,
   FieldDefinitionDto,
   FieldDefinitionService,
   GetDocumentListInput,
@@ -59,6 +60,7 @@ interface UploadResult {
 })
 export class DocumentListComponent implements OnInit {
   private readonly documentService = inject(DocumentService);
+  private readonly documentUploadService = inject(DocumentUploadService);
   private readonly documentTypeService = inject(DocumentTypeService);
   private readonly fieldDefinitionService = inject(FieldDefinitionService);
   private readonly cabinetService = inject(CabinetService);
@@ -158,7 +160,7 @@ export class DocumentListComponent implements OnInit {
     this.loadList();
   }
 
-  private buildFilter(): GetDocumentListInput {
+  private buildFilter(): Partial<GetDocumentListInput> {
     return {
       documentTypeCode: this.typeFilter() || undefined,
       cabinetId: this.cabinetFilter() || undefined,
@@ -211,7 +213,7 @@ export class DocumentListComponent implements OnInit {
       .subscribe({
         next: fields =>
           this.extractedFieldColumns.set(
-            [...fields].sort((a, b) => a.displayOrder - b.displayOrder),
+            [...fields].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)),
           ),
         error: () => this.extractedFieldColumns.set([]),
       });
@@ -291,7 +293,7 @@ export class DocumentListComponent implements OnInit {
       .pipe(
         mergeMap(
           file =>
-            this.documentService.upload(file).pipe(
+            this.documentUploadService.upload(file).pipe(
               map(doc => ({ fileName: file.name, documentId: doc.id, succeeded: true } as UploadResult)),
               catchError(err =>
                 of({ fileName: file.name, succeeded: false, errorMessage: err?.message } as UploadResult),
@@ -370,7 +372,7 @@ export class DocumentListComponent implements OnInit {
     const doc = this.confirmingDoc();
     if (!doc || !this.selectedTypeId()) return;
     this.isConfirming.set(true);
-    this.documentService.confirmClassification(doc.id!, this.selectedTypeId())
+    this.documentService.confirmClassification(doc.id!, { documentTypeId: this.selectedTypeId() })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
       next: () => {
@@ -386,7 +388,7 @@ export class DocumentListComponent implements OnInit {
     });
   }
 
-  getStatusBadgeClass(status: DocumentLifecycleStatus): string {
+  getStatusBadgeClass(status: DocumentLifecycleStatus | undefined): string {
     switch (status) {
       case DocumentLifecycleStatus.Uploaded:
         return 'badge bg-secondary';
@@ -409,7 +411,7 @@ export class DocumentListComponent implements OnInit {
     return this.getStatusBadgeClass(doc.lifecycleStatus);
   }
 
-  getStatusLabel(status: DocumentLifecycleStatus): string {
+  getStatusLabel(status: DocumentLifecycleStatus | undefined): string {
     switch (status) {
       case DocumentLifecycleStatus.Uploaded:
         return '::Document:Status:Uploaded';

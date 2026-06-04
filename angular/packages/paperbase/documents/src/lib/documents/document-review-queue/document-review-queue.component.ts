@@ -121,7 +121,7 @@ export class DocumentReviewQueueComponent implements OnInit {
     if (!doc || !this.selectedTypeId()) return;
     this.isSubmitting.set(true);
     this.documentService
-      .confirmClassification(doc.id!, this.selectedTypeId())
+      .confirmClassification(doc.id!, { documentTypeId: this.selectedTypeId() })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
@@ -154,7 +154,7 @@ export class DocumentReviewQueueComponent implements OnInit {
     this.isSubmitting.set(true);
     const reason = this.rejectReason().trim();
     this.documentService
-      .rejectReview(doc.id!, reason || undefined)
+      .rejectReview(doc.id!, { reason: reason || undefined })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
