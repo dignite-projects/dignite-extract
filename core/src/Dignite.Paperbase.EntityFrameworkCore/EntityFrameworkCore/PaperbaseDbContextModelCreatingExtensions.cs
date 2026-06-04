@@ -142,6 +142,11 @@ public static class PaperbaseDbContextModelCreatingExtensions
             // 校验上限同源 DocumentExtractedFieldConsts.MaxStringValueLength（ExtractedFieldValueValidator 一并卡住）。
             b.Property(x => x.StringValue).HasMaxLength(DocumentExtractedFieldConsts.MaxStringValueLength);
 
+            // LongTextValue 不限长（不调 HasMaxLength → provider 映射为 nvarchar(max) 等大文本类型，跨库可移植）：
+            // 长内容载荷（摘要 / 描述等）。刻意不进下方任何复合索引、也无单列索引——长文本既进不了索引键，也无等值 / 区间查询语义
+            // （ApplyFieldValueFilter 对 LongText loud fail）。App 层 MaxLongTextValueLength 仅作反滥用上限，不映射列长。
+            b.Property(x => x.LongTextValue);
+
             // NumberValue 用 precision(38,6)（32 位整数 + 6 位小数）——覆盖任何现实抽取数值（金额 / 比率 / 百分比）
             // 而不溢出 / 截断；EF 默认 decimal(18,2) 会静默把 >2 位小数四舍五入，丢精度。precision 跨库可移植（provider 各自映射）。
             // 其余数字 / 日期值列由 provider 按 CLR 类型自动映射（long→bigint、DateOnly→date、DateTime→datetime2 等），不绑 provider-specific 类型。
@@ -213,7 +218,8 @@ public static class PaperbaseDbContextModelCreatingExtensions
 
             b.Property(x => x.Name).IsRequired().HasMaxLength(FieldDefinitionConsts.MaxNameLength);
             b.Property(x => x.DisplayName).IsRequired().HasMaxLength(FieldDefinitionConsts.MaxDisplayNameLength);
-            b.Property(x => x.Prompt).IsRequired().HasMaxLength(FieldDefinitionConsts.MaxPromptLength);
+            // Prompt 选填（可空）：留空时 LLM 仅靠 Name + DataType 推断（FieldDefinition.NormalizePrompt 把空白收敛为 null）。
+            b.Property(x => x.Prompt).IsRequired(false).HasMaxLength(FieldDefinitionConsts.MaxPromptLength);
             b.Property(x => x.DataType).IsRequired();
 
             // 父文档类型内部关联（#207）：FK → DocumentType.Id，OnDelete Restrict（软删不触发，硬删被引用类型由 DB 拒绝）。

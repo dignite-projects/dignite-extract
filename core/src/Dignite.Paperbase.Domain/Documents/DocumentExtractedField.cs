@@ -56,6 +56,10 @@ public class DocumentExtractedField : Entity, IMultiTenant
     public virtual DateOnly? DateValue { get; private set; }
     public virtual DateTime? DateTimeValue { get; private set; }
 
+    // LongText 落独立的 nvarchar(max) 列——长内容载荷（摘要 / 描述等），不进任何索引、不可作查询条件、不支持多值。
+    // 与 StringValue（限长 256、入复合索引、可等值查询）刻意分列：长文本进不了索引键，强塞 StringValue 会废掉 #209 的 index seek。
+    public virtual string? LongTextValue { get; private set; }
+
     protected DocumentExtractedField()
     {
     }
@@ -81,12 +85,16 @@ public class DocumentExtractedField : Entity, IMultiTenant
         NumberValue = null;
         DateValue = null;
         DateTimeValue = null;
+        LongTextValue = null;
 
         var element = value.Value;
         switch (value.DataType)
         {
             case FieldDataType.String:
                 StringValue = element.GetString();
+                break;
+            case FieldDataType.LongText:
+                LongTextValue = element.GetString();
                 break;
             case FieldDataType.Number:
                 NumberValue = element.GetDecimal();
@@ -113,6 +121,7 @@ public class DocumentExtractedField : Entity, IMultiTenant
     public JsonElement ToJsonElement(FieldDataType dataType) => dataType switch
     {
         FieldDataType.String => JsonSerializer.SerializeToElement(StringValue),
+        FieldDataType.LongText => JsonSerializer.SerializeToElement(LongTextValue),
         FieldDataType.Number => JsonSerializer.SerializeToElement(NumberValue),
         FieldDataType.Boolean => JsonSerializer.SerializeToElement(BooleanValue),
         FieldDataType.Date => JsonSerializer.SerializeToElement(DateValue?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),

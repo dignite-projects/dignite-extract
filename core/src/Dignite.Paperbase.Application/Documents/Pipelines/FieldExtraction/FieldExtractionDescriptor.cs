@@ -15,7 +15,7 @@ namespace Dignite.Paperbase.Documents.Pipelines.FieldExtraction;
 public sealed record FieldExtractionDescriptor(
     Guid FieldDefinitionId,
     string Name,
-    string Prompt,
+    string? Prompt,
     FieldDataType DataType,
     bool IsRequired,
     bool AllowMultiple);

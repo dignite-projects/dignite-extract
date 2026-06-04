@@ -3,9 +3,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl } from '@angular/forms';
 import {
   Observable,
+  Subject,
   catchError,
-  debounceTime,
-  distinctUntilChanged,
   filter,
   finalize,
   map,
@@ -22,11 +21,12 @@ const SUGGEST_TIMEOUT_MS = 8000;
  * 显示名 → 机器键自动建议（issue #190）。FieldDefinition 与 DocumentType 创建表单共用同一套接线逻辑。
  *
  * 行为：
- * - admin 在 displayName 停顿 → 调后端 LLM 英译端点预填 target（name / typeCode）。
+ * - admin 在 displayName **失焦**时 → 调后端 LLM 英译端点预填 target（name / typeCode）。
+ *   （早期版本在 displayName 停顿 400ms 时防抖触发；实测反馈改为失焦触发——少调 LLM，且不会拿"半截显示名"去翻译。）
  * - **仅调用方允许时生效**：target enabled 且未标记为手动编辑时，自动建议才会接管。
  * - **用户手动改过 target 就不再覆盖**：监听 target.valueChanges；程序化写入一律用
  *   `{ emitEvent: false }`，因此只有真实键入会被识别为"手动"。
- * - **过期键防护**：displayName 一变就**立即清空** target（防抖前），让 target 在新建议落定前为空——
+ * - **过期键防护**：displayName 一变就**立即清空** target（与触发时机无关，输入即执行），让 target 在新建议落定前为空——
  *   配合 required 校验自动禁用 Save，杜绝把基于「上一个显示名」的 slug 当成不可变键保存；
  *   建议返回时再比对当时捕获的 displayName 与当前值，不一致则丢弃（switchMap 已取消过期 in-flight，这是二道防线）。
  * - LLM 返回空 / 不可用 → 回退到本地占位（如 `field_3`），保证 target 落定后有合法默认值。
@@ -39,6 +39,11 @@ export interface SlugSuggestionHandle {
   reset(): void;
   /** 标记 target 当前值由用户/调用方保留，后续 displayName 变化不再自动覆盖。 */
   markManual(): void;
+  /**
+   * 显示名输入框**失焦**时调用——处于自动接管态（target enabled 且非手动）时发起一次 LLM slug 翻译。
+   * 由调用方在 displayName 控件的 `(blur)` 事件上接线。
+   */
+  notifyDisplayNameBlur(): void;
 }
 
 export interface SlugSuggestionConfig {
@@ -62,13 +67,16 @@ export function wireSlugSuggestion(config: SlugSuggestionConfig): SlugSuggestion
   // 编辑态若需要保留既有机器键，调用方应先 disable 再 reset，随后 enable 并 markManual()。
   const autoManaged = (): boolean => config.target.enabled && !manuallyEdited;
 
+  // 显示名失焦事件流——触发 LLM 翻译。失焦天然低频，无需防抖。
+  const blur$ = new Subject<void>();
+
   // target 上的真实键入 → 标记为手动，停止自动覆盖。
   // 下方程序化写入都用 { emitEvent: false }，不会触达这里。
   config.target.valueChanges.pipe(takeUntilDestroyed(config.destroyRef)).subscribe(() => {
     manuallyEdited = true;
   });
 
-  // 过期键防护（防抖前、立即执行）：displayName 一变就清空 target，使其在新建议落定前保持为空。
+  // 过期键防护（输入即执行，与触发时机解耦）：displayName 一变就清空 target，使其在新建议落定前保持为空。
   // target 是 required，空值 → form.invalid → Save 被禁用，杜绝保存基于旧显示名的过期机器键。
   config.displayName.valueChanges.pipe(takeUntilDestroyed(config.destroyRef)).subscribe(() => {
     if (autoManaged() && config.target.value !== '') {
@@ -76,11 +84,12 @@ export function wireSlugSuggestion(config: SlugSuggestionConfig): SlugSuggestion
     }
   });
 
-  config.displayName.valueChanges
+  // 触发改为失焦（实测反馈）：离开 displayName 输入框时取其当前值，自动接管态才发起一次 LLM 翻译。
+  // 刻意不做 distinctUntilChanged——displayName 可能被改了又改回同值（其间 target 已被上面的过期键防护清空），
+  // 相邻去重会挡掉"补回 target"的那次请求、让 target 空着。失焦低频，偶尔重复一次请求可接受。
+  blur$
     .pipe(
-      debounceTime(400),
-      map(v => (v ?? '').trim()),
-      distinctUntilChanged(),
+      map(() => (config.displayName.value ?? '').trim()),
       filter(text => text.length > 0 && autoManaged()),
       switchMap(text => {
         config.onPending?.(true);
@@ -112,5 +121,6 @@ export function wireSlugSuggestion(config: SlugSuggestionConfig): SlugSuggestion
       manuallyEdited = true;
       config.onPending?.(false);
     },
+    notifyDisplayNameBlur: () => blur$.next(),
   };
 }

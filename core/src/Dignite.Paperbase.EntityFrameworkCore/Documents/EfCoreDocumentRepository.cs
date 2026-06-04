@@ -164,6 +164,11 @@ public class EfCoreDocumentRepository
                 return query.Where(d => d.ExtractedFieldValues
                     .Any(f => f.FieldDefinitionId == fieldDefinitionId && f.StringValue == stringValue));
 
+            case FieldDataType.LongText:
+                // 长文本字段落 nvarchar(max) 列、不进索引——红线：永不作查询条件（等值 / 区间 / LIKE 全禁）。
+                // 长内容查询属下游 RAG 的事（CLAUDE.md OUT of scope）。loud fail 给 AI 客户端可纠正信号，绝不退化成全捞。
+                throw NotQueryable(name, fieldQuery.FieldDataType);
+
             case FieldDataType.Boolean:
                 if (isRange)
                 {
@@ -256,6 +261,11 @@ public class EfCoreDocumentRepository
 
     private static BusinessException RangeNotSupported(string fieldName, FieldDataType dataType) =>
         new BusinessException(PaperbaseErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange)
+            .WithData("FieldName", fieldName)
+            .WithData("DataType", dataType.ToString());
+
+    private static BusinessException NotQueryable(string fieldName, FieldDataType dataType) =>
+        new BusinessException(PaperbaseErrorCodes.ExtractedField.FieldTypeNotQueryable)
             .WithData("FieldName", fieldName)
             .WithData("DataType", dataType.ToString());
 

@@ -125,7 +125,12 @@ public class FieldExtractionWorkflow : ITransientDependency
             // BoundaryRule 让模型把它当指令以外的内容看待。
             // #212：多值字段在类型标注后追加 "[]"（如 "String[]"）提示模型返回数组。
             var typeLabel = f.AllowMultiple ? $"{f.DataType}[]" : f.DataType.ToString();
-            sb.AppendLine($"- \"{f.Name}\" ({typeLabel}, {(f.IsRequired ? "required" : "optional")}): {PromptBoundary.WrapField(f.Prompt)}");
+            var header = $"- \"{f.Name}\" ({typeLabel}, {(f.IsRequired ? "required" : "optional")})";
+            // Prompt 选填：留空时只给「字段名 + 类型」，让模型靠 Name 语义推断该抽什么；绝不输出空的 PromptBoundary 包裹块
+            // （WrapField("") 会产出一个空的数据边界标记，污染 schema、对模型是噪声）。
+            sb.AppendLine(string.IsNullOrWhiteSpace(f.Prompt)
+                ? header
+                : $"{header}: {PromptBoundary.WrapField(f.Prompt)}");
         }
         return sb.ToString();
     }
@@ -184,6 +189,10 @@ public class FieldExtractionWorkflow : ITransientDependency
             case FieldDataType.String:
                 schema["maxLength"] = DocumentExtractedFieldConsts.MaxStringValueLength;
                 schema["description"] = "A short structured string value, or null when absent.";
+                break;
+            case FieldDataType.LongText:
+                schema["maxLength"] = DocumentExtractedFieldConsts.MaxLongTextValueLength;
+                schema["description"] = "A long-form text value (e.g. a summary or description), or null when absent.";
                 break;
             case FieldDataType.Number:
                 schema["description"] = "A JSON number, or null when absent.";

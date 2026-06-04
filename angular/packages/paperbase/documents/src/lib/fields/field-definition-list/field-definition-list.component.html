@@ -87,7 +87,7 @@
                   }
                 </td>
                 <td class="text-muted small text-truncate" style="max-width: 280px;" [title]="field.prompt">
-                  {{ field.prompt }}
+                  {{ field.prompt || '—' }}
                 </td>
                 <td class="text-end">
                   <div class="d-flex gap-1 justify-content-end">
@@ -130,8 +130,14 @@
 
 <!-- Create / Edit modal -->
 @if (editing(); as mode) {
-  <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);" (click)="closeModal()">
-    <div class="modal-dialog modal-dialog-centered modal-lg" (click)="$event.stopPropagation()">
+  <div
+    class="modal d-block"
+    tabindex="-1"
+    style="background:rgba(0,0,0,.4);"
+    (mousedown)="onBackdropMouseDown($event)"
+    (click)="onBackdropClick($event)"
+  >
+    <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
         <form [formGroup]="form" (ngSubmit)="submit()">
           <div class="modal-header">
@@ -149,6 +155,7 @@
                   type="text"
                   class="form-control"
                   formControlName="displayName"
+                  (blur)="onDisplayNameBlur()"
                   [class.is-invalid]="form.controls.displayName.touched && form.controls.displayName.invalid"
                 />
               </div>

@@ -14,9 +14,9 @@ public class UpdateFieldDefinitionDto
     [DynamicStringLength(typeof(FieldDefinitionConsts), nameof(FieldDefinitionConsts.MaxDisplayNameLength))]
     public string DisplayName { get; set; } = default!;
 
-    [Required]
+    /// <summary>抽取指令——<b>选填</b>。留空时 LLM 仅靠 <see cref="Name"/> + <see cref="DataType"/> 推断该抽什么。</summary>
     [DynamicStringLength(typeof(FieldDefinitionConsts), nameof(FieldDefinitionConsts.MaxPromptLength))]
-    public string Prompt { get; set; } = default!;
+    public string? Prompt { get; set; }
 
     public FieldDataType DataType { get; set; }
 

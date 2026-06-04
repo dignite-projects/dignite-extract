@@ -11,7 +11,7 @@ public class FieldDefinitionDto : EntityDto<Guid>
     public Guid DocumentTypeId { get; set; }
     public string Name { get; set; } = default!;
     public string DisplayName { get; set; } = default!;
-    public string Prompt { get; set; } = default!;
+    public string? Prompt { get; set; }
     public FieldDataType DataType { get; set; }
     public int DisplayOrder { get; set; }
     public bool IsRequired { get; set; }

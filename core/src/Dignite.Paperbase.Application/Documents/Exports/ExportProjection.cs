@@ -31,6 +31,7 @@ internal sealed class ExtractedFieldProjection
     public int Order { get; init; }
 
     public string? StringValue { get; init; }
+    public string? LongTextValue { get; init; }
     public bool? BooleanValue { get; init; }
     public decimal? NumberValue { get; init; }
     public DateOnly? DateValue { get; init; }

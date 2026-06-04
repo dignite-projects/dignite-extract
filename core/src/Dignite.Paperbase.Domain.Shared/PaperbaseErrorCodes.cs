@@ -48,6 +48,7 @@ public static class PaperbaseErrorCodes
         public const string Unknown = "Paperbase:UnknownExtractedField";
         public const string InvalidValue = "Paperbase:InvalidExtractedFieldValue";
         public const string FieldTypeDoesNotSupportRange = "Paperbase:FieldTypeDoesNotSupportRange";
+        public const string FieldTypeNotQueryable = "Paperbase:FieldTypeNotQueryable";
     }
 
     public static class Pipeline

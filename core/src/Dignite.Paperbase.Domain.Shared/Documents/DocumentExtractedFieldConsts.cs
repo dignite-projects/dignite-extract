@@ -18,6 +18,18 @@ public static class DocumentExtractedFieldConsts
     public static int MaxStringValueLength { get; set; } = 256;
 
     /// <summary>
+    /// 类型绑定字段 <c>LongText</c> 值的最大长度（App 层校验上限 + LLM schema 软提示）。
+    /// <para>
+    /// 与 <see cref="MaxStringValueLength"/> 的 256 不同源：<c>LongText</c> 落独立的 <c>LongTextValue nvarchar(max)</c> 列，
+    /// <b>不进任何索引、不可作查询条件</b>（DB 列本身不限长）。此上限是<b>反滥用护栏</b>——防恶意 / 失控文档诱导 LLM
+    /// 对长文本字段吐出超大字符串，灌爆 prompt 往返与 DB 行。8000 字符（约数千汉字）从容覆盖摘要 / 描述 / 风险提示等
+    /// 长内容抽取场景；真正的全文载荷归 <c>Document.Markdown</c>，不在类型绑定字段承载。改动此值无需重建索引（列不限长），
+    /// 但需同步 <c>ExtractedFieldValueValidator</c> 与 <c>FieldExtractionWorkflow</c> 的 schema maxLength。
+    /// </para>
+    /// </summary>
+    public static int MaxLongTextValueLength { get; set; } = 8000;
+
+    /// <summary>
     /// 多值字段（<c>FieldDefinition.AllowMultiple</c>，#212）单字段的最大值个数 = 单文档单字段展开行数硬上限。
     /// <para>
     /// 这是 LLM 触发写入路径的「结果集硬上限」（CLAUDE.md 安全约定 / <c>llm-call-anti-patterns.md</c> § 2.9 在写入侧的同构）：

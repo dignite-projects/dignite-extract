@@ -77,7 +77,8 @@ export class FieldDefinitionListComponent implements OnInit {
       [Validators.required, Validators.maxLength(MAX_NAME_LENGTH), Validators.pattern(NAME_PATTERN)],
     ],
     displayName: ['', [Validators.required, Validators.maxLength(MAX_DISPLAY_NAME_LENGTH)]],
-    prompt: ['', [Validators.required, Validators.maxLength(MAX_PROMPT_LENGTH)]],
+    // 抽取指令选填（实测反馈）：去掉 Validators.required，仅保留长度上限；留空时后端 NormalizePrompt 收敛为 null。
+    prompt: ['', [Validators.maxLength(MAX_PROMPT_LENGTH)]],
     dataType: [FieldDataType.String, [Validators.required]],
     displayOrder: [0, [Validators.required]],
     isRequired: [false],
@@ -193,7 +194,7 @@ export class FieldDefinitionListComponent implements OnInit {
     this.form.reset({
       name: field.name,
       displayName: field.displayName,
-      prompt: field.prompt,
+      prompt: field.prompt ?? '',
       dataType: field.dataType,
       displayOrder: field.displayOrder,
       isRequired: field.isRequired,
@@ -203,6 +204,27 @@ export class FieldDefinitionListComponent implements OnInit {
     this.applyAllowMultiplePolicy(field.dataType);
     this.slugHandle?.markManual();
     this.editing.set(field);
+  }
+
+  // 显示名失焦 → 触发 slug 自动建议（实测反馈：从停顿防抖改为失焦触发）。
+  onDisplayNameBlur(): void {
+    this.slugHandle?.notifyDisplayNameBlur();
+  }
+
+  // 遮罩关闭防误触：只有当 mousedown 与 click 都发生在遮罩本身（而非对话框内）时才关闭。
+  // 否则在输入框里拖选文本、松手落在遮罩区时，浏览器会在遮罩上触发 click（mousedown/mouseup 的最近公共祖先），
+  // 误关弹窗并丢失已填内容。记录 mousedown 起点是判定"这一次点击是否真的从遮罩发起"的唯一可靠方式。
+  private backdropMouseDownOnSelf = false;
+
+  onBackdropMouseDown(event: MouseEvent): void {
+    this.backdropMouseDownOnSelf = event.target === event.currentTarget;
+  }
+
+  onBackdropClick(event: MouseEvent): void {
+    if (this.backdropMouseDownOnSelf && event.target === event.currentTarget) {
+      this.closeModal();
+    }
+    this.backdropMouseDownOnSelf = false;
   }
 
   closeModal(): void {

@@ -9,7 +9,7 @@ export interface FieldDefinitionDto extends EntityDto<string> {
   documentTypeId: string;
   name: string;
   displayName: string;
-  prompt: string;
+  prompt?: string;
   dataType: FieldDataType;
   displayOrder: number;
   isRequired: boolean;
@@ -21,7 +21,7 @@ export interface CreateFieldDefinitionDto {
   documentTypeId: string;
   name: string;
   displayName: string;
-  prompt: string;
+  prompt?: string;
   dataType: FieldDataType;
   displayOrder: number;
   isRequired: boolean;
@@ -31,7 +31,7 @@ export interface CreateFieldDefinitionDto {
 export interface UpdateFieldDefinitionDto {
   name: string;
   displayName: string;
-  prompt: string;
+  prompt?: string;
   dataType: FieldDataType;
   displayOrder: number;
   isRequired: boolean;

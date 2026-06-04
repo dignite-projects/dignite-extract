@@ -31,8 +31,11 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// <summary>显示名称（人类可读，运行时直接展示）。<b>不进 LLM prompt</b>。</summary>
     public virtual string DisplayName { get; private set; } = default!;
 
-    /// <summary>LLM 抽取指令——告诉模型从文档中找什么值。</summary>
-    public virtual string Prompt { get; private set; } = default!;
+    /// <summary>
+    /// LLM 抽取指令——告诉模型从文档中找什么值。<b>选填</b>：留空（null）时模型仅靠 <see cref="Name"/>（机器名）+
+    /// <see cref="DataType"/> 推断该抽什么。字段名足够自解释时（如 <c>contract_amount</c> / <c>issue_date</c>）可不填。
+    /// </summary>
+    public virtual string? Prompt { get; private set; }
 
     public virtual FieldDataType DataType { get; private set; }
 
@@ -55,7 +58,7 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
         Guid documentTypeId,
         string name,
         string displayName,
-        string prompt,
+        string? prompt,
         FieldDataType dataType,
         int displayOrder = 0,
         bool isRequired = false,
@@ -66,7 +69,7 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
         DocumentTypeId = Check.NotDefaultOrNull<Guid>(documentTypeId, nameof(documentTypeId));
         Name = ValidateName(name);
         DisplayName = ValidateDisplayName(displayName);
-        Prompt = Check.NotNullOrWhiteSpace(prompt, nameof(prompt), FieldDefinitionConsts.MaxPromptLength);
+        Prompt = NormalizePrompt(prompt);
         DataType = dataType;
         DisplayOrder = displayOrder;
         IsRequired = isRequired;
@@ -78,11 +81,11 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// <paramref name="dataType"/> 对已有抽取值的字段禁止改类型（防 typed-column 错位），
     /// <paramref name="allowMultiple"/> 由 multi→single 收窄对已有值字段禁止（防 Order&gt;0 行变孤儿）——两者均由 AppService 调用前断言。
     /// </summary>
-    public void Update(string name, string displayName, string prompt, FieldDataType dataType, int displayOrder, bool isRequired, bool allowMultiple)
+    public void Update(string name, string displayName, string? prompt, FieldDataType dataType, int displayOrder, bool isRequired, bool allowMultiple)
     {
         Name = ValidateName(name);
         DisplayName = ValidateDisplayName(displayName);
-        Prompt = Check.NotNullOrWhiteSpace(prompt, nameof(prompt), FieldDefinitionConsts.MaxPromptLength);
+        Prompt = NormalizePrompt(prompt);
         DataType = dataType;
         DisplayOrder = displayOrder;
         IsRequired = isRequired;
@@ -115,6 +118,21 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
         }
 
         return displayName;
+    }
+
+    /// <summary>
+    /// 规范化选填的抽取指令：空白（null / 纯空格）一律收敛为 null（语义"无 prompt"，留空时 LLM 仅靠 Name + DataType 推断），
+    /// 非空时仅校验长度上限（<see cref="FieldDefinitionConsts.MaxPromptLength"/>）。不再 NotNullOrWhiteSpace——Prompt 已是选填项。
+    /// </summary>
+    private static string? NormalizePrompt(string? prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            return null;
+        }
+
+        Check.Length(prompt, nameof(prompt), FieldDefinitionConsts.MaxPromptLength);
+        return prompt;
     }
 
     /// <summary>

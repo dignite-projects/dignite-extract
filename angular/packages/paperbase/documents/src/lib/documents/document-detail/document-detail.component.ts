@@ -497,6 +497,9 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
 
   private toFormFieldType(dataType: FieldDataType): FormFieldConfig['type'] {
     switch (dataType) {
+      // 长文本（摘要 / 描述等）用多行编辑框；toFormInitialValue 的 default 分支已把它当字符串原样回填。
+      case FieldDataType.LongText:
+        return 'textarea';
       case FieldDataType.Number:
         return 'number';
       case FieldDataType.Boolean:
