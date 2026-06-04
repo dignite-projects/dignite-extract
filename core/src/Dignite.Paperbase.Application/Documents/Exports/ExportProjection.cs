@@ -30,7 +30,7 @@ internal sealed class ExtractedFieldProjection
     /// 与 REST/MCP 出口的 Order-0 标量渲染一致、且确定（不依赖 DB 未指定的行返回顺序）。完整多值 join 留作后续增量。</summary>
     public int Order { get; init; }
 
-    public string? StringValue { get; init; }
+    public string? TextValue { get; init; }
     public string? LongTextValue { get; init; }
     public bool? BooleanValue { get; init; }
     public decimal? NumberValue { get; init; }

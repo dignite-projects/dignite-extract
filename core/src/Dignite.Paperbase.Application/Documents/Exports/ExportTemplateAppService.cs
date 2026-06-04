@@ -140,7 +140,7 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
                         {
                             FieldDefinitionId = f.FieldDefinitionId,
                             Order = f.Order,
-                            StringValue = f.StringValue,
+                            TextValue = f.TextValue,
                             LongTextValue = f.LongTextValue,
                             BooleanValue = f.BooleanValue,
                             NumberValue = f.NumberValue,
@@ -284,7 +284,7 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
     // ApplyFieldValueFilter 一致（绝不静默吐空单元格：新增枚举值漏改本处应在测试 / 运行期响亮报错，而非无声错导）。
     private static string? FieldValueToString(ExtractedFieldProjection f, FieldDataType dataType) => dataType switch
     {
-        FieldDataType.Text => f.StringValue,
+        FieldDataType.Text => f.TextValue,
         FieldDataType.LongText => f.LongTextValue,
         // Number 以最小形渲染（"0.######"）：整数 1000 → "1000"，小数 10.50 → "10.5"——不带 decimal(38,6) 的 6 位尾零。
         FieldDataType.Number => f.NumberValue?.ToString("0.######", CultureInfo.InvariantCulture),

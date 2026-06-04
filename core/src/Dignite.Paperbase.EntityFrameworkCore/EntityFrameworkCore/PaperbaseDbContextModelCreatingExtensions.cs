@@ -137,10 +137,10 @@ public static class PaperbaseDbContextModelCreatingExtensions
             b.HasKey(x => new { x.DocumentId, x.FieldDefinitionId, x.Order });
 
             // 字段类型不在本行持久化（#208）：由所引用 FieldDefinition.DataType 决定，读 / 导出路径已 load 该实体。
-            // StringValue 限长 nvarchar(256)（#209）：类型绑定 文本字段是从 Markdown 抽取的结构化短值（姓名 / 编号 /
+            // TextValue 限长 nvarchar(256)（#209）：类型绑定 文本字段是从 Markdown 抽取的结构化短值（姓名 / 编号 /
             // 币种 / 案由等），不承载长文本（长文本归 Document.Markdown）——限长换来它能进复合索引键，等值查询走 index seek。
-            // 校验上限同源 DocumentExtractedFieldConsts.MaxStringValueLength（ExtractedFieldValueValidator 一并卡住）。
-            b.Property(x => x.StringValue).HasMaxLength(DocumentExtractedFieldConsts.MaxStringValueLength);
+            // 校验上限同源 DocumentExtractedFieldConsts.MaxTextValueLength（ExtractedFieldValueValidator 一并卡住）。
+            b.Property(x => x.TextValue).HasMaxLength(DocumentExtractedFieldConsts.MaxTextValueLength);
 
             // LongTextValue 不限长（不调 HasMaxLength → provider 映射为 nvarchar(max) 等大文本类型，跨库可移植）：
             // 长内容载荷（摘要 / 描述等）。刻意不进下方任何复合索引、也无单列索引——长文本既进不了索引键，也无等值 / 区间查询语义
@@ -163,7 +163,7 @@ public static class PaperbaseDbContextModelCreatingExtensions
             // (FieldDefinitionId, typedValue) EXISTS。下列 (TenantId, FieldDefinitionId, <typedValue>, DocumentId) 复合索引
             // 支撑 文本等值 + Number / 日期字段的等值 + 范围（文本限长 256 后可进索引键，#209）。Boolean 不单建索引——
             // 基数仅 2，selectivity 太低，靠 (TenantId, FieldDefinitionId) 前缀分组 + 与其他字段 AND 收窄即可。
-            b.HasIndex(x => new { x.TenantId, x.FieldDefinitionId, x.StringValue, x.DocumentId });
+            b.HasIndex(x => new { x.TenantId, x.FieldDefinitionId, x.TextValue, x.DocumentId });
             b.HasIndex(x => new { x.TenantId, x.FieldDefinitionId, x.NumberValue, x.DocumentId });
             b.HasIndex(x => new { x.TenantId, x.FieldDefinitionId, x.DateValue, x.DocumentId });
             b.HasIndex(x => new { x.TenantId, x.FieldDefinitionId, x.DateTimeValue, x.DocumentId });

@@ -16,7 +16,7 @@ namespace Dignite.Paperbase.Documents;
 /// 不再冗余字段名 / TypeCode 字符串；<see cref="FieldDefinition.Name"/> rename 不级联本表。<see cref="Order"/> 是值在
 /// 多值集合内的 0-based 位序：单值字段恒为 0（同文档同字段唯一）；多值文本字段（<c>AllowMultiple</c>）一字段多行、Order 递增。
 /// 整组重建 / 操作员手改走 reconcile（按 <c>(FieldDefinitionId, Order)</c> 原地更新），不留重复行。值按写入时的 <c>FieldDataType</c> 落到对应类型化列
-/// （<see cref="StringValue"/> / <see cref="NumberValue"/> / …）——类型由所引用的 <see cref="FieldDefinition"/> 决定、<b>不在本行持久化</b>（#208），
+/// （<see cref="TextValue"/> / <see cref="NumberValue"/> / …）——类型由所引用的 <see cref="FieldDefinition"/> 决定、<b>不在本行持久化</b>（#208），
 /// 让 <c>GetFieldMatchedIdsAsync</c> 用普通列比较（等值 + 范围）跨任意关系型数据库可移植——不再依赖 SQL Server <c>JSON_VALUE</c> / <c>TRY_CONVERT</c> 方言。
 /// </para>
 /// <para>
@@ -50,14 +50,14 @@ public class DocumentExtractedField : Entity, IMultiTenant
 
     // 类型化值列——按字段类型取用其一，其余为 null（类型由 FieldDefinition 决定、不在本行持久化，#208）。
     // 普通列即可建 B-tree 索引、支持等值 + 范围。Number（整数与小数统一）落 NumberValue。
-    public virtual string? StringValue { get; private set; }
+    public virtual string? TextValue { get; private set; }
     public virtual bool? BooleanValue { get; private set; }
     public virtual decimal? NumberValue { get; private set; }
     public virtual DateOnly? DateValue { get; private set; }
     public virtual DateTime? DateTimeValue { get; private set; }
 
     // LongText 落独立的 nvarchar(max) 列——长内容载荷（摘要 / 描述等），不进任何索引、不可作查询条件、不支持多值。
-    // 与 StringValue（限长 256、入复合索引、可等值查询）刻意分列：长文本进不了索引键，强塞 StringValue 会废掉 #209 的 index seek。
+    // 与 TextValue（限长 256、入复合索引、可等值查询）刻意分列：长文本进不了索引键，强塞 TextValue 会废掉 #209 的 index seek。
     public virtual string? LongTextValue { get; private set; }
 
     protected DocumentExtractedField()
@@ -80,7 +80,7 @@ public class DocumentExtractedField : Entity, IMultiTenant
     /// </summary>
     internal void SetValue(DocumentFieldValue value)
     {
-        StringValue = null;
+        TextValue = null;
         BooleanValue = null;
         NumberValue = null;
         DateValue = null;
@@ -91,7 +91,7 @@ public class DocumentExtractedField : Entity, IMultiTenant
         switch (value.DataType)
         {
             case FieldDataType.Text:
-                StringValue = element.GetString();
+                TextValue = element.GetString();
                 break;
             case FieldDataType.LongText:
                 LongTextValue = element.GetString();
@@ -120,7 +120,7 @@ public class DocumentExtractedField : Entity, IMultiTenant
     /// </summary>
     public JsonElement ToJsonElement(FieldDataType dataType) => dataType switch
     {
-        FieldDataType.Text => JsonSerializer.SerializeToElement(StringValue),
+        FieldDataType.Text => JsonSerializer.SerializeToElement(TextValue),
         FieldDataType.LongText => JsonSerializer.SerializeToElement(LongTextValue),
         FieldDataType.Number => JsonSerializer.SerializeToElement(NumberValue),
         FieldDataType.Boolean => JsonSerializer.SerializeToElement(BooleanValue),

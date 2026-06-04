@@ -12,8 +12,8 @@ namespace Dignite.Paperbase.Documents.Fields;
 /// <para>
 /// <see cref="Text"/> 与 <see cref="LongText"/> 刻意分开，二者是"短结构化值 vs 长内容"两种用途：
 /// <list type="bullet">
-///   <item><see cref="Text"/>：结构化短值（姓名 / 编号 / 币种 / 案由等），限长 256（<c>DocumentExtractedFieldConsts.MaxStringValueLength</c>），
-///   落 <c>StringValue</c> 列、进复合索引键，支持等值查询 + 多值（#209 / #212）。</item>
+///   <item><see cref="Text"/>：结构化短值（姓名 / 编号 / 币种 / 案由等），限长 256（<c>DocumentExtractedFieldConsts.MaxTextValueLength</c>），
+///   落 <c>TextValue</c> 列、进复合索引键，支持等值查询 + 多值（#209 / #212）。</item>
 ///   <item><see cref="LongText"/>：长内容（摘要 / 描述 / 风险提示等，由租户用 B 机制自配字段抽取），落独立的
 ///   <c>LongTextValue</c> 列（<c>nvarchar(max)</c>），<b>不进任何索引、不可作查询条件、不支持多值</b>——
 ///   纯存储载荷，出口 DTO 照常渲染为字符串。注意这是 B 机制下用户自配的<b>类型绑定字段</b>，

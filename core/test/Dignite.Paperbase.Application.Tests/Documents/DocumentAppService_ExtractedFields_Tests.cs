@@ -186,7 +186,7 @@ public class DocumentAppService_ExtractedFields_Tests
 
         // 数组 → 3 行，按 Order 还原。
         doc.ExtractedFieldValues.Count.ShouldBe(3);
-        doc.ExtractedFieldValues.OrderBy(f => f.Order).Select(f => f.StringValue)
+        doc.ExtractedFieldValues.OrderBy(f => f.Order).Select(f => f.TextValue)
             .ShouldBe(new[] { "urgent", "legal", "2026" });
 
         // FieldsExtractedEto.FieldCount 是逻辑字段数（1），非展开行数（3）。

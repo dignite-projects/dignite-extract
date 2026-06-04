@@ -442,7 +442,7 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
             // 3 行持久化，按 Order 还原。
             var doc = await _documentRepository.GetAsync(id, includeDetails: true);
             doc.ExtractedFieldValues.Count.ShouldBe(3);
-            doc.ExtractedFieldValues.OrderBy(f => f.Order).Select(f => f.StringValue)
+            doc.ExtractedFieldValues.OrderBy(f => f.Order).Select(f => f.TextValue)
                 .ShouldBe(new[] { "urgent", "legal", "2026" });
 
             // 按任一值命中（.Any 跨多行；查询路径对多值天然兼容，无需改动）。
@@ -495,7 +495,7 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
         await WithUnitOfWorkAsync(async () =>
         {
             var reloaded = await _documentRepository.GetAsync(id, includeDetails: true);
-            reloaded.ExtractedFieldValues.OrderBy(f => f.Order).Select(f => f.StringValue)
+            reloaded.ExtractedFieldValues.OrderBy(f => f.Order).Select(f => f.TextValue)
                 .ShouldBe(new[] { "x", "y" });
 
             // 被删除的 Order 2 旧值（"c"）查不到。

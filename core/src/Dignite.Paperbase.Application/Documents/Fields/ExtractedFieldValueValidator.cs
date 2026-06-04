@@ -21,7 +21,7 @@ namespace Dignite.Paperbase.Documents.Fields;
 /// <para>
 /// 严格语义（不做强制转换）：声明类型即承诺值可表达为该 JSON 类型。数字字段须为 JSON number、
 /// 布尔字段须为 JSON true/false、日期字段须为 ISO-8601 字符串。要存自由文本有两个档位：
-/// <see cref="FieldDataType.Text"/>（结构化短值，长度须 ≤ <see cref="DocumentExtractedFieldConsts.MaxStringValueLength"/>，
+/// <see cref="FieldDataType.Text"/>（结构化短值，长度须 ≤ <see cref="DocumentExtractedFieldConsts.MaxTextValueLength"/>，
 /// 与持久化列长同源、入复合索引、可等值查询，#209）或 <see cref="FieldDataType.LongText"/>
 /// （长内容如摘要 / 描述，长度须 ≤ <see cref="DocumentExtractedFieldConsts.MaxLongTextValueLength"/>，落 nvarchar(max) 列、不索引不可查询）。
 /// 真正的全文载荷仍归 Document.Markdown，不在类型绑定字段承载。
@@ -69,7 +69,7 @@ internal static class ExtractedFieldValueValidator
         return dataType switch
         {
             FieldDataType.Text => value.ValueKind == JsonValueKind.String &&
-                                    (value.GetString() ?? string.Empty).Length <= DocumentExtractedFieldConsts.MaxStringValueLength,
+                                    (value.GetString() ?? string.Empty).Length <= DocumentExtractedFieldConsts.MaxTextValueLength,
             FieldDataType.LongText => value.ValueKind == JsonValueKind.String &&
                                       (value.GetString() ?? string.Empty).Length <= DocumentExtractedFieldConsts.MaxLongTextValueLength,
             FieldDataType.Number => value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out _),

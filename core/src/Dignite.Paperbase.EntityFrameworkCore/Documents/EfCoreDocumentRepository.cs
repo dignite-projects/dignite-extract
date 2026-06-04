@@ -160,9 +160,9 @@ public class EfCoreDocumentRepository
                 {
                     throw RangeNotSupported(name, fieldQuery.FieldDataType);
                 }
-                var stringValue = fieldQuery.FieldValue!;
+                var textValue = fieldQuery.FieldValue!;
                 return query.Where(d => d.ExtractedFieldValues
-                    .Any(f => f.FieldDefinitionId == fieldDefinitionId && f.StringValue == stringValue));
+                    .Any(f => f.FieldDefinitionId == fieldDefinitionId && f.TextValue == textValue));
 
             case FieldDataType.LongText:
                 // 长文本字段落 nvarchar(max) 列、不进索引——红线：永不作查询条件（等值 / 区间 / LIKE 全禁）。

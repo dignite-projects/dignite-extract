@@ -173,7 +173,7 @@ public class FieldExtractionWorkflow : ITransientDependency
                 ["items"] = new JsonObject
                 {
                     ["type"] = "string",
-                    ["maxLength"] = DocumentExtractedFieldConsts.MaxStringValueLength
+                    ["maxLength"] = DocumentExtractedFieldConsts.MaxTextValueLength
                 },
                 ["description"] = "A JSON array of short structured string values, or null/empty array when absent."
             };
@@ -187,7 +187,7 @@ public class FieldExtractionWorkflow : ITransientDependency
         switch (dataType)
         {
             case FieldDataType.Text:
-                schema["maxLength"] = DocumentExtractedFieldConsts.MaxStringValueLength;
+                schema["maxLength"] = DocumentExtractedFieldConsts.MaxTextValueLength;
                 schema["description"] = "A short structured string value, or null when absent.";
                 break;
             case FieldDataType.LongText:
