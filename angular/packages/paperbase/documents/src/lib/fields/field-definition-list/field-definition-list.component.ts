@@ -96,7 +96,7 @@ export class FieldDefinitionListComponent implements OnInit {
     this.slugHandle = wireSlugSuggestion({
       displayName: this.form.controls.displayName,
       target: this.form.controls.name,
-      suggest: text => this.slugService.suggest({ label: text }).pipe(map(r => r.slug)),
+      suggest: text => this.slugService.suggest({ label: text }, undefined).pipe(map(r => r.slug ?? '')),
       fallback: () => this.nextFieldSlug(),
       destroyRef: this.destroyRef,
       onPending: pending => this.isSuggesting.set(pending),
@@ -161,7 +161,7 @@ export class FieldDefinitionListComponent implements OnInit {
     });
     source$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: list => {
-        this.fields.set([...list].sort((a, b) => a.displayOrder - b.displayOrder));
+        this.fields.set([...list].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)));
         this.isLoading.set(false);
       },
       error: () => this.isLoading.set(false),
@@ -169,7 +169,7 @@ export class FieldDefinitionListComponent implements OnInit {
   }
 
   openCreate(): void {
-    const nextOrder = this.fields().reduce((max, f) => Math.max(max, f.displayOrder), -1) + 1;
+    const nextOrder = this.fields().reduce((max, f) => Math.max(max, f.displayOrder ?? 0), -1) + 1;
     this.form.reset({
       name: '',
       displayName: '',
@@ -201,7 +201,7 @@ export class FieldDefinitionListComponent implements OnInit {
       allowMultiple: field.allowMultiple,
     });
     this.form.controls.name.enable();
-    this.applyAllowMultiplePolicy(field.dataType);
+    this.applyAllowMultiplePolicy(field.dataType ?? FieldDataType.Text);
     this.slugHandle?.markManual();
     this.editing.set(field);
   }
@@ -314,7 +314,7 @@ export class FieldDefinitionListComponent implements OnInit {
       });
   }
 
-  dataTypeLabel(dataType: FieldDataType): string {
+  dataTypeLabel(dataType: FieldDataType | undefined): string {
     return this.dataTypeOptions.find(o => o.value === dataType)?.key ?? String(dataType);
   }
 }

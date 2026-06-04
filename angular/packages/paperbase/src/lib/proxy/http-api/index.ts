@@ -1,2 +1,3 @@
 import * as Documents from './documents';
-export { Documents };
+import * as Slugging from './slugging';
+export { Documents, Slugging };

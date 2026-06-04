@@ -5,7 +5,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LocalizationPipe, PermissionService } from '@abp/ng.core';
 import { ToasterService } from '@abp/ng.theme.shared';
-import { CabinetDto, CabinetService, DocumentService, PAPERBASE_PERMISSIONS } from '@dignite/paperbase';
+import { CabinetDto, CabinetService, DocumentUploadService, PAPERBASE_PERMISSIONS } from '@dignite/paperbase';
 import { from, of } from 'rxjs';
 import { catchError, map, mergeMap } from 'rxjs/operators';
 import {
@@ -34,7 +34,7 @@ interface FileUploadState {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DocumentUploadComponent implements OnInit {
-  private readonly documentService = inject(DocumentService);
+  private readonly documentUploadService = inject(DocumentUploadService);
   private readonly cabinetService = inject(CabinetService);
   private readonly router = inject(Router);
   private readonly toaster = inject(ToasterService);
@@ -123,7 +123,7 @@ export class DocumentUploadComponent implements OnInit {
       .pipe(
         mergeMap(
           ({ file, idx }) =>
-            this.documentService.upload(file, this.selectedCabinetId() || undefined).pipe(
+            this.documentUploadService.upload(file, this.selectedCabinetId() || undefined).pipe(
               map(() => ({ idx, success: true, errorMessage: undefined as string | undefined })),
               catchError(err => {
                 const errorMessage: string | undefined = err?.error?.error?.message;

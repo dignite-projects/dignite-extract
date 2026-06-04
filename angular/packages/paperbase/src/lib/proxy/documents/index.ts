@@ -1,11 +1,9 @@
-export * from './cabinet.models';
+import * as Cabinets from './cabinets';
+import * as DocumentTypes from './document-types';
+import * as Exports from './exports';
+import * as Fields from './fields';
+import * as Pipelines from './pipelines';
 export * from './document-lifecycle-status.enum';
 export * from './document-review-status.enum';
-export * from './document-type.models';
-export * from './field-data-type.enum';
-export * from './field-definition.models';
 export * from './models';
-export * from './pipeline-run-status.enum';
-export * from './slug-suggestion.models';
-export * from './export-format.enum';
-export * from './export-template.models';
+export { Cabinets, DocumentTypes, Exports, Fields, Pipelines };

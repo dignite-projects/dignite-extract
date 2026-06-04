@@ -1,7 +1,7 @@
-export * from './cabinet.service';
+import * as Cabinets from './cabinets';
+import * as DocumentTypes from './document-types';
+import * as Exports from './exports';
+import * as Fields from './fields';
+import * as Pipelines from './pipelines';
 export * from './document.service';
-export * from './document-pipeline-run.service';
-export * from './document-type.service';
-export * from './field-definition.service';
-export * from './export-template.service';
-export * from './slug-suggestion.service';
+export { Cabinets, DocumentTypes, Exports, Fields, Pipelines };

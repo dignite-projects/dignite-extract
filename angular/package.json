@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "nx run-many -t lint",
+    "generate-proxy": "nx g @abp/nx.generators:generate-proxy --module=paperbase --apiName=Default --source=host --target=paperbase --url=https://localhost:44348 --serviceType=application --no-interactive",
     "affected:build": "nx affected -t build",
     "affected:test": "vitest run"
   },
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@abp/ng.schematics": "~10.2.0",
+    "@abp/nx.generators": "~10.2.0",
     "@angular-devkit/build-angular": "~21.0.0",
     "@angular-eslint/builder": "~21.0.0",
     "@angular-eslint/eslint-plugin": "~21.0.0",

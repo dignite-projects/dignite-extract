@@ -15,7 +15,11 @@ paths:
 ```bash
 # URL flag: `-u` (short) or `--url` (long). Use whichever your team prefers, but keep it consistent.
 #
-# Angular (host must be running)
+# Angular for this Paperbase Nx workspace (host must be running at https://localhost:44348)
+cd angular
+npm run generate-proxy
+
+# Generic Angular CLI workspace with angular.json
 abp generate-proxy -t ng
 
 # C# client proxies
@@ -79,7 +83,7 @@ abp suite generate --entity .suite/entities/Book.json --solution ./Acme.BookStor
 
 | Task | Command |
 |------|---------|
-| Angular proxies | `abp generate-proxy -t ng` |
+| Angular proxies | `cd angular` then `npm run generate-proxy` |
 | C# proxies | `abp generate-proxy -t csharp -u URL` |
 | Install JS libs | `abp install-libs` |
 | Add reference | `abp add-package-ref PackageName` |

@@ -63,7 +63,7 @@
                     <span class="text-muted">-</span>
                   }
                 </td>
-                <td class="text-muted">{{ t.columns.length }}</td>
+                <td class="text-muted">{{ t.columns?.length ?? 0 }}</td>
                 <td class="text-end">
                   <div class="d-flex gap-1 justify-content-end">
                     @if (canExport) {
