@@ -21,7 +21,7 @@ public sealed record DocumentTypeSchema
 
 /// <summary>
 /// 单个字段的 schema 投影。<see cref="Name"/> 是 immutable 标识符（用于 <c>fieldFilters</c> / <c>includeFields</c>）；
-/// <see cref="DataType"/> 决定可用查询算子（String / Boolean 仅等值，数字 / 日期可区间）；
+/// <see cref="DataType"/> 决定可用查询算子（Text / Boolean 仅等值，数字 / 日期可区间）；
 /// <see cref="AllowMultiple"/> 告知该字段在检索结果 <c>extractedFields</c> 里是数组还是标量（#212）；
 /// <see cref="DisplayName"/> 已 PromptBoundary 包裹。不含抽取指令 <c>Prompt</c>——抽取指令对查询 / 投影编排无用，
 /// 省 LLM context + 注入面。
@@ -30,11 +30,11 @@ public sealed record DocumentTypeFieldSchema
 {
     public required string Name { get; init; }
 
-    /// <summary>字段数据类型（<c>FieldDataType</c> 枚举名：String / Number / Boolean / Date / DateTime）。</summary>
+    /// <summary>字段数据类型（<c>FieldDataType</c> 枚举名：Text / Number / Boolean / Date / DateTime / LongText）。</summary>
     public required string DataType { get; init; }
 
     /// <summary>
-    /// 是否多值（#212，仅 String 字段可为 true）。为 true 时该字段在检索结果的 <c>extractedFields</c> 里是
+    /// 是否多值（#212，仅文本字段可为 true）。为 true 时该字段在检索结果的 <c>extractedFields</c> 里是
     /// <b>JSON 数组</b>（<c>string[]</c>）而非标量字符串——客户端据此正确解析。等值过滤仍按单个值匹配（命中含该值的文档）。
     /// </summary>
     public bool AllowMultiple { get; init; }

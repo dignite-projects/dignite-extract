@@ -46,7 +46,7 @@ public interface IDocumentRepository : IRepository<Document, Guid>
     /// 不再依赖 SQL Server <c>JSON_VALUE</c> / <c>TRY_CONVERT</c> / raw SQL（注入面归零）。
     /// </para>
     /// 安全：按 <see cref="DocumentFieldQuery.FieldDataType"/> 分派等值 / 区间；只 = + range，永不 LIKE；
-    /// String/Boolean 传区间抛 <see cref="PaperbaseErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange"/>；值无法解析为声明类型抛
+    /// Text/Boolean 传区间抛 <see cref="PaperbaseErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange"/>；值无法解析为声明类型抛
     /// <see cref="PaperbaseErrorCodes.ExtractedField.InvalidValue"/>（皆 loud，不静默空）。
     /// 权限断言、输入校验（必填 / 长度 / 数量 / 至少一个值）、字段解析（外部 documentTypeCode / fieldName → 内部
     /// <see cref="Document.DocumentTypeId"/> / <see cref="DocumentFieldQuery.FieldDefinitionId"/> + <see cref="FieldDataType"/>）

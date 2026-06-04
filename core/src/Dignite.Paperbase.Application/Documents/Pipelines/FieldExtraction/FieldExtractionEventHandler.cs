@@ -305,7 +305,7 @@ public class FieldExtractionEventHandler
                     continue;
                 }
 
-                // #212：单值 → 1 行（Order 0）；多值 String → 按 JSON 数组元素拆多行（Order 0,1,2…）。
+                // #212：单值 → 1 行（Order 0）；多值文本 → 按 JSON 数组元素拆多行（Order 0,1,2…）。
                 fieldValues.AddRange(DocumentFieldValueFactory.Expand(
                     currentDefinition.Id, currentDefinition.DataType, currentDefinition.AllowMultiple, value.Value));
             }

@@ -121,7 +121,9 @@ public class DocumentReadAssembly_Tests : PaperbaseEntityFrameworkCoreTestBase
     // 每个 FieldDataType 的代表样本 + 往返断言。default 分支抛错 = 穷尽性绊线（加新枚举值必须在此补全）。
     private static (JsonElement Value, Action<JsonElement> AssertRoundTrip) SampleFor(FieldDataType dataType) => dataType switch
     {
-        FieldDataType.String => (Json("Acme"), e => e.GetString().ShouldBe("Acme")),
+        FieldDataType.Text => (Json("Acme"), e => e.GetString().ShouldBe("Acme")),
+        FieldDataType.LongText => (Json("A longer free-form passage that spans a sentence or two."),
+            e => e.GetString().ShouldBe("A longer free-form passage that spans a sentence or two.")),
         FieldDataType.Number => (Json(1000.50m), e => e.GetDecimal().ShouldBe(1000.50m)),
         FieldDataType.Boolean => (Json(true), e => e.GetBoolean().ShouldBeTrue()),
         FieldDataType.Date => (Json("2024-03-09"), e => e.GetString().ShouldBe("2024-03-09")),

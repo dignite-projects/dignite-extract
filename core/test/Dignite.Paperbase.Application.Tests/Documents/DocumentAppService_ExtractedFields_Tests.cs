@@ -81,7 +81,7 @@ public class DocumentAppService_ExtractedFields_Tests
         StubGet(doc);
         StubFields(
             "host.contract",
-            ("title", FieldDataType.String),
+            ("title", FieldDataType.Text),
             ("count", FieldDataType.Number),
             ("amount", FieldDataType.Number),
             ("approved", FieldDataType.Boolean),
@@ -150,7 +150,7 @@ public class DocumentAppService_ExtractedFields_Tests
     public async Task Should_Clear_All_Fields_When_Input_Is_Empty()
     {
         var doc = CreateClassifiedDocument("host.contract");
-        doc.SetFields(new[] { new DocumentFieldValue(Guid.NewGuid(), FieldDataType.String, JsonString("1000")) });
+        doc.SetFields(new[] { new DocumentFieldValue(Guid.NewGuid(), FieldDataType.Text, JsonString("1000")) });
         doc.ExtractedFieldValues.Count.ShouldBe(1);
         StubGet(doc);
         StubFields("host.contract", "amount");
@@ -171,7 +171,7 @@ public class DocumentAppService_ExtractedFields_Tests
     [Fact]
     public async Task Should_Expand_MultiValue_String_Field_Into_Ordered_Rows()
     {
-        // #212：多值 String 字段——输入 JSON 数组，App 层经 DocumentFieldValueFactory 拆成多行（Order 0,1,2…）。
+        // #212：多值文本字段——输入 JSON 数组，App 层经 DocumentFieldValueFactory 拆成多行（Order 0,1,2…）。
         var doc = CreateClassifiedDocument("host.contract");
         StubGet(doc);
         StubMultiField("host.contract", "tags");
@@ -205,7 +205,7 @@ public class DocumentAppService_ExtractedFields_Tests
         var tags = new FieldDefinition(
             Guid.NewGuid(), tenantId: null, documentTypeId: TypeId("host.contract"),
             name: "tags", displayName: "Tags", prompt: "extract tags",
-            dataType: FieldDataType.String, allowMultiple: true);
+            dataType: FieldDataType.Text, allowMultiple: true);
         // 写路径解析（按 typeId 查定义）
         _fieldDefinitionRepository.GetListAsync(TypeId("host.contract"), Arg.Any<CancellationToken>())
             .Returns(new List<FieldDefinition> { tags });
@@ -271,7 +271,7 @@ public class DocumentAppService_ExtractedFields_Tests
     {
         StubFields(
             typeCode,
-            names.Select(n => (Name: n, DataType: FieldDataType.String)).ToArray());
+            names.Select(n => (Name: n, DataType: FieldDataType.Text)).ToArray());
     }
 
     private void StubFields(string typeCode, params (string Name, FieldDataType DataType)[] fields)
@@ -285,14 +285,14 @@ public class DocumentAppService_ExtractedFields_Tests
             .Returns(defs);
     }
 
-    // #212：stub 一个多值 String 字段定义（AllowMultiple = true）。
+    // #212：stub 一个多值文本字段定义（AllowMultiple = true）。
     private void StubMultiField(string typeCode, string name)
     {
         var defs = new List<FieldDefinition>
         {
             new(Guid.NewGuid(), tenantId: null, documentTypeId: TypeId(typeCode),
                 name: name, displayName: name, prompt: "extract " + name,
-                dataType: FieldDataType.String, allowMultiple: true)
+                dataType: FieldDataType.Text, allowMultiple: true)
         };
         _fieldDefinitionRepository.GetListAsync(TypeId(typeCode), Arg.Any<CancellationToken>())
             .Returns(defs);

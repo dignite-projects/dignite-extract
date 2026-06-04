@@ -132,12 +132,12 @@ public static class PaperbaseDbContextModelCreatingExtensions
             b.ConfigureByConvention();
 
             // 复合主键 (DocumentId, FieldDefinitionId, Order)（#207 + #212）：单值字段 Order 恒 0（同文档同字段唯一）；
-            // 多值 String 字段（AllowMultiple）一字段多行、Order 0/1/2…。reconcile 按 (FieldDefinitionId, Order) 原地替换不留重复行。
+            // 多值文本字段（AllowMultiple）一字段多行、Order 0/1/2…。reconcile 按 (FieldDefinitionId, Order) 原地替换不留重复行。
             // DocumentId 同时是指向 Document 聚合根的外键（identifying relationship）。
             b.HasKey(x => new { x.DocumentId, x.FieldDefinitionId, x.Order });
 
             // 字段类型不在本行持久化（#208）：由所引用 FieldDefinition.DataType 决定，读 / 导出路径已 load 该实体。
-            // StringValue 限长 nvarchar(256)（#209）：类型绑定 String 字段是从 Markdown 抽取的结构化短值（姓名 / 编号 /
+            // StringValue 限长 nvarchar(256)（#209）：类型绑定 文本字段是从 Markdown 抽取的结构化短值（姓名 / 编号 /
             // 币种 / 案由等），不承载长文本（长文本归 Document.Markdown）——限长换来它能进复合索引键，等值查询走 index seek。
             // 校验上限同源 DocumentExtractedFieldConsts.MaxStringValueLength（ExtractedFieldValueValidator 一并卡住）。
             b.Property(x => x.StringValue).HasMaxLength(DocumentExtractedFieldConsts.MaxStringValueLength);
@@ -161,7 +161,7 @@ public static class PaperbaseDbContextModelCreatingExtensions
 
             // 字段值查询从 Documents 聚合根起手（按 TenantId + DocumentTypeId + 软删全局过滤收窄），再对 child 走
             // (FieldDefinitionId, typedValue) EXISTS。下列 (TenantId, FieldDefinitionId, <typedValue>, DocumentId) 复合索引
-            // 支撑 String 等值 + Number / 日期字段的等值 + 范围（String 限长 256 后可进索引键，#209）。Boolean 不单建索引——
+            // 支撑 文本等值 + Number / 日期字段的等值 + 范围（文本限长 256 后可进索引键，#209）。Boolean 不单建索引——
             // 基数仅 2，selectivity 太低，靠 (TenantId, FieldDefinitionId) 前缀分组 + 与其他字段 AND 收窄即可。
             b.HasIndex(x => new { x.TenantId, x.FieldDefinitionId, x.StringValue, x.DocumentId });
             b.HasIndex(x => new { x.TenantId, x.FieldDefinitionId, x.NumberValue, x.DocumentId });

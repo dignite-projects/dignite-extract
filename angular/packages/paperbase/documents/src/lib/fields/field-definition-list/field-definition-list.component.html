@@ -214,7 +214,7 @@
                     {{ '::FieldDefinition:Required' | abpLocalization }}
                   </label>
                 </div>
-                <!-- #212：多值仅 String 有效——非 String 时 control 被 applyAllowMultiplePolicy 禁用（自动置灰），
+                <!-- #212：多值仅文本有效——非文本时 control 被 applyAllowMultiplePolicy 禁用（自动置灰），
                      hint 常驻说明约束（与后端 FieldDefinition.MultiValueRequiresStringType 一致）。 -->
                 <div class="form-check">
                   <input type="checkbox" class="form-check-input" id="allowMultiple" formControlName="allowMultiple" />

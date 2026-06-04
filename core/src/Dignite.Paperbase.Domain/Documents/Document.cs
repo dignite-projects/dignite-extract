@@ -196,7 +196,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// 用 <b>reconcile</b> 而非 clear+add：同字段值行（按 <see cref="DocumentFieldValue.FieldDefinitionId"/> +
     /// <see cref="DocumentFieldValue.Order"/>，#212）<b>原地更新</b>、消失的删除、新增的插入。原因——复合主键
     /// <c>(DocumentId, FieldDefinitionId, Order)</c> 下，clear+add 会在单次 SaveChanges 内对同键产生 delete+insert，
-    /// 触发唯一冲突 / EF 操作排序风险（操作员把 <c>amount=100</c> 改 <c>200</c> 即同字段同 Order 替换；多值 String
+    /// 触发唯一冲突 / EF 操作排序风险（操作员把 <c>amount=100</c> 改 <c>200</c> 即同字段同 Order 替换；多值文本
     /// 字段 <c>["a","b","c"] → ["x","y"]</c> 时 Order 0/1 原地改、Order 2 删除，无键碰撞）。
     /// </para>
     /// 原子状态变更，无需经 DomainService 中转（与 <see cref="SetMarkdown"/> 等必须与 pipeline 完成事务组合的 internal setter 不同）。

@@ -109,7 +109,7 @@ public class FieldExtractionWorkflow : ITransientDependency
         "Date as an ISO-8601 \"YYYY-MM-DD\" JSON string; " +
         "DateTime as an offset-free ISO-8601 \"YYYY-MM-DDThh:mm:ss\" JSON string (local wall-clock time, no timezone offset or trailing Z); " +
         "Boolean as JSON true or false; " +
-        "String as the original text. " +
+        "Text as the original text. " +
         "When a field cannot be confidently extracted or normalized to its declared type, set its value to null. " +
         "A field whose schema type is array accepts multiple values: return a JSON array of strings (each a distinct value found in the document), or an empty array when none apply. " +
         "The input document is provided as Markdown — treat headings, tables, and lists as semantic structure signals.";
@@ -123,7 +123,7 @@ public class FieldExtractionWorkflow : ITransientDependency
             // f.Name 已经在 FieldDefinition 实体层经白名单 regex 校验，仅含 [A-Za-z0-9_-]。
             // f.Prompt 来自 Host 编译期常量或租户用户输入 —— 经 PromptBoundary.WrapField 显式标记为数据，
             // BoundaryRule 让模型把它当指令以外的内容看待。
-            // #212：多值字段在类型标注后追加 "[]"（如 "String[]"）提示模型返回数组。
+            // #212：多值字段在类型标注后追加 "[]"（如 "Text[]"）提示模型返回数组。
             var typeLabel = f.AllowMultiple ? $"{f.DataType}[]" : f.DataType.ToString();
             var header = $"- \"{f.Name}\" ({typeLabel}, {(f.IsRequired ? "required" : "optional")})";
             // Prompt 选填：留空时只给「字段名 + 类型」，让模型靠 Name 语义推断该抽什么；绝不输出空的 PromptBoundary 包裹块
@@ -163,7 +163,7 @@ public class FieldExtractionWorkflow : ITransientDependency
 
     private static JsonObject BuildFieldValueSchema(FieldDataType dataType, bool allowMultiple)
     {
-        // #212：多值字段（仅 String，FieldDefinition 实体层保证）→ array-or-null，元素为限长 string。
+        // #212：多值字段（仅文本，FieldDefinition 实体层保证）→ array-or-null，元素为限长 string。
         if (allowMultiple)
         {
             return new JsonObject
@@ -186,7 +186,7 @@ public class FieldExtractionWorkflow : ITransientDependency
 
         switch (dataType)
         {
-            case FieldDataType.String:
+            case FieldDataType.Text:
                 schema["maxLength"] = DocumentExtractedFieldConsts.MaxStringValueLength;
                 schema["description"] = "A short structured string value, or null when absent.";
                 break;

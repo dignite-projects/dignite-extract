@@ -28,7 +28,7 @@ public sealed record DocumentSearchResultItem
     /// <summary>
     /// 该文档的类型绑定字段抽取结果（LLM-facing）。key = 字段名（<c>FieldDefinition.Name</c>）；
     /// value 为 <see cref="JsonElement"/>，保留字段声明类型——数字 / 布尔等结构化值原样透传（序列化为 JSON
-    /// 数字 / 布尔，下游 LLM 从值本身推断类型，无需字符串转换）；String 类型字段值（用户派生自由文本）经
+    /// 数字 / 布尔，下游 LLM 从值本身推断类型，无需字符串转换）；文本类型字段值（用户派生自由文本）经
     /// <c>PromptBoundary.WrapField</c> 包裹后重新装回 JSON 字符串（防 indirect prompt injection）。
     /// 文档无抽取字段（或全为 null）时为 null。
     /// </summary>

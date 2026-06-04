@@ -44,9 +44,9 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
     public virtual bool IsRequired { get; private set; }
 
     /// <summary>
-    /// 是否允许多值（#212）——仅对 <see cref="FieldDataType.String"/> 字段有效。为 true 时该字段的抽取值落成
+    /// 是否允许多值（#212）——仅对 <see cref="FieldDataType.Text"/> 字段有效。为 true 时该字段的抽取值落成
     /// 多行 <see cref="DocumentExtractedField"/>（复合键含 <c>Order</c> 位序），出口 <c>ExtractedFields</c> 渲染为 JSON 数组；
-    /// LLM 抽取 schema 告知模型返回 <c>string[]</c>。非 String 类型强行开多值由实体层 loud fail（见 <see cref="ValidateMultiValue"/>）。
+    /// LLM 抽取 schema 告知模型返回 <c>string[]</c>。非文本类型强行开多值由实体层 loud fail（见 <see cref="ValidateMultiValue"/>）。
     /// </summary>
     public virtual bool AllowMultiple { get; private set; }
 
@@ -136,13 +136,13 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// 多值仅对 <see cref="FieldDataType.String"/> 有意义（#212）：多值落多行（复合键含 Order）只有 String 是
+    /// 多值仅对 <see cref="FieldDataType.Text"/> 有意义（#212）：多值落多行（复合键含 Order）只有文本是
     /// "短结构化值列表"语义（标签 / 关键词 / 多当事人）；Number/Boolean/Date/DateTime 的多值无现实抽取场景，
-    /// 且会让类型化列查询语义含糊。非 String 强行开多值 → loud fail。
+    /// 且会让类型化列查询语义含糊。非文本强行开多值 → loud fail。
     /// </summary>
     private static bool ValidateMultiValue(bool allowMultiple, FieldDataType dataType)
     {
-        if (allowMultiple && dataType != FieldDataType.String)
+        if (allowMultiple && dataType != FieldDataType.Text)
         {
             throw new BusinessException(PaperbaseErrorCodes.FieldDefinition.MultiValueRequiresStringType)
                 .WithData("dataType", dataType.ToString());

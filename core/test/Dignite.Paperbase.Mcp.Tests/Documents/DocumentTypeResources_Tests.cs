@@ -67,7 +67,7 @@ public class DocumentTypeResources_Tests : PaperbaseTestBase<DocumentTypeResourc
                 new()
                 {
                     Id = Guid.NewGuid(), DocumentTypeId = typeId, Name = "partyName", DisplayName = "甲方",
-                    Prompt = "Extract party A name", DataType = FieldDataType.String, DisplayOrder = 0
+                    Prompt = "Extract party A name", DataType = FieldDataType.Text, DisplayOrder = 0
                 }
             });
 
@@ -82,7 +82,7 @@ public class DocumentTypeResources_Tests : PaperbaseTestBase<DocumentTypeResourc
         // 字段按 DisplayOrder 升序：partyName(0) 先于 amount(1)。
         schema.Fields.Count.ShouldBe(2);
         schema.Fields[0].Name.ShouldBe("partyName");
-        schema.Fields[0].DataType.ShouldBe("String");
+        schema.Fields[0].DataType.ShouldBe("Text");
         schema.Fields[0].DisplayName.ShouldBe(PromptBoundary.WrapField("甲方"));
         schema.Fields[1].Name.ShouldBe("amount");
         schema.Fields[1].DataType.ShouldBe("Number");
@@ -93,7 +93,7 @@ public class DocumentTypeResources_Tests : PaperbaseTestBase<DocumentTypeResourc
     public async Task Exposes_AllowMultiple_so_clients_know_a_field_returns_an_array()
     {
         // #212：多值字段在检索结果 extractedFields 里是 string[]——schema 必须透出 AllowMultiple，
-        // 否则 MCP 客户端按"String 标量"解析数组会出错。
+        // 否则 MCP 客户端按"文本标量"解析数组会出错。
         var typeId = Guid.NewGuid();
         _documentTypeAppService
             .GetVisibleAsync()
@@ -108,13 +108,13 @@ public class DocumentTypeResources_Tests : PaperbaseTestBase<DocumentTypeResourc
                 new()
                 {
                     Id = Guid.NewGuid(), DocumentTypeId = typeId, Name = "tags", DisplayName = "标签",
-                    Prompt = "Extract tags", DataType = FieldDataType.String, DisplayOrder = 0,
+                    Prompt = "Extract tags", DataType = FieldDataType.Text, DisplayOrder = 0,
                     IsRequired = false, AllowMultiple = true
                 },
                 new()
                 {
                     Id = Guid.NewGuid(), DocumentTypeId = typeId, Name = "partyName", DisplayName = "甲方",
-                    Prompt = "Extract party A name", DataType = FieldDataType.String, DisplayOrder = 1
+                    Prompt = "Extract party A name", DataType = FieldDataType.Text, DisplayOrder = 1
                 }
             });
 

@@ -141,7 +141,7 @@ public class DocumentSearchTool_Tests : PaperbaseTestBase<DocumentSearchToolTest
             _documentAppService,
             documentTypeCode: "contract.general");
 
-        // String 字段值（用户派生自由文本）经 PromptBoundary 包裹后仍是 JSON 字符串（防 indirect prompt injection）；
+        // 文本字段值（用户派生自由文本）经 PromptBoundary 包裹后仍是 JSON 字符串（防 indirect prompt injection）；
         // 数字等结构化值原样透传保留 JSON 类型（Number），下游 LLM 从值本身推断类型，无需字符串转换。
         result[0].ExtractedFields.ShouldNotBeNull();
         var partyName = result[0].ExtractedFields!["partyName"];
@@ -165,7 +165,7 @@ public class DocumentSearchTool_Tests : PaperbaseTestBase<DocumentSearchToolTest
                     Id = docId,
                     LifecycleStatus = DocumentLifecycleStatus.Ready,
                     CreationTime = new DateTime(2024, 1, 1),
-                    // 多值 String 字段（#212）出口是 JSON 数组。
+                    // 多值文本字段（#212）出口是 JSON 数组。
                     ExtractedFields = new Dictionary<string, JsonElement>
                     {
                         ["tags"] = JsonSerializer.SerializeToElement(new[] { "urgent", "legal" })

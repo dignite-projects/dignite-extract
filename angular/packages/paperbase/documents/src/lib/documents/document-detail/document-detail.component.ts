@@ -467,7 +467,7 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
       const config: FormFieldConfig = {
         key: def.name,
         label: `${def.displayName} (${def.name})`,
-        // 多值字段（#212，仅 String）用 textarea 每行一个值；单值按 DataType 选输入类型。
+        // 多值字段（#212，仅文本）用 textarea 每行一个值；单值按 DataType 选输入类型。
         type: def.allowMultiple ? 'textarea' : this.toFormFieldType(def.dataType),
         value: this.toFormInitialValue(def, values[def.name]),
         required: def.isRequired,
@@ -541,7 +541,7 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
       (typeof value === 'string' && value.trim() === '');
   }
 
-  // 按字段 DataType 转成对应 JSON 类型。Date/DateTime/String 一律存字符串。
+  // 按字段 DataType 转成对应 JSON 类型。Date/DateTime/Text 一律存字符串。
   private coerceValue(def: FieldDefinitionDto, value: unknown): unknown {
     // 多值字段（#212）：textarea 每行一个值 → 去空白 + 去空行 → string[]（与后端 UpdateExtractedFieldsAsync 收数组对称）。
     if (def.allowMultiple) {

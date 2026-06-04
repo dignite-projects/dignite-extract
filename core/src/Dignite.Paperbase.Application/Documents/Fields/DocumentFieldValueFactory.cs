@@ -10,7 +10,7 @@ namespace Dignite.Paperbase.Documents.Fields;
 /// （<c>FieldExtractionEventHandler</c>）与操作员手改（<c>DocumentAppService.UpdateExtractedFieldsAsync</c>）：
 /// <list type="bullet">
 ///   <item>单值字段（<c>allowMultiple == false</c>）：标量 <paramref name="value"/> → 1 行，<c>Order = 0</c>。</item>
-///   <item>多值 String 字段（<c>allowMultiple == true</c>）：JSON 数组 <paramref name="value"/> → 每元素 1 行，
+///   <item>多值文本字段（<c>allowMultiple == true</c>）：JSON 数组 <paramref name="value"/> → 每元素 1 行，
 ///   <c>Order</c> 按数组顺序取 0,1,2…（空数组 → 0 行）。</item>
 /// </list>
 /// 调用前必须已 <c>IsValid(value, dataType, allowMultiple)</c>——多值路径假定 <paramref name="value"/> 是数组。

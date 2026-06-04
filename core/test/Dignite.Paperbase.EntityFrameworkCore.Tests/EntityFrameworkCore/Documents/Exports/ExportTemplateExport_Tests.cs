@@ -74,8 +74,8 @@ public class ExportTemplateExport_Tests : PaperbaseEntityFrameworkCoreTestBase
         {
             var fields = new[]
             {
-                new DocumentFieldValue(amountFieldId, FieldDataType.String, Json("1000")),
-                new DocumentFieldValue(partnerFieldId, FieldDataType.String, Json("Acme")),
+                new DocumentFieldValue(amountFieldId, FieldDataType.Text, Json("1000")),
+                new DocumentFieldValue(partnerFieldId, FieldDataType.Text, Json("Acme")),
             };
             await SeedSchemaAsync(typeId, fields);
             await _documentRepository.InsertAsync(
@@ -113,7 +113,7 @@ public class ExportTemplateExport_Tests : PaperbaseEntityFrameworkCoreTestBase
     [Fact]
     public async Task Export_Should_Render_Typed_Number_And_Date_Fields()
     {
-        // 覆盖非 String 字段经 typed child 投影 + FieldValueToString 的导出渲染。
+        // 覆盖非文本字段经 typed child 投影 + FieldValueToString 的导出渲染。
         var templateId = _guidGenerator.Create();
         var typeId = _guidGenerator.Create();
         var amountFieldId = _guidGenerator.Create();
@@ -175,15 +175,15 @@ public class ExportTemplateExport_Tests : PaperbaseEntityFrameworkCoreTestBase
             await _fieldDefinitionRepository.InsertAsync(
                 new FieldDefinition(
                     tagsFieldId, null, typeId, "tags", "Tags", "extract",
-                    FieldDataType.String, allowMultiple: true),
+                    FieldDataType.Text, allowMultiple: true),
                 autoSave: true);
 
             // 乱序插入：物理首行是 Order 2（"2026"），Order 0（"urgent"）在中间。
             var fields = new[]
             {
-                new DocumentFieldValue(tagsFieldId, FieldDataType.String, Json("2026"), 2),
-                new DocumentFieldValue(tagsFieldId, FieldDataType.String, Json("urgent"), 0),
-                new DocumentFieldValue(tagsFieldId, FieldDataType.String, Json("legal"), 1),
+                new DocumentFieldValue(tagsFieldId, FieldDataType.Text, Json("2026"), 2),
+                new DocumentFieldValue(tagsFieldId, FieldDataType.Text, Json("urgent"), 0),
+                new DocumentFieldValue(tagsFieldId, FieldDataType.Text, Json("legal"), 1),
             };
             await _documentRepository.InsertAsync(
                 CreateDocument(_guidGenerator.Create(), typeId, "Doc M", fields),

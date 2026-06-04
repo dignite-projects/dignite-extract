@@ -128,7 +128,7 @@ public class EfCoreDocumentRepository
     /// 把单字段值查询编译成一个对 <see cref="Document.ExtractedFieldValues"/> 的 <c>Any</c>（EXISTS）谓词，
     /// 按 <see cref="FieldDataType"/> 分派到对应类型化列做普通比较：
     /// <list type="bullet">
-    ///   <item><c>String</c> / <c>Boolean</c>：仅等值（红线：永不 LIKE）；传区间 → 抛
+    ///   <item><c>Text</c> / <c>Boolean</c>：仅等值（红线：永不 LIKE）；传区间 → 抛
     ///   <see cref="PaperbaseErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange"/>（给 AI 客户端可纠正信号）。</item>
     ///   <item><c>Number</c> / <c>Date</c> / <c>DateTime</c>：等值或区间（含界）。
     ///   入参无法解析为声明类型 → 抛 <see cref="PaperbaseErrorCodes.ExtractedField.InvalidValue"/>（loud，不静默空）。</item>
@@ -155,7 +155,7 @@ public class EfCoreDocumentRepository
 
         switch (fieldQuery.FieldDataType)
         {
-            case FieldDataType.String:
+            case FieldDataType.Text:
                 if (isRange)
                 {
                     throw RangeNotSupported(name, fieldQuery.FieldDataType);

@@ -109,7 +109,7 @@ public class DocumentReferenceResolution_Tests : PaperbaseTestBase<DocumentRefer
         await WithUnitOfWorkAsync(async () =>
         {
             (_, fieldId) = await SeedTypeFieldAndDocAsync(
-                "host.invoice", "partner", FieldDataType.String, docId, "Acme");
+                "host.invoice", "partner", FieldDataType.Text, docId, "Acme");
         });
 
         // 软删字段（FieldDefinition 删除走软删，无 in-use 守卫；字段值行仍在）。
@@ -145,7 +145,7 @@ public class DocumentReferenceResolution_Tests : PaperbaseTestBase<DocumentRefer
                     Name = "amount",
                     DisplayName = "Amount",
                     Prompt = "Extract the amount.",
-                    DataType = FieldDataType.String,   // ← 从 Number 改 String
+                    DataType = FieldDataType.Text,   // ← 从 Number 改 Text
                     DisplayOrder = 0,
                     IsRequired = false
                 }));

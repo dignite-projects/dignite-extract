@@ -484,7 +484,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
 
         // 校验每个值符合声明类型后，展开成 typed DocumentFieldValue（FieldDefinitionId + DataType 来自 FieldDefinition）。
         // 校验通过即可直接交给聚合根，不再经 JSON 字典中转——值类型与列对齐的转换集中在 DocumentExtractedField 内。
-        // #212：多值 String 字段的 JSON 数组由 DocumentFieldValueFactory 拆成多行（Order 0,1,2…），单值字段 1 行（Order 0）。
+        // #212：多值文本字段的 JSON 数组由 DocumentFieldValueFactory 拆成多行（Order 0,1,2…），单值字段 1 行（Order 0）。
         var fieldValues = new List<DocumentFieldValue>(fields.Count);
         foreach (var (key, value) in fields)
         {
@@ -705,7 +705,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
             return null;
         }
 
-        // 按 FieldDefinitionId 分组（#212）：多值 String 字段一字段多行（Order 0,1,2…），单值一字段一行（Order 0）。
+        // 按 FieldDefinitionId 分组（#212）：多值文本字段一字段多行（Order 0,1,2…），单值一字段一行（Order 0）。
         // 容量按 values.Count 上界预留（去重后 ≤ 该值），省去多字段文档的字典扩容。
         var dict = new Dictionary<string, JsonElement>(values.Count, StringComparer.Ordinal);
         foreach (var group in values.GroupBy(v => v.FieldDefinitionId))

@@ -268,7 +268,7 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
         }
 
         // 按 Order 升序渲染该字段全部值行再 join（#212）——单值字段恰好一行（结果即该值，与既有行为一致），
-        // 多值字段（String）多行用 "; " 连接，不丢值，且确定（不依赖 DB 对 child 子查询未指定的行返回顺序）。
+        // 多值字段（文本）多行用 "; " 连接，不丢值，且确定（不依赖 DB 对 child 子查询未指定的行返回顺序）。
         var rendered = d.ExtractedFields
             .Where(f => f.FieldDefinitionId == fieldDefinitionId)
             .OrderBy(f => f.Order)
@@ -284,7 +284,7 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
     // ApplyFieldValueFilter 一致（绝不静默吐空单元格：新增枚举值漏改本处应在测试 / 运行期响亮报错，而非无声错导）。
     private static string? FieldValueToString(ExtractedFieldProjection f, FieldDataType dataType) => dataType switch
     {
-        FieldDataType.String => f.StringValue,
+        FieldDataType.Text => f.StringValue,
         FieldDataType.LongText => f.LongTextValue,
         // Number 以最小形渲染（"0.######"）：整数 1000 → "1000"，小数 10.50 → "10.5"——不带 decimal(38,6) 的 6 位尾零。
         FieldDataType.Number => f.NumberValue?.ToString("0.######", CultureInfo.InvariantCulture),

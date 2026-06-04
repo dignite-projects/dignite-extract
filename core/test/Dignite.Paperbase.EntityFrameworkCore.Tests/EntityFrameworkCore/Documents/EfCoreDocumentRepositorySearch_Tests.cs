@@ -91,7 +91,7 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
         {
             var ex = await Should.ThrowAsync<BusinessException>(() => _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode),
-                new[] { Query("party", FieldDataType.String, min: "a", max: "z") }));
+                new[] { Query("party", FieldDataType.Text, min: "a", max: "z") }));
 
             ex.Code.ShouldBe(PaperbaseErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange);
         });
@@ -161,11 +161,11 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
     {
         await WithUnitOfWorkAsync(async () =>
         {
-            var hit = await InsertDocumentAsync(Field("party", FieldDataType.String, "Acme"));
-            await InsertDocumentAsync(Field("party", FieldDataType.String, "Globex"));
+            var hit = await InsertDocumentAsync(Field("party", FieldDataType.Text, "Acme"));
+            await InsertDocumentAsync(Field("party", FieldDataType.Text, "Globex"));
 
             var ids = await _documentRepository.GetFieldMatchedIdsAsync(
-                TypeId(TypeCode), new[] { Query("party", FieldDataType.String, value: "Acme") });
+                TypeId(TypeCode), new[] { Query("party", FieldDataType.Text, value: "Acme") });
 
             ids.ShouldHaveSingleItem().ShouldBe(hit);
         });
@@ -327,20 +327,20 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
         await WithUnitOfWorkAsync(async () =>
         {
             var both = await InsertDocumentAsync(
-                Field("party", FieldDataType.String, "Acme"),
+                Field("party", FieldDataType.Text, "Acme"),
                 Field("amount", FieldDataType.Number, 300m));
             // 只满足一个条件 → 不应命中（AND，不同字段互相收窄）。
             await InsertDocumentAsync(
-                Field("party", FieldDataType.String, "Acme"),
+                Field("party", FieldDataType.Text, "Acme"),
                 Field("amount", FieldDataType.Number, 999m));
             await InsertDocumentAsync(
-                Field("party", FieldDataType.String, "Globex"),
+                Field("party", FieldDataType.Text, "Globex"),
                 Field("amount", FieldDataType.Number, 300m));
 
             var ids = await _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode), new[]
                 {
-                    Query("party", FieldDataType.String, value: "Acme"),
+                    Query("party", FieldDataType.Text, value: "Acme"),
                     Query("amount", FieldDataType.Number, min: "250", max: "350")
                 });
 
@@ -355,12 +355,12 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
     {
         await WithUnitOfWorkAsync(async () =>
         {
-            var contract = await InsertDocumentAsync(TypeCode, Field("party", FieldDataType.String, "Acme"));
+            var contract = await InsertDocumentAsync(TypeCode, Field("party", FieldDataType.Text, "Acme"));
             // 同字段值但不同类型——不应命中（查询锚定单一 documentTypeId）。
-            await InsertDocumentAsync("invoice.general", Field("party", FieldDataType.String, "Acme"));
+            await InsertDocumentAsync("invoice.general", Field("party", FieldDataType.Text, "Acme"));
 
             var ids = await _documentRepository.GetFieldMatchedIdsAsync(
-                TypeId(TypeCode), new[] { Query("party", FieldDataType.String, value: "Acme") });
+                TypeId(TypeCode), new[] { Query("party", FieldDataType.Text, value: "Acme") });
 
             ids.ShouldHaveSingleItem().ShouldBe(contract);
         });
@@ -373,11 +373,11 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
     {
         await WithUnitOfWorkAsync(async () =>
         {
-            var id = await InsertDocumentAsync(Field("party", FieldDataType.String, "Acme"));
+            var id = await InsertDocumentAsync(Field("party", FieldDataType.Text, "Acme"));
             await _documentRepository.DeleteAsync(id, autoSave: true); // 软删
 
             var ids = await _documentRepository.GetFieldMatchedIdsAsync(
-                TypeId(TypeCode), new[] { Query("party", FieldDataType.String, value: "Acme") });
+                TypeId(TypeCode), new[] { Query("party", FieldDataType.Text, value: "Acme") });
 
             ids.ShouldBeEmpty();
 
@@ -385,7 +385,7 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
             using (_dataFilter.Disable<ISoftDelete>())
             {
                 var deletedIds = await _documentRepository.GetFieldMatchedIdsAsync(
-                    TypeId(TypeCode), new[] { Query("party", FieldDataType.String, value: "Acme") });
+                    TypeId(TypeCode), new[] { Query("party", FieldDataType.Text, value: "Acme") });
                 deletedIds.ShouldHaveSingleItem().ShouldBe(id);
             }
         });
@@ -403,25 +403,25 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
             Guid tenantDocId;
             using (_currentTenant.Change(tenantId))
             {
-                tenantDocId = await InsertDocumentAsync(Field("party", FieldDataType.String, "Acme"));
+                tenantDocId = await InsertDocumentAsync(Field("party", FieldDataType.Text, "Acme"));
             }
 
             // Host 上下文（CurrentTenant.Id == null）查不到租户文档。
             var hostIds = await _documentRepository.GetFieldMatchedIdsAsync(
-                TypeId(TypeCode), new[] { Query("party", FieldDataType.String, value: "Acme") });
+                TypeId(TypeCode), new[] { Query("party", FieldDataType.Text, value: "Acme") });
             hostIds.ShouldBeEmpty();
 
             // 切到该租户上下文即可查到。
             using (_currentTenant.Change(tenantId))
             {
                 var tenantIds = await _documentRepository.GetFieldMatchedIdsAsync(
-                    TypeId(TypeCode), new[] { Query("party", FieldDataType.String, value: "Acme") });
+                    TypeId(TypeCode), new[] { Query("party", FieldDataType.Text, value: "Acme") });
                 tenantIds.ShouldHaveSingleItem().ShouldBe(tenantDocId);
             }
         });
     }
 
-    // ─── 多值 String 字段（#212） ───────────────────────────────────────────────
+    // ─── 多值文本字段（#212） ───────────────────────────────────────────────
 
     [Fact]
     public async Task Multi_value_string_field_persists_ordered_rows_and_matches_any_value()
@@ -433,9 +433,9 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
             var tagsId = FieldId("tags");
             var values = new[]
             {
-                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("urgent"), 0),
-                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("legal"), 1),
-                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("2026"), 2),
+                new DocumentFieldValue(tagsId, FieldDataType.Text, JsonSerializer.SerializeToElement("urgent"), 0),
+                new DocumentFieldValue(tagsId, FieldDataType.Text, JsonSerializer.SerializeToElement("legal"), 1),
+                new DocumentFieldValue(tagsId, FieldDataType.Text, JsonSerializer.SerializeToElement("2026"), 2),
             };
             var id = await InsertDocumentAsync(values);
 
@@ -447,16 +447,16 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
 
             // 按任一值命中（.Any 跨多行；查询路径对多值天然兼容，无需改动）。
             var byMiddle = await _documentRepository.GetFieldMatchedIdsAsync(
-                TypeId(TypeCode), new[] { Query("tags", FieldDataType.String, value: "legal") });
+                TypeId(TypeCode), new[] { Query("tags", FieldDataType.Text, value: "legal") });
             byMiddle.ShouldHaveSingleItem().ShouldBe(id);
 
             var byLast = await _documentRepository.GetFieldMatchedIdsAsync(
-                TypeId(TypeCode), new[] { Query("tags", FieldDataType.String, value: "2026") });
+                TypeId(TypeCode), new[] { Query("tags", FieldDataType.Text, value: "2026") });
             byLast.ShouldHaveSingleItem().ShouldBe(id);
 
             // 未抽到的值不命中。
             var miss = await _documentRepository.GetFieldMatchedIdsAsync(
-                TypeId(TypeCode), new[] { Query("tags", FieldDataType.String, value: "archived") });
+                TypeId(TypeCode), new[] { Query("tags", FieldDataType.Text, value: "archived") });
             miss.ShouldBeEmpty();
         });
     }
@@ -471,9 +471,9 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
         {
             var values = new[]
             {
-                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("a"), 0),
-                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("b"), 1),
-                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("c"), 2),
+                new DocumentFieldValue(tagsId, FieldDataType.Text, JsonSerializer.SerializeToElement("a"), 0),
+                new DocumentFieldValue(tagsId, FieldDataType.Text, JsonSerializer.SerializeToElement("b"), 1),
+                new DocumentFieldValue(tagsId, FieldDataType.Text, JsonSerializer.SerializeToElement("c"), 2),
             };
             await EnsureSchemaAsync(TypeCode, values);
             await _documentRepository.InsertAsync(
@@ -486,8 +486,8 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
             var doc = await _documentRepository.GetAsync(id, includeDetails: true);
             doc.SetFields(new[]
             {
-                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("x"), 0),
-                new DocumentFieldValue(tagsId, FieldDataType.String, JsonSerializer.SerializeToElement("y"), 1),
+                new DocumentFieldValue(tagsId, FieldDataType.Text, JsonSerializer.SerializeToElement("x"), 0),
+                new DocumentFieldValue(tagsId, FieldDataType.Text, JsonSerializer.SerializeToElement("y"), 1),
             });
             await _documentRepository.UpdateAsync(doc, autoSave: true);
         });
@@ -500,7 +500,7 @@ public class EfCoreDocumentRepositorySearch_Tests : PaperbaseEntityFrameworkCore
 
             // 被删除的 Order 2 旧值（"c"）查不到。
             var oldHits = await _documentRepository.GetFieldMatchedIdsAsync(
-                TypeId(TypeCode), new[] { Query("tags", FieldDataType.String, value: "c") });
+                TypeId(TypeCode), new[] { Query("tags", FieldDataType.Text, value: "c") });
             oldHits.ShouldBeEmpty();
         });
     }

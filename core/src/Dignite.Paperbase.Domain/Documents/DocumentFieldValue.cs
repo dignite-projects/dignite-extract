@@ -21,7 +21,7 @@ namespace Dignite.Paperbase.Documents;
 /// </para>
 /// <para>
 /// <paramref name="Order"/>（#212）是该值在所属字段多值集合内的 0-based 位序，参与 <see cref="DocumentExtractedField"/>
-/// 复合主键 <c>(DocumentId, FieldDefinitionId, Order)</c>。单值字段恒为 0；多值 String 字段（<c>FieldDefinition.AllowMultiple</c>）
+/// 复合主键 <c>(DocumentId, FieldDefinitionId, Order)</c>。单值字段恒为 0；多值文本字段（<c>FieldDefinition.AllowMultiple</c>）
 /// 的 JSON 数组由 App 层拆成多个本记录（<c>Order = 0,1,2…</c>，每元素一个标量）。<see cref="Document.SetFields"/> 按
 /// <c>(FieldDefinitionId, Order)</c> reconcile。
 /// </para>
