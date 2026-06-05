@@ -58,8 +58,10 @@ export class FieldDefinitionListComponent implements OnInit {
   readonly dataTypeOptions = fieldDataTypeOptions;
   readonly FieldDataType = FieldDataType;
 
-  // 路由按不可变 DocumentTypeId 绑定（#207）；TypeCode 仅作 header 徽标展示，由当前层类型即时解析。
+  // 路由按不可变 DocumentTypeId 绑定（#207）；header 徽标主显示用户友好的 DisplayName（#261），
+  // TypeCode 降为 hover 提示——二者均由当前层可见类型按 Id 即时解析（穿透重命名）。
   documentTypeId = '';
+  documentTypeDisplayName = signal('');
   documentTypeCode = signal('');
   fields = signal<FieldDefinitionDto[]>([]);
   isLoading = signal(true);
@@ -92,7 +94,7 @@ export class FieldDefinitionListComponent implements OnInit {
 
   ngOnInit(): void {
     this.documentTypeId = this.route.snapshot.paramMap.get('typeId') ?? '';
-    this.resolveTypeCode();
+    this.resolveDocumentType();
     this.slugHandle = wireSlugSuggestion({
       displayName: this.form.controls.displayName,
       target: this.form.controls.name,
@@ -122,13 +124,16 @@ export class FieldDefinitionListComponent implements OnInit {
     }
   }
 
-  // header 徽标展示用：按不可变 Id 在当前层可见类型里解析当前 TypeCode（穿透重命名）。
-  private resolveTypeCode(): void {
+  // header 徽标展示用：按不可变 Id 在当前层可见类型里解析当前类型，主显示 DisplayName、TypeCode 作 hover 提示（穿透重命名）。
+  private resolveDocumentType(): void {
     this.documentTypeService.getVisible()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: types =>
-          this.documentTypeCode.set(types.find(t => t.id === this.documentTypeId)?.typeCode ?? ''),
+        next: types => {
+          const type = types.find(t => t.id === this.documentTypeId);
+          this.documentTypeDisplayName.set(type?.displayName ?? '');
+          this.documentTypeCode.set(type?.typeCode ?? '');
+        },
       });
   }
 
