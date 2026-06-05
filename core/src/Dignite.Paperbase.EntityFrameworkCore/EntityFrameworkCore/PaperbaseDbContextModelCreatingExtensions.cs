@@ -202,6 +202,8 @@ public static class PaperbaseDbContextModelCreatingExtensions
 
             b.Property(x => x.TypeCode).IsRequired().HasMaxLength(DocumentTypeConsts.MaxTypeCodeLength);
             b.Property(x => x.DisplayName).IsRequired().HasMaxLength(DocumentTypeConsts.MaxDisplayNameLength);
+            // 可空：分类辅助说明（#262），NULL = 无说明。
+            b.Property(x => x.Description).HasMaxLength(DocumentTypeConsts.MaxDescriptionLength);
             b.Property(x => x.ConfidenceThreshold).IsRequired();
             b.Property(x => x.Priority).IsRequired();
 

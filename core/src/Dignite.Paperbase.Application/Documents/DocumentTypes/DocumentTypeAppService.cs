@@ -89,6 +89,7 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
             CurrentTenant.Id,
             input.TypeCode,
             input.DisplayName,
+            input.Description,
             input.ConfidenceThreshold,
             input.Priority);
 
@@ -123,7 +124,7 @@ public class DocumentTypeAppService : PaperbaseAppService, IDocumentTypeAppServi
             }
         }
 
-        entity.Update(input.TypeCode, input.DisplayName, input.ConfidenceThreshold, input.Priority);
+        entity.Update(input.TypeCode, input.DisplayName, input.Description, input.ConfidenceThreshold, input.Priority);
         await _repository.UpdateAsync(entity, autoSave: true);
         return ObjectMapper.Map<DocumentType, DocumentTypeDto>(entity);
     }

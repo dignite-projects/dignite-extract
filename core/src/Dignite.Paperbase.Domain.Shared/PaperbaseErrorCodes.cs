@@ -28,6 +28,7 @@ public static class PaperbaseErrorCodes
         public const string InUse = "Paperbase:DocumentTypeInUse";
         public const string RestoreConflict = "Paperbase:DocumentTypeRestoreConflict";
         public const string InvalidDisplayName = "Paperbase:InvalidDocumentTypeDisplayName";
+        public const string InvalidDescription = "Paperbase:InvalidDocumentTypeDescription";
         public const string NoneConfigured = "Paperbase:NoDocumentTypesConfigured";
     }
 

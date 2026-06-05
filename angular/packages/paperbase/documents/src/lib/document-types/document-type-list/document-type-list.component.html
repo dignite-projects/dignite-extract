@@ -172,6 +172,16 @@
                 <div class="invalid-feedback d-block">{{ '::DocumentType:TypeCodeInvalid' | abpLocalization }}</div>
               }
             </div>
+            <div class="mb-3">
+              <label class="form-label">{{ '::DocumentType:Description' | abpLocalization }}</label>
+              <textarea
+                class="form-control"
+                formControlName="description"
+                rows="3"
+                [class.is-invalid]="form.controls.description.touched && form.controls.description.invalid"
+              ></textarea>
+              <div class="form-text">{{ '::DocumentType:DescriptionHint' | abpLocalization }}</div>
+            </div>
             <div class="row g-3">
               <div class="col-6">
                 <label class="form-label">{{ '::DocumentType:ConfidenceThreshold' | abpLocalization }}</label>

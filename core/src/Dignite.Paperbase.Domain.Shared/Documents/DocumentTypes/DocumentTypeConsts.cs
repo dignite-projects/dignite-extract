@@ -6,6 +6,12 @@ public static class DocumentTypeConsts
     public static int MaxDisplayNameLength { get; set; } = 128;
 
     /// <summary>
+    /// <see cref="DocumentType.Description"/> 长度上限。Description 是可选的分类辅助文本，
+    /// 仅喂入分类 prompt 帮助 LLM 判型——一两句特征描述足矣，过长反而稀释分类信号，故上限远小于文档正文。
+    /// </summary>
+    public static int MaxDescriptionLength { get; set; } = 512;
+
+    /// <summary>
     /// <see cref="DocumentType.TypeCode"/> 白名单：仅允许字母 / 数字 / 下划线 / 短横线段，
     /// 段间用 <c>.</c> 分隔（单段合法，多段也合法；不允许首尾或连续 <c>.</c>）。
     /// 与 <see cref="FieldDefinitionConsts.NamePattern"/> 同源的 prompt injection 防御目的——

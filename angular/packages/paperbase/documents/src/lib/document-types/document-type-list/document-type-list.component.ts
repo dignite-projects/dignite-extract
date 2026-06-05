@@ -26,6 +26,7 @@ import { SlugSuggestionHandle, wireSlugSuggestion } from '../../shared/slug-sugg
 const TYPE_CODE_PATTERN = /^[A-Za-z0-9_\-]+(\.[A-Za-z0-9_\-]+)*$/;
 const MAX_TYPE_CODE_LENGTH = 128;
 const MAX_DISPLAY_NAME_LENGTH = 128;
+const MAX_DESCRIPTION_LENGTH = 512;
 
 @Component({
   selector: 'lib-document-type-list',
@@ -71,6 +72,8 @@ export class DocumentTypeListComponent implements OnInit {
       ],
     ],
     displayName: ['', [Validators.required, Validators.maxLength(MAX_DISPLAY_NAME_LENGTH)]],
+    // 可选分类辅助说明（#262）：仅帮助 AI 识别类型，不参与文档内容加工。
+    description: ['', [Validators.maxLength(MAX_DESCRIPTION_LENGTH)]],
     confidenceThreshold: [0.7, [Validators.required, Validators.min(0), Validators.max(1)]],
     priority: [0, [Validators.required]],
   });
@@ -117,7 +120,7 @@ export class DocumentTypeListComponent implements OnInit {
   }
 
   openCreate(): void {
-    this.form.reset({ typeCode: '', displayName: '', confidenceThreshold: 0.7, priority: 0 });
+    this.form.reset({ typeCode: '', displayName: '', description: '', confidenceThreshold: 0.7, priority: 0 });
     this.form.controls.typeCode.enable();
     // 必须在 form.reset()/enable() 之后调用：二者触发的 valueChanges 会误标"手动编辑"，
     // reset() 清掉该标记并复位建议状态（含 spinner）。
@@ -132,6 +135,7 @@ export class DocumentTypeListComponent implements OnInit {
     this.form.reset({
       typeCode: type.typeCode,
       displayName: type.displayName,
+      description: type.description ?? '',
       confidenceThreshold: type.confidenceThreshold,
       priority: type.priority,
     });
@@ -180,6 +184,7 @@ export class DocumentTypeListComponent implements OnInit {
       const input: CreateDocumentTypeDto = {
         typeCode: raw.typeCode,
         displayName: raw.displayName,
+        description: raw.description.trim() || undefined,
         confidenceThreshold: raw.confidenceThreshold,
         priority: raw.priority,
       };
@@ -193,6 +198,7 @@ export class DocumentTypeListComponent implements OnInit {
       this.service.update(mode.id!, {
         typeCode: raw.typeCode,
         displayName: raw.displayName,
+        description: raw.description.trim() || undefined,
         confidenceThreshold: raw.confidenceThreshold,
         priority: raw.priority,
       })

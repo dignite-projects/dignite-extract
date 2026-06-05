@@ -69,15 +69,23 @@ public class DocumentClassificationWorkflow : ITransientDependency
             truncatedText = TruncateAtCharBoundary(markdown, _options.MaxTextLengthPerExtraction);
         }
 
-        // 字段架构 v2：DocumentType.DisplayName 是 DB-resolved string，
+        // 字段架构 v2：DocumentType.DisplayName / Description 是 DB-resolved string，
         // Host admin / 租户 admin 通过 admin UI 直接输入 string——是用户控制文本，
         // 必须经 PromptBoundary.WrapField 包裹（CLAUDE.md "## 安全约定 / PromptBoundary"），
-        // 防止恶意 admin 通过 DisplayName 注入指令（"Ignore previous instructions..."）。
+        // 防止恶意 admin 通过 DisplayName / Description 注入指令（"Ignore previous instructions..."）。
         // TypeCode 已经走实体层 ValidateTypeCode 强校验为 <owner>.<sub-type> 形式，安全。
+        // Description（#262）是可选分类辅助文本：仅当非空时追加一行，帮助 LLM 判型——不做任何内容二次加工。
         var typeDescriptions = candidateTypes.Select(t =>
-            $"- TypeCode: {t.TypeCode}\n" +
-            $"  Name: {PromptBoundary.WrapField(t.DisplayName)}"
-        ).ToList();
+        {
+            var entry =
+                $"- TypeCode: {t.TypeCode}\n" +
+                $"  Name: {PromptBoundary.WrapField(t.DisplayName)}";
+            if (!string.IsNullOrWhiteSpace(t.Description))
+            {
+                entry += $"\n  Description: {PromptBoundary.WrapField(t.Description)}";
+            }
+            return entry;
+        }).ToList();
 
         var userMessage = $$"""
                 ## Registered Document Types
