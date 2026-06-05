@@ -7,6 +7,7 @@ using Dignite.Paperbase.Abstractions.Documents;
 using Dignite.Paperbase.Abstractions.TextExtraction;
 using Dignite.Paperbase.Ai;
 using Dignite.Paperbase.Documents;
+using Dignite.Paperbase.Documents.Cabinets;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -26,6 +27,7 @@ public class DocumentTextExtractionBackgroundJob
     : DocumentPipelineBackgroundJobBase<DocumentTextExtractionJobArgs>, ITransientDependency
 {
     private readonly DocumentPipelineJobScheduler _pipelineJobScheduler;
+    private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly ITextExtractor _textExtractor;
     private readonly IBlobContainer<PaperbaseDocumentContainer> _blobContainer;
     private readonly IDistributedEventBus _distributedEventBus;
@@ -50,6 +52,7 @@ public class DocumentTextExtractionBackgroundJob
         DocumentPipelineRunAccessor pipelineRunAccessor,
         IUnitOfWorkManager unitOfWorkManager,
         DocumentPipelineJobScheduler pipelineJobScheduler,
+        IBackgroundJobManager backgroundJobManager,
         ITextExtractor textExtractor,
         IBlobContainer<PaperbaseDocumentContainer> blobContainer,
         IDistributedEventBus distributedEventBus,
@@ -61,6 +64,7 @@ public class DocumentTextExtractionBackgroundJob
         : base(documentRepository, runRepository, pipelineRunManager, pipelineRunAccessor, unitOfWorkManager)
     {
         _pipelineJobScheduler = pipelineJobScheduler;
+        _backgroundJobManager = backgroundJobManager;
         _textExtractor = textExtractor;
         _blobContainer = blobContainer;
         _distributedEventBus = distributedEventBus;
@@ -156,6 +160,16 @@ public class DocumentTextExtractionBackgroundJob
         // 文本提取完成即推进分类——OCR 不设质量门控
         // （#196：OCR 平均置信度预测不了真实质量；质量问题由分类审核 + 操作员重跑/重传事后处理）。
         await _pipelineJobScheduler.QueueAsync(document, PaperbasePipelines.Classification);
+
+        // #265：文本提取成功、Markdown 就绪后 fan-out「留空 AI 兜底选柜」作业。
+        // 它是正交于内容 pipeline 的独立 sibling（非 PipelineRun 阶段）——这里<b>不</b>读 document.CabinetId
+        // （文本提取 job 不触碰 cabinet，守 #194 护栏），人工/竞态门控全在 DocumentCabinetSuggestionBackgroundJob 内自做。
+        // 「一次性」（#265 护栏 3）由 Markdown write-once 不变式天然保证：CompleteTextExtractionAsync → SetMarkdown
+        // 在 Markdown 已存在时抛 MarkdownIsImmutable → FailRun，故本成功路径每个文档<b>至多命中一次</b>，
+        // retry 只对 Failed run 放行（首次成功即在此）、rerecognize 只重排 classification 不重跑文本提取——均不会重复 fan-out。
+        // 不用 AttemptNumber==1 门控：那会漏掉「首次尝试失败、retry 才成功」（成功 run 的 AttemptNumber>1）这一首次成功场景。
+        await _backgroundJobManager.EnqueueAsync(
+            new DocumentCabinetSuggestionJobArgs { DocumentId = document.Id });
 
         await uow.CompleteAsync();
     }

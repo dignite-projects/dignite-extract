@@ -42,4 +42,17 @@ public class PaperbaseAIBehaviorOptions
     /// 超出时截断尾部（文档开头通常已包含标题、摘要等关键信息）。
     /// </summary>
     public int MaxTitleGenerationMarkdownLength { get; set; } = 4000;
+
+    /// <summary>
+    /// 「留空 AI 兜底选柜」（#265）提示词中最多包含的候选文件柜数量，超出时截断。
+    /// 镜像 <see cref="MaxDocumentTypesInClassificationPrompt"/>——柜选择与分类同属「从受限候选集挑一个」。
+    /// </summary>
+    public int MaxCabinetsInSuggestionPrompt { get; set; } = 50;
+
+    /// <summary>
+    /// 「留空 AI 兜底选柜」（#265）的弃选阈值：LLM 置信度低于此值时<b>不</b>写入 CabinetId，文档保持「未归类」。
+    /// 柜是人工组织维度，宁可留空交由操作员后续改派（#257），也不强塞一个把握不大的柜。
+    /// 文档 Markdown 截断复用 <see cref="MaxTextLengthPerExtraction"/>（选柜与分类一样只需文档前段语义）。
+    /// </summary>
+    public double MinCabinetSuggestionConfidence { get; set; } = 0.6;
 }

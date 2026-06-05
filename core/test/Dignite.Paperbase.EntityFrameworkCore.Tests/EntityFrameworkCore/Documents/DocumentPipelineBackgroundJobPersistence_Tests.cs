@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Dignite.Paperbase.Abstractions.TextExtraction;
 using Dignite.Paperbase.Ai;
 using Dignite.Paperbase.Documents;
+using Dignite.Paperbase.Documents.Cabinets;
 using Dignite.Paperbase.Documents.Pipelines;
 using Dignite.Paperbase.Documents.Pipelines.Classification;
 using Dignite.Paperbase.Documents.Pipelines.TextExtraction;
@@ -105,6 +106,13 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
             Arg.Is<DocumentClassificationJobArgs>(x =>
                 x.DocumentId == documentId &&
                 x.PipelineRunId == classificationRunId),
+            Arg.Any<BackgroundJobPriority>(),
+            Arg.Any<TimeSpan?>());
+
+        // #265：文本提取成功后 fan-out「留空 AI 兜底选柜」作业（无条件——一次性由 Markdown write-once 保证，
+        // 成功路径每文档至多命中一次；不用 AttemptNumber==1 门控以免漏掉「首次失败、retry 才成功」场景）。
+        await _backgroundJobManager.Received(1).EnqueueAsync(
+            Arg.Is<DocumentCabinetSuggestionJobArgs>(x => x.DocumentId == documentId),
             Arg.Any<BackgroundJobPriority>(),
             Arg.Any<TimeSpan?>());
     }
