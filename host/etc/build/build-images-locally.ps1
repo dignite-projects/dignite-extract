@@ -8,7 +8,7 @@ $angularAppFolder = Join-Path $slnFolder "angular"
 
 Write-Host "********* BUILDING Angular Application *********" -ForegroundColor Green
 Set-Location $angularAppFolder
-npx yarn
+npm install
 npm run build:prod
 docker build -f Dockerfile.local -t dignite/paperbase-web:$version .
 
