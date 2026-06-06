@@ -21,6 +21,25 @@ The `/mcp` endpoint reuses the host's existing **OpenIddict Bearer** auth — th
 
 Every request to `/mcp` requires a valid Bearer token (`RequireAuthorization` on the endpoint). In addition, each tool/resource call performs an explicit server-side permission assertion: the caller must be granted **`Paperbase.Documents`** (`PaperbasePermissions.Documents.Default`). A token without that permission gets an authorization error even though the endpoint accepted the connection (fail-closed, defense in depth).
 
+There are two ways for a client to present that token. Both end at the same Bearer validation — they differ only in **how the client obtains the token**.
+
+### 1. Manual token (static `Authorization` header)
+
+Obtain a token from the Paperbase auth server (`AuthServer:Authority`) using your normal OAuth flow (e.g. client-credentials for a service client, or an interactive user token), then grant the client/user the `Paperbase.Documents` permission via the admin UI. Present it as a static `Authorization: Bearer <token>` header. This is what the `mcp-remote` bridge and a manually-configured MCP Inspector use (see the connection examples below). A request that already carries a valid token is validated directly and **never triggers the discovery flow** — these paths are unchanged.
+
+### 2. Automatic discovery (OAuth Protected Resource Metadata, RFC 9728)
+
+Spec-compliant MCP clients (Claude Desktop native Custom Connectors, claude.ai connectors, MCP Inspector's *Guided OAuth*, Cursor) can discover the authorization server and log in interactively, without a pre-provisioned token:
+
+1. The client connects to `/mcp` **without** a token → receives `401` with a `WWW-Authenticate: Bearer resource_metadata="https://<host>/.well-known/oauth-protected-resource/mcp"` pointer.
+2. It fetches that **Protected Resource Metadata** document, which advertises the Paperbase auth server (`AuthServer:Authority`) under `authorization_servers`, plus `scopes_supported: ["Paperbase"]` and `bearer_methods_supported: ["header"]`.
+3. It fetches the auth server's `/.well-known/openid-configuration` to find the `authorize` / `token` endpoints.
+4. It runs Authorization Code + PKCE (a browser login/consent), obtains a token, and connects.
+
+The discovery metadata and the `WWW-Authenticate` pointer come from the `ModelContextProtocol.AspNetCore` MCP authentication scheme (`McpAuth`), wired in `PaperbaseHostModule.ConfigureMcpAuthentication`. In this host the `McpAuth` scheme does **not** validate tokens and is **not** part of the `/mcp` authorization policy — it only (a) self-serves `/.well-known/oauth-protected-resource` (its handler runs in the authentication middleware, so there is no separately-mapped controller), and (b) supplies the 401 challenge. Token validation, ABP dynamic claims, and tenant resolution stay on the endpoint's default policy and the existing OpenIddict chain — unchanged. The challenge is routed to `McpAuth` only for the `/mcp` endpoint, by a small `IAuthorizationMiddlewareResultHandler` (`McpDiscoveryAuthorizationResultHandler`) keyed off an endpoint marker; every other endpoint (admin UI, REST, Swagger) keeps the framework-default challenge, so the UI cookie login redirect is untouched. The discovery path is therefore purely additive and never alters the principal used for authorization — the manual-token paths above are byte-for-byte unchanged.
+
+> **Auth-server-side prerequisite.** Exposing the resource metadata is only the resource-server half of the handshake. For a native client to complete step 4 end-to-end, the OpenIddict authorization server must accept that client — i.e. a **public PKCE client** whose redirect URI matches the MCP client's callback must be registered (statically seeded, or via Dynamic Client Registration / RFC 7591, which is a separate authorization-server concern with its own security review). Until such a client exists for your MCP client, use the manual-token path above.
+
 Obtain a token from the Paperbase auth server (`AuthServer:Authority`) using your normal OAuth flow (e.g. client-credentials for a service client, or an interactive user token), then grant the client/user the `Paperbase.Documents` permission via the admin UI.
 
 > Multi-tenancy is currently disabled (`PaperbaseHostModule.IsMultiTenant = false`), so all access resolves to the host document space. Tenant isolation is still enforced fail-closed in code (explicit `TenantId` predicate), so it stays correct if multi-tenancy is later enabled.

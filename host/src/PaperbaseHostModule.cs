@@ -68,6 +68,9 @@ using Volo.Abp.Timing;
 using Volo.Abp.UI.Navigation.Urls;
 using Volo.Abp.VirtualFileSystem;
 using ModelContextProtocol.AspNetCore;
+using ModelContextProtocol.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using Dignite.Paperbase.Host.Authentication;
 
 namespace Dignite.Paperbase.Host;
 
@@ -278,6 +281,46 @@ public class PaperbaseHostModule : AbpModule
         {
             options.IsDynamicClaimsEnabled = true;
         });
+
+        ConfigureMcpAuthentication(context);
+    }
+
+    // #278：给 /mcp 出口补 OAuth Protected Resource Metadata 自动发现链路（RFC 9728）。纯增量，
+    // 不破坏现有手动 token 路径。McpAuth scheme 在本 host 只承担两件事，都不参与 token 验证：
+    //   1. 自服务 `/.well-known/oauth-protected-resource`——McpAuthenticationHandler 实现
+    //      IAuthenticationRequestHandler，在 UseAuthentication() 阶段对该路径直接吐 metadata JSON，
+    //      不依赖任何授权策略，无需单独映射端点；
+    //   2. 提供 401 challenge——注入 `WWW-Authenticate: Bearer resource_metadata="..."` 指针。
+    // 注意 McpAuth 不进入 /mcp 端点的授权策略 AuthenticationSchemes（否则 PolicyEvaluator 会重新
+    // authenticate，丢掉 UseDynamicClaims 富化过的 principal），challenge 由
+    // McpDiscoveryAuthorizationResultHandler 仅对带标记的 /mcp 端点定向触发。详见该 handler 注释。
+    // token 验证、dynamic claims、租户解析全部仍走端点默认策略 + 现有 OpenIddict 链，手动 token
+    //（mcp-remote 静态 Bearer / Inspector 手填 / password-grant）零影响；发现仅在未带 token 的 401 触发。
+    private void ConfigureMcpAuthentication(ServiceConfigurationContext context)
+    {
+        var configuration = context.Services.GetConfiguration();
+        var authority = configuration["AuthServer:Authority"];
+        if (string.IsNullOrWhiteSpace(authority))
+        {
+            // 没有 authority 就无从指向授权服务器，发现链路无意义；不注册半成品 metadata、不接管 challenge。
+            // 此时 /mcp 仍受 RequireAuthorization 保护，手动 token 路径不受影响。
+            return;
+        }
+
+        context.Services.AddAuthentication().AddMcp(options =>
+        {
+            options.ResourceMetadata = new ProtectedResourceMetadata
+            {
+                // Resource 留空：使用默认 well-known 端点时由 handler 从请求自动推断（/mcp 绝对 URL）。
+                AuthorizationServers = new List<string> { authority },
+                ScopesSupported = new List<string> { "Paperbase" },
+                BearerMethodsSupported = new List<string> { "header" },
+                ResourceName = "Paperbase MCP"
+            };
+        });
+
+        // 只覆盖 challenge、不动 authenticate：保留 ABP dynamic claims 富化的 principal（见 handler 注释）。
+        context.Services.Replace(ServiceDescriptor.Singleton<IAuthorizationMiddlewareResultHandler, McpDiscoveryAuthorizationResultHandler>());
     }
 
     private void ConfigureBundles(IHostEnvironment hostingEnvironment)
@@ -657,8 +700,13 @@ public class PaperbaseHostModule : AbpModule
         app.UseConfiguredEndpoints(endpoints =>
         {
             // MCP 出口端点（Streamable HTTP）。复用 host 现有 OpenIddict Bearer：
-            // RequireAuthorization 在端点强制鉴权；tool / resource 方法体内再做显式权限断言（fail-closed 双保险）。
-            endpoints.MapMcp("/mcp").RequireAuthorization();
+            // RequireAuthorization 在端点强制鉴权（authenticate 走默认策略，保留 dynamic claims 富化）；
+            // tool / resource 方法体内再做显式权限断言（fail-closed 双保险）。
+            // #278：McpDiscoveryChallengeMarker 让未带 token 的 401 由 McpDiscoveryAuthorizationResultHandler
+            // 定向走 McpAuth challenge，注入 `WWW-Authenticate: Bearer resource_metadata="..."` 发现指针。
+            endpoints.MapMcp("/mcp")
+                .RequireAuthorization()
+                .WithMetadata(McpDiscoveryChallengeMarker.Instance);
         });
     }
 }
