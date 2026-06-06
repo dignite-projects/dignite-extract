@@ -124,28 +124,28 @@
                 }
               }
               @case ('file') {
-                @if (isBlobLoading()) {
+                @if (fileBlob.isLoading()) {
                   <div class="text-center py-5">
                     <div class="spinner-border text-primary" role="status"></div>
                   </div>
-                } @else if (previewError()) {
+                } @else if (fileBlob.hasError()) {
                   <div class="text-center text-muted py-5">
                     <i class="fas fa-exclamation-triangle fa-3x mb-3 d-block"></i>
                     <p class="mb-0">{{ '::Document:PreviewUnavailable' | abpLocalization }}</p>
                   </div>
-                } @else if (isImage() && blobUrl()) {
+                } @else if (isImage() && fileBlob.blobUrl()) {
                   <div class="text-center">
                     <img
-                      [src]="blobUrl()"
+                      [src]="fileBlob.blobUrl()"
                       (error)="onPreviewError()"
                       alt="{{ document()!.fileOrigin?.originalFileName }}"
                       class="img-fluid preview-image"
                       style="max-height: 70vh; object-fit: contain;"
                     />
                   </div>
-                } @else if (isPdf() && safeBlobUrl()) {
+                } @else if (isPdf() && fileBlob.safeResourceUrl()) {
                   <iframe
-                    [src]="safeBlobUrl()"
+                    [src]="fileBlob.safeResourceUrl()"
                     [title]="document()!.fileOrigin?.originalFileName"
                     class="w-100 border rounded"
                     style="min-height: 70vh;"
@@ -164,9 +164,9 @@
             <span class="text-truncate">{{ document()!.fileOrigin?.originalFileName }}</span>
             <span>·</span>
             <span class="flex-shrink-0">{{ document()!.fileOrigin?.contentType }}</span>
-            <button type="button" (click)="downloadFile()" [disabled]="isBlobLoading()"
+            <button type="button" (click)="downloadFile()" [disabled]="fileBlob.isLoading()"
                     class="btn btn-sm btn-link p-0 ms-auto flex-shrink-0">
-              @if (isBlobLoading()) {
+              @if (fileBlob.isLoading()) {
                 <span class="spinner-border spinner-border-sm me-1" role="status"></span>
               } @else {
                 <i class="fas fa-download me-1"></i>

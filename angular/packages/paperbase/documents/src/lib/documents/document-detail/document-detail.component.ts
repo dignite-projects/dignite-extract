@@ -3,7 +3,7 @@ import {
   Component,
   DestroyRef,
   OnInit,
-  OnDestroy,
+  effect,
   inject,
   signal,
   computed,
@@ -13,7 +13,6 @@ import { forkJoin, of, switchMap, tap } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { marked } from 'marked';
 import { LocalizationPipe, LocalizationService, PermissionService } from '@abp/ng.core';
 import { DynamicFormComponent, type FormFieldConfig } from '@abp/ng.components/dynamic-form';
@@ -36,6 +35,8 @@ import {
   PipelineRunStatus,
 } from '@dignite/paperbase';
 import { formatExtractedFieldValue } from '../../shared/format-field-value';
+import { DocumentFileBlobService } from '../../shared/document-file-blob.service';
+import { isImageContentType, isPdfContentType } from '../../shared/content-type';
 
 interface PipelineRow {
   pipelineCode: string;
@@ -65,9 +66,10 @@ const KNOWN_PIPELINE_CODES = [
   templateUrl: './document-detail.component.html',
   styleUrls: ['./document-detail.component.scss'],
   imports: [CommonModule, FormsModule, DynamicFormComponent, LocalizationPipe],
+  providers: [DocumentFileBlobService],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class DocumentDetailComponent implements OnInit, OnDestroy {
+export class DocumentDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly documentService = inject(DocumentService);
@@ -79,8 +81,9 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
   private readonly confirmation = inject(ConfirmationService);
   private readonly permissionService = inject(PermissionService);
   private readonly localization = inject(LocalizationService);
-  private readonly sanitizer = inject(DomSanitizer);
   private readonly destroyRef = inject(DestroyRef);
+  // 原文件 blob 加载 / sanitize / revoke 生命周期（#277），与 file-preview 页共用同一 service。
+  protected readonly fileBlob = inject(DocumentFileBlobService);
 
   readonly canDelete = this.permissionService.getGrantedPolicy(
     PAPERBASE_PERMISSIONS.Documents.Delete,
@@ -99,14 +102,8 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
   isLoading = signal(true);
   // 左栏 3-Tab（#274）：默认 Markdown 预览；切到 'file' 才触发原文件 blob 懒加载。
   activeTab = signal<'preview' | 'source' | 'file'>('preview');
-  isBlobLoading = signal(false);
-  // 原文件预览失败（blob 下载失败 或 <img> 渲染失败）的统一信号；进 file Tab / reload 时复位。
-  previewError = signal(false);
   retryingPipeline = signal<string | null>(null);
   isRerecognizing = signal(false);
-  blobUrl = signal<string | null>(null);
-  // PDF iframe 的 resource URL 必须经 DomSanitizer 放行（自造同源 blob:，安全）。
-  safeBlobUrl = signal<SafeResourceUrl | null>(null);
   isEditingFields = signal(false);
   isSavingFields = signal(false);
   fieldDefinitions = signal<FieldDefinitionDto[]>([]);
@@ -210,11 +207,11 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
   );
 
   isImage = computed(() =>
-    this.document()?.fileOrigin?.contentType?.startsWith('image/') ?? false
+    isImageContentType(this.document()?.fileOrigin?.contentType)
   );
 
   isPdf = computed(() =>
-    this.document()?.fileOrigin?.contentType === 'application/pdf'
+    isPdfContentType(this.document()?.fileOrigin?.contentType)
   );
 
   // Markdown 源文本中间 computed（#274 review）：document() 变更但 markdown 未变时（改字段 /
@@ -269,8 +266,25 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
   );
 
   private documentId!: string;
-  // 「下载文件」点击时 blob 尚未加载 → 置位，待 loadBlob 成功后触发一次下载（见 downloadFile）。
+  // 「下载文件」点击时 blob 尚未加载 → 置位，待 blob 就绪后触发一次下载（见 downloadFile + 构造器 effect）。
   private pendingDownload = false;
+
+  constructor() {
+    // 挂起的下载收尾：blob 到位 → 触发一次下载；blob 失败 → 提示。pendingDownload 是普通布尔，
+    // effect 仅在 fileBlob 信号变化时重跑（下载点击会先改信号触发加载），逻辑天然只命中一次。
+    effect(() => {
+      const url = this.fileBlob.blobUrl();
+      const failed = this.fileBlob.hasError();
+      if (!this.pendingDownload) return;
+      if (url) {
+        this.pendingDownload = false;
+        this.fileBlob.download(this.downloadFileName());
+      } else if (failed) {
+        this.pendingDownload = false;
+        this.toaster.error('::Document:DownloadFailed', '::Error');
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.documentId = this.route.snapshot.paramMap.get('id')!;
@@ -381,41 +395,12 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
       });
   }
 
-  // 原文件 blob 懒加载（#274）：「原文件」Tab 激活或点击「下载文件」时调用。已加载 / 加载中则跳过，
-  // blob 缓存至组件销毁（ngOnDestroy revoke）；预览与下载共用同一份缓存，不重复拉取。
-  private loadBlob(): void {
-    if (this.blobUrl() || this.isBlobLoading()) return;
-    this.isBlobLoading.set(true);
-
-    this.documentService.getBlob(this.documentId)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: blob => {
-          const url = URL.createObjectURL(blob);
-          this.blobUrl.set(url);
-          // PDF 走 iframe，resource URL 必须经 DomSanitizer 放行（自造同源 blob:，安全）。
-          if (this.isPdf()) {
-            this.safeBlobUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(url));
-          }
-          this.isBlobLoading.set(false);
-          this.flushPendingDownload(url);
-        },
-        error: () => {
-          this.isBlobLoading.set(false);
-          this.previewError.set(true);
-          if (this.pendingDownload) {
-            this.pendingDownload = false;
-            this.toaster.error('::Document:DownloadFailed', '::Error');
-          }
-        },
-      });
-  }
-
   // 进入「原文件」Tab 的统一入口（#274 review）：先复位上次的预览错误（给 <img> 重建一次重试、
-  // 让上次下载失败可重拉），再 loadBlob（自身防重复请求）。修复 imageError 卡死 + Refresh 无效。
+  // 让上次下载失败可重拉），再确保 blob 就绪（service 自身防重复请求 + 组件销毁时 revoke）。
+  // 修复 imageError 卡死 + Refresh 无效。
   private ensureFilePreview(): void {
-    this.previewError.set(false);
-    this.loadBlob();
+    this.fileBlob.resetError();
+    this.fileBlob.ensureLoaded(this.documentId);
   }
 
   // Tab 切换（#274）：切到「原文件」时确保原文件预览就绪。
@@ -428,42 +413,23 @@ export class DocumentDetailComponent implements OnInit, OnDestroy {
 
   // 「下载文件」（footer）：直接触发浏览器下载原文件，免去先开预览页再下载。
   // blob 已缓存（看过「原文件」Tab 或此前下载过）则秒触发；未缓存则置 pendingDownload 复用
-  // loadBlob 拉取（共享 isBlobLoading 防重复请求），blob 到位后由 flushPendingDownload 触发。
+  // service 拉取（自身防重复请求），blob 到位 / 失败由构造器 effect 收尾。
   downloadFile(): void {
-    const cached = this.blobUrl();
-    if (cached) {
-      this.triggerDownload(cached);
+    if (this.fileBlob.blobUrl()) {
+      this.fileBlob.download(this.downloadFileName());
       return;
     }
     this.pendingDownload = true;
-    this.loadBlob();
+    this.fileBlob.ensureLoaded(this.documentId);
   }
 
-  // loadBlob 成功后若有挂起的下载请求，触发一次下载。
-  private flushPendingDownload(url: string): void {
-    if (!this.pendingDownload) return;
-    this.pendingDownload = false;
-    this.triggerDownload(url);
-  }
-
-  // 用隐藏 <a download> 触发浏览器下载。url 是组件持有的 blob: 缓存（ngOnDestroy 统一回收），
-  // 这里不 revoke——它仍可能用于「原文件」Tab 预览的同一 URL。
-  private triggerDownload(url: string): void {
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download =
-      this.document()?.fileOrigin?.originalFileName || this.document()?.title || 'document';
-    anchor.click();
-  }
-
-  ngOnDestroy(): void {
-    const url = this.blobUrl();
-    if (url) URL.revokeObjectURL(url);
+  private downloadFileName(): string {
+    return this.document()?.fileOrigin?.originalFileName || this.document()?.title || 'document';
   }
 
   // <img> 渲染失败（blob 已下载但解码失败）——并入统一预览错误信号。
   onPreviewError(): void {
-    this.previewError.set(true);
+    this.fileBlob.markError();
   }
 
   goBack(): void {
