@@ -436,6 +436,7 @@ FodyWeavers.xsd
 .claude/settings.local.json
 .claude/worktrees/
 .obsidian/
+codex-tmp/
 
 # Code coverage and analysis
 .sonarqube/
