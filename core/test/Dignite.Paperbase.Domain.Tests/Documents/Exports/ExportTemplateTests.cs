@@ -7,7 +7,8 @@ namespace Dignite.Paperbase.Documents.Exports;
 
 /// <summary>
 /// ExportTemplate / ExportColumn 实体层不变量测试（#207 收敛为 ExtractedField-only）。重点：
-/// 列引用 <c>FieldDefinitionId</c>、列名控制字符过滤、列数与重名约束、按 Order 排序、DocumentTypeId 必填。
+/// 列引用 <c>FieldDefinitionId</c>、列数与重复字段约束、按 Order 排序、DocumentTypeId 必填。
+/// 列标题由导出引擎在运行时取 <c>FieldDefinition.DisplayName</c>，不在模板列上存储。
 /// 系统字段（LifecycleStatus / ReviewStatus / Title）由导出引擎固定输出（不走列配置），故无系统列白名单测试。
 /// </summary>
 public class ExportTemplateTests
@@ -20,31 +21,9 @@ public class ExportTemplateTests
     public void Should_Accept_Extracted_Column()
     {
         var fieldId = Guid.NewGuid();
-        var col = new ExportColumn(fieldId, "金额", 3);
+        var col = new ExportColumn(fieldId, 3);
         col.FieldDefinitionId.ShouldBe(fieldId);
-        col.ColumnName.ShouldBe("金额");
         col.Order.ShouldBe(3);
-    }
-
-    [Theory]
-    [InlineData("Col\nName")]
-    [InlineData("Tab\tHere")]
-    [InlineData("Null\0byte")]
-    public void Should_Reject_Column_Name_With_Control_Chars(string columnName)
-    {
-        Should.Throw<BusinessException>(() =>
-                new ExportColumn(Guid.NewGuid(), columnName, 0))
-            .Code.ShouldBe(PaperbaseErrorCodes.Export.InvalidColumnName);
-    }
-
-    [Theory]
-    [InlineData("合同金额")]      // 中文 OK
-    [InlineData("契約金額")]      // 日文 OK
-    [InlineData("Amount (CNY)")]  // 括号空格 OK
-    public void Should_Accept_Unicode_Column_Name(string columnName)
-    {
-        var col = new ExportColumn(Guid.NewGuid(), columnName, 0);
-        col.ColumnName.ShouldBe(columnName);
     }
 
     // --- ExportTemplate ---
@@ -55,8 +34,8 @@ public class ExportTemplateTests
         var first = Guid.NewGuid();
         var second = Guid.NewGuid();
         var template = CreateTemplate(
-            new ExportColumn(second, "标题", 5),
-            new ExportColumn(first, "金额", 1));
+            new ExportColumn(second, 5),
+            new ExportColumn(first, 1));
 
         template.Columns.Count.ShouldBe(2);
         template.Columns[0].FieldDefinitionId.ShouldBe(first);
@@ -71,12 +50,13 @@ public class ExportTemplateTests
     }
 
     [Fact]
-    public void Should_Reject_Template_With_Duplicate_Column_Names()
+    public void Should_Reject_Template_With_Duplicate_Fields()
     {
+        var duplicateFieldId = Guid.NewGuid();
         Should.Throw<BusinessException>(() => CreateTemplate(
-                new ExportColumn(Guid.NewGuid(), "重复", 0),
-                new ExportColumn(Guid.NewGuid(), "重复", 1)))
-            .Code.ShouldBe(PaperbaseErrorCodes.Export.TemplateDuplicateColumnName);
+                new ExportColumn(duplicateFieldId, 0),
+                new ExportColumn(duplicateFieldId, 1)))
+            .Code.ShouldBe(PaperbaseErrorCodes.Export.TemplateDuplicateField);
     }
 
     [Theory]
@@ -86,7 +66,7 @@ public class ExportTemplateTests
     {
         Should.Throw<BusinessException>(() => new ExportTemplate(
                 Guid.NewGuid(), tenantId: null, name, ExportFormat.Csv, TypeId,
-                new[] { new ExportColumn(Guid.NewGuid(), "T", 0) }))
+                new[] { new ExportColumn(Guid.NewGuid(), 0) }))
             .Code.ShouldBe(PaperbaseErrorCodes.Export.InvalidTemplateName);
     }
 
@@ -95,10 +75,10 @@ public class ExportTemplateTests
     {
         var newTypeId = Guid.NewGuid();
         var newFieldId = Guid.NewGuid();
-        var template = CreateTemplate(new ExportColumn(Guid.NewGuid(), "标题", 0));
+        var template = CreateTemplate(new ExportColumn(Guid.NewGuid(), 0));
 
         template.Update("新名", ExportFormat.Xlsx, newTypeId,
-            new[] { new ExportColumn(newFieldId, "金额", 0) });
+            new[] { new ExportColumn(newFieldId, 0) });
 
         template.Name.ShouldBe("新名");
         template.Format.ShouldBe(ExportFormat.Xlsx);

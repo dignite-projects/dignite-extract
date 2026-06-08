@@ -27,7 +27,6 @@ import {
 
 // Mirrors ExportTemplateConsts (Domain.Shared).
 const MAX_NAME_LENGTH = 128;
-const MAX_COLUMN_NAME_LENGTH = 128;
 
 @Component({
   selector: 'lib-export-template-list',
@@ -123,15 +122,14 @@ export class ExportTemplateListComponent implements OnInit {
     this.loadFieldDefinitions(template.documentTypeId);
     [...(template.columns ?? [])]
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      .forEach(c => this.addColumn(c.fieldDefinitionId, c.columnName));
+      .forEach(c => this.addColumn(c.fieldDefinitionId));
     this.editing.set(template);
   }
 
-  addColumn(fieldDefinitionId = '', columnName = ''): void {
+  addColumn(fieldDefinitionId = ''): void {
     this.columns.push(
       this.fb.nonNullable.group({
         fieldDefinitionId: [fieldDefinitionId, [Validators.required]],
-        columnName: [columnName, [Validators.required, Validators.maxLength(MAX_COLUMN_NAME_LENGTH)]],
       }),
     );
   }
@@ -177,11 +175,8 @@ export class ExportTemplateListComponent implements OnInit {
     const raw = this.form.getRawValue();
     // Order = array position; the editor's row order is the source of truth.
     const columns: ExportColumnInput[] = this.columns.controls.map((ctrl, i) => {
-      const v = ctrl.getRawValue() as {
-        fieldDefinitionId: string;
-        columnName: string;
-      };
-      return { fieldDefinitionId: v.fieldDefinitionId, columnName: v.columnName, order: i };
+      const v = ctrl.getRawValue() as { fieldDefinitionId: string };
+      return { fieldDefinitionId: v.fieldDefinitionId, order: i };
     });
 
     if (mode === 'create') {

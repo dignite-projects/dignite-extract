@@ -11,13 +11,11 @@ export interface CreateExportTemplateDto {
 
 export interface ExportColumnDto {
   fieldDefinitionId?: string;
-  columnName?: string;
   order?: number;
 }
 
 export interface ExportColumnInput {
   fieldDefinitionId: string;
-  columnName: string;
   order?: number;
 }
 

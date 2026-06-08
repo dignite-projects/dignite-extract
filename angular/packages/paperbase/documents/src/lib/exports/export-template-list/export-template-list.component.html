@@ -166,14 +166,9 @@
             }
 
             <div formArrayName="columns">
-              <div class="row g-2 mb-1 text-muted small d-none d-md-flex">
-                <div class="col-md-5">{{ '::ExportTemplate:ColumnKey' | abpLocalization }}</div>
-                <div class="col-md-6">{{ '::ExportTemplate:ColumnName' | abpLocalization }}</div>
-                <div class="col-md-1"></div>
-              </div>
               @for (col of columns.controls; track $index) {
                 <div class="row g-2 mb-2 align-items-center" [formGroupName]="$index">
-                  <div class="col-md-5">
+                  <div class="col-11">
                     <select class="form-select form-select-sm" formControlName="fieldDefinitionId">
                       <option value="" disabled>
                         {{ '::ExportTemplate:ColumnKey' | abpLocalization }}
@@ -183,15 +178,7 @@
                       }
                     </select>
                   </div>
-                  <div class="col-md-6">
-                    <input
-                      type="text"
-                      class="form-control form-control-sm"
-                      formControlName="columnName"
-                      placeholder="{{ '::ExportTemplate:ColumnName' | abpLocalization }}"
-                    />
-                  </div>
-                  <div class="col-md-1 text-end">
+                  <div class="col-1 text-end">
                     <button
                       type="button"
                       class="btn btn-sm btn-outline-danger"

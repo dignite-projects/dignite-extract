@@ -147,7 +147,7 @@ public partial class FieldDefinitionToDtoMapper : MapperBase<FieldDefinition, Fi
 
 /// <summary>
 /// ExportTemplate -> ExportTemplateDto（#207）。所有标量（含不可变 <see cref="ExportTemplate.DocumentTypeId"/>）
-/// 及列集合（FieldDefinitionId / ColumnName / Order）由 Mapperly 直接映射，无需查找投影。
+/// 及列集合（FieldDefinitionId / Order）由 Mapperly 直接映射，无需查找投影。
 /// </summary>
 [Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
 public partial class ExportTemplateToDtoMapper : MapperBase<ExportTemplate, ExportTemplateDto>

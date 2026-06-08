@@ -162,6 +162,7 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
         // 供 FieldValueToString 渲染 typed 列。穿透 soft-delete（列可能引用已归档字段）；有界（= 列数）。
         var columnFieldIds = template.Columns.Select(c => c.FieldDefinitionId).Distinct().ToList();
         var fieldDataTypes = new Dictionary<Guid, FieldDataType>();
+        var fieldDisplayNames = new Dictionary<Guid, string>();
         if (columnFieldIds.Count > 0)
         {
             using (DataFilter.Disable<ISoftDelete>())
@@ -169,13 +170,17 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
                 foreach (var f in await _fieldDefinitionRepository.GetListAsync(f => columnFieldIds.Contains(f.Id)))
                 {
                     fieldDataTypes[f.Id] = f.DataType;
+                    fieldDisplayNames[f.Id] = f.DisplayName;
                 }
             }
         }
 
-        // 固定系统字段列在前，模板配置的抽取字段列在后（#207）。
+        // 固定系统字段列在前，模板配置的抽取字段列在后（#207）。列标题取字段的 DisplayName。
         var headers = new List<string>(SystemFieldHeaders);
-        headers.AddRange(template.Columns.Select(c => c.ColumnName));
+        headers.AddRange(template.Columns.Select(c =>
+            fieldDisplayNames.TryGetValue(c.FieldDefinitionId, out var displayName)
+                ? displayName
+                : c.FieldDefinitionId.ToString("N")));
 
         var systemCount = SystemFieldHeaders.Count;
         var dataRows = rows
@@ -253,7 +258,7 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
                 throw new EntityNotFoundException(typeof(FieldDefinition), c.FieldDefinitionId);
             }
 
-            result.Add(new ExportColumn(c.FieldDefinitionId, c.ColumnName, c.Order));
+            result.Add(new ExportColumn(c.FieldDefinitionId, c.Order));
         }
 
         return result;
