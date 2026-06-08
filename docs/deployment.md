@@ -106,6 +106,29 @@ cd host/etc/docker
 
 For local development without the full image build, see [local-development.md](local-development.md) — it runs the API via `dotnet run` against a local SQL Server (LocalDB or container) and only spins up the PaddleOCR / observability sidecars via `host/docker-compose.yml`.
 
+### Serving the Angular UI under a sub-path
+
+By default the Angular UI is built for the domain root (`<base href="/">`) and the `paperbase-web` container serves it at `/`. To host it under a sub-path (e.g. `https://host.example.com/admin`) the **publisher picks the path at build time** — nothing is hard-coded in the repo:
+
+```bash
+cd angular
+npx nx build host --configuration production --base-href=/admin/
+```
+
+The container reads `<base href>` from the built `index.html` on startup (`apps/host/docker-entrypoint.d/40-spa-base-path.sh`) and serves the SPA at exactly that path — no separate nginx knob, no drift. The reverse proxy in front must forward `/admin/*` to the container **as-is (do not strip the prefix)**.
+
+The `<base href>` only fixes static-asset loading. The OAuth callback URLs must carry the sub-path too, or login breaks after the MIME error is gone:
+
+| Where | Key | Value for `/admin` |
+|-------|-----|--------------------|
+| API config | `App:ClientUrl` | `https://host.example.com/admin` |
+| API config | `App:RedirectAllowedUrls` | include `https://host.example.com/admin` |
+| API config | `App:CorsOrigins` | include `https://host.example.com` (origin only — no path) |
+| API config | `OpenIddict:Applications:Paperbase_App:RootUrl` | `https://host.example.com/admin` |
+| Mounted `dynamic-env.json` | `oAuthConfig.redirectUri` + `application.baseUrl` | `https://host.example.com/admin` (no trailing slash) |
+
+Re-run the DB seed / DbMigrator after changing `RootUrl` so the OpenIddict client's stored redirect URIs update (`OpenIddictDataSeedContributor` uses `CreateOrUpdateApplicationAsync`).
+
 ## Migrations
 
 EF Core migrations live under `host/src/Migrations/`. Apply them with:

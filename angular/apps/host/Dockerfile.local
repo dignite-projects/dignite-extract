@@ -2,5 +2,9 @@ FROM nginx:alpine
 
 # build context 为 angular/（见 etc/docker/docker-compose.yml 的 context: ../../angular）。
 # 前置：宿主机先 `nx build host`（产物落在 dist/host/browser/，dynamic-env.json 已由 assets 打入）。
+# 部署路径由发布者构建时决定：默认根；子路径用 `nx build host --base-href=/foo/`。
+# 容器启动时 40-spa-base-path.sh 从 index.html 的 <base href> 自动推导 nginx 服务路径（零写死）。
 COPY dist/host/browser /usr/share/nginx/html
-COPY apps/host/nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/host/docker-entrypoint.d/40-spa-base-path.sh /docker-entrypoint.d/40-spa-base-path.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.d/40-spa-base-path.sh \
+ && chmod +x /docker-entrypoint.d/40-spa-base-path.sh

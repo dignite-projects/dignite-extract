@@ -6,8 +6,8 @@
     "logoUrl": ""
   },
   "oAuthConfig": {
-    "issuer": "https://localhost:44348",
-    "redirectUri": "https://localhost:44348",
+    "issuer": "https://localhost:44348/",
+    "redirectUri": "http://localhost:4200",
     "clientId": "Paperbase_App",
     "responseType": "code",
     "scope": "offline_access openid profile email phone Paperbase"

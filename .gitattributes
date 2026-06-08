@@ -1,2 +1,5 @@
 # Auto detect text files and normalize line endings to LF
 * text=auto
+
+# Shell scripts must stay LF on every platform (executed by /bin/sh in Linux containers).
+*.sh text eol=lf
