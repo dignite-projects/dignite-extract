@@ -23,6 +23,9 @@ export interface ExportDocumentsInput {
   templateId?: string;
   documentIds?: string[] | null;
   lifecycleStatus?: DocumentLifecycleStatus | null;
+  cabinetId?: string | null;
+  creationTimeMin?: string | null;
+  creationTimeMax?: string | null;
 }
 
 export interface ExportTemplateDto extends EntityDto<string> {

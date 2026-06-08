@@ -107,6 +107,64 @@
   }
 </div>
 
+<!-- Export filter modal -->
+@if (filteringTemplate(); as tmpl) {
+  <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);" (click)="closeFilterModal()">
+    <div class="modal-dialog modal-dialog-centered" (click)="$event.stopPropagation()">
+      <div class="modal-content">
+        <form [formGroup]="filterForm" (ngSubmit)="startExport()">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-filter me-2"></i>
+              {{ '::ExportTemplate:FilterAndExport' | abpLocalization }}
+            </h5>
+            <button type="button" class="btn-close" (click)="closeFilterModal()"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">{{ '::Document:Status' | abpLocalization }}</label>
+              <select class="form-select" formControlName="lifecycleStatus">
+                <option [ngValue]="null">{{ '::Document:Filter:AllStatuses' | abpLocalization }}</option>
+                @for (opt of lifecycleStatusOptions; track opt.value) {
+                  <option [ngValue]="opt.value">{{ '::Document:Status:' + opt.key | abpLocalization }}</option>
+                }
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">{{ '::Document:Cabinet' | abpLocalization }}</label>
+              <select class="form-select" formControlName="cabinetId">
+                <option [ngValue]="null">{{ '::Document:Filter:AllCabinets' | abpLocalization }}</option>
+                @for (c of cabinets(); track c.id) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="form-label">{{ '::ExportTemplate:Filter:DateFrom' | abpLocalization }}</label>
+                <input type="date" class="form-control" formControlName="creationTimeMin" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">{{ '::ExportTemplate:Filter:DateTo' | abpLocalization }}</label>
+                <input type="date" class="form-control" formControlName="creationTimeMax" />
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeFilterModal()">
+              {{ '::Cancel' | abpLocalization }}
+            </button>
+            <button type="submit" class="btn btn-success">
+              <i class="fas fa-download me-1"></i>
+              {{ '::ExportTemplate:Export' | abpLocalization }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+}
+
 <!-- Create / Edit modal -->
 @if (editing(); as mode) {
   <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);" (click)="closeModal()">

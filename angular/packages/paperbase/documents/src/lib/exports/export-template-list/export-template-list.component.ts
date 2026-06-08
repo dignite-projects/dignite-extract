@@ -12,7 +12,10 @@ import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } fr
 import { LocalizationPipe, PermissionService } from '@abp/ng.core';
 import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
 import {
+  CabinetDto,
+  CabinetService,
   CreateExportTemplateDto,
+  DocumentLifecycleStatus,
   DocumentTypeDto,
   DocumentTypeService,
   ExportColumnInput,
@@ -22,6 +25,7 @@ import {
   FieldDefinitionDto,
   FieldDefinitionService,
   PAPERBASE_PERMISSIONS,
+  documentLifecycleStatusOptions,
   exportFormatOptions,
 } from '@dignite/paperbase';
 
@@ -39,6 +43,7 @@ export class ExportTemplateListComponent implements OnInit {
   private readonly service = inject(ExportTemplateService);
   private readonly documentTypeService = inject(DocumentTypeService);
   private readonly fieldDefinitionService = inject(FieldDefinitionService);
+  private readonly cabinetService = inject(CabinetService);
   private readonly fb = inject(FormBuilder);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toaster = inject(ToasterService);
@@ -54,14 +59,26 @@ export class ExportTemplateListComponent implements OnInit {
 
   readonly formatOptions = exportFormatOptions;
   readonly ExportFormat = ExportFormat;
+  readonly DocumentLifecycleStatus = DocumentLifecycleStatus;
+  readonly lifecycleStatusOptions = documentLifecycleStatusOptions;
 
   templates = signal<ExportTemplateDto[]>([]);
   documentTypes = signal<DocumentTypeDto[]>([]);
   fieldDefinitions = signal<FieldDefinitionDto[]>([]);
+  cabinets = signal<CabinetDto[]>([]);
   isLoading = signal(true);
   editing = signal<ExportTemplateDto | 'create' | null>(null);
   isSubmitting = signal(false);
   exportingId = signal<string | null>(null);
+  /** 正在配置筛选条件的导出模板；非 null 时显示筛选 modal。 */
+  filteringTemplate = signal<ExportTemplateDto | null>(null);
+
+  readonly filterForm = this.fb.nonNullable.group({
+    lifecycleStatus: [null as DocumentLifecycleStatus | null],
+    cabinetId: [null as string | null],
+    creationTimeMin: [null as string | null],
+    creationTimeMax: [null as string | null],
+  });
 
   readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(MAX_NAME_LENGTH)]],
@@ -77,6 +94,7 @@ export class ExportTemplateListComponent implements OnInit {
   ngOnInit(): void {
     this.load();
     this.loadDocumentTypes();
+    this.loadCabinets();
   }
 
   refresh(): void {
@@ -102,6 +120,13 @@ export class ExportTemplateListComponent implements OnInit {
       .getVisible()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: list => this.documentTypes.set(list) });
+  }
+
+  private loadCabinets(): void {
+    this.cabinetService
+      .getList()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: list => this.cabinets.set(list) });
   }
 
   openCreate(): void {
@@ -236,11 +261,30 @@ export class ExportTemplateListComponent implements OnInit {
   }
 
   exportTemplate(template: ExportTemplateDto): void {
+    this.filterForm.reset({ lifecycleStatus: null, cabinetId: null, creationTimeMin: null, creationTimeMax: null });
+    this.filteringTemplate.set(template);
+  }
+
+  closeFilterModal(): void {
+    this.filteringTemplate.set(null);
+  }
+
+  startExport(): void {
+    const template = this.filteringTemplate();
+    if (!template) return;
+
+    const f = this.filterForm.getRawValue();
     this.exportingId.set(template.id!);
-    // v1: export all documents the template applies to (backend enforces the per-export cap).
-    // Document-checkbox / filter selection can be layered on later from the document list.
+    this.filteringTemplate.set(null);
+
     this.service
-      .export({ templateId: template.id! })
+      .export({
+        templateId: template.id!,
+        lifecycleStatus: f.lifecycleStatus ?? undefined,
+        cabinetId: f.cabinetId ?? undefined,
+        creationTimeMin: f.creationTimeMin ?? undefined,
+        creationTimeMax: f.creationTimeMax ?? undefined,
+      })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: blob => {

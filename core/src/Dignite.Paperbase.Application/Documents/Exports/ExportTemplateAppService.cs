@@ -115,11 +115,20 @@ public class ExportTemplateAppService : PaperbaseAppService, IExportTemplateAppS
 
         if (input.DocumentIds is { Count: > 0 } ids)
         {
+            // 勾选导出：按指定 ID 集合，忽略所有筛选条件。
             query = query.Where(d => ids.Contains(d.Id));
         }
-        else if (input.LifecycleStatus.HasValue)
+        else
         {
-            query = query.Where(d => d.LifecycleStatus == input.LifecycleStatus.Value);
+            if (input.LifecycleStatus.HasValue)
+                query = query.Where(d => d.LifecycleStatus == input.LifecycleStatus.Value);
+            if (input.CabinetId.HasValue)
+                query = query.Where(d => d.CabinetId == input.CabinetId.Value);
+            if (input.CreationTimeMin.HasValue)
+                query = query.Where(d => d.CreationTime >= input.CreationTimeMin.Value.Date);
+            // 时间上界包含整个 Max 日期（< Max+1天），与日期选择器的直觉一致。
+            if (input.CreationTimeMax.HasValue)
+                query = query.Where(d => d.CreationTime < input.CreationTimeMax.Value.Date.AddDays(1));
         }
 
         // 单次 fetch (Max + 1) 投影到 ExportProjection（非实体类型 → 不 SELECT Markdown、不进 tracker）。
