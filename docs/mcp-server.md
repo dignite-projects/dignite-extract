@@ -150,6 +150,30 @@ Cursor reads remote HTTP MCP servers directly. In `.cursor/mcp.json` (project) o
 }
 ```
 
+## Connect Claude Code
+
+Claude Code (CLI) reads remote HTTP MCP servers directly and uses Guided OAuth — an interactive browser login with automatic token refresh, so no manual bearer token. Against a host with a real CA-signed certificate only steps 3–4 are needed; steps 1–2 cover local testing against the dev certificate.
+
+1. **Register Claude Code's callback.** Its OAuth callback path is `http://localhost:<port>/callback`, which the seeded defaults don't include. Add `http://localhost/callback` to the `Paperbase_Mcp` redirect URIs (the **Registered callbacks** section above shows the override — the `Native` client type relaxes the port, so register it without one), then re-seed with `--migrate-database` and restart the host.
+
+2. **Trust the dev certificate (local testing only).** Claude Code's bundled Node honours neither the system certificate store nor `NODE_EXTRA_CA_CERTS`, so the **Local TLS** note above (which targets system Node) does not apply here. Instead add an `env` block to `.claude/settings.local.json` — Claude Code injects it into every internal process, including the OAuth sub-process:
+
+   ```json
+   {
+     "env": { "NODE_TLS_REJECT_UNAUTHORIZED": "0" }
+   }
+   ```
+
+   This disables TLS verification for that process — dev machines only. A host on a real CA-signed certificate needs none of it.
+
+3. **Add the server** (the preset public PKCE client — no secret, no fixed callback port):
+
+   ```powershell
+   claude mcp add --transport http paperbase https://localhost:44348/mcp --client-id Paperbase_Mcp
+   ```
+
+4. **Log in.** Restart Claude Code, run `/mcp`, select **paperbase** → **Authenticate**, and sign in through the browser. Tokens are stored and refreshed automatically; the `search_paperbase_documents` tool and `paperbase://documents/{id}` resources become available.
+
 ## Typical flow
 
 1. Client calls `search_paperbase_documents` with a required `documentTypeCode` (and optionally `lifecycleStatus`, plus zero or more `fieldFilters` — each names a field with a `Value` for equality or a `Min`/`Max` numeric/date range; multiple filters are AND-ed). If the user hasn't named a document type, the client asks first.

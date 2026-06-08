@@ -139,19 +139,22 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
         var mcpClientId = configurationSection["Paperbase_Mcp:ClientId"];
         if (!mcpClientId.IsNullOrWhiteSpace())
         {
-            // Operators may override the entire callback set via
-            // OpenIddict:Applications:Paperbase_Mcp:RedirectUris (replace semantics — list every URI you
-            // want, including any built-ins you still need). When unset we seed the researched defaults
-            // below. Loopback entries are registered WITHOUT a port and rely on the Native-type port
-            // relaxation to match the client's ephemeral port; 127.0.0.1 and localhost are DISTINCT host
-            // strings to OpenIddict, so both are listed. Paths are matched exactly. Verified against each
-            // client's source (#281):
+            // REDIRECT URIS are split by environment to keep the production surface minimal:
+            //   • Production baseline = the seeded default below: ONLY the claude.ai hosted callback,
+            //     the one redirect_uri a deployed host actually serves.
+            //   • Dev-only loopback callbacks are NOT seeded (dead attack surface on a production client).
+            //     Each developer lists them in appsettings.Development.json (gitignored) under
+            //     OpenIddict:Applications:Paperbase_Mcp:RedirectUris.
+            // That override REPLACES the default, and ASP.NET Core merges config arrays by index (not as a
+            // union), so the dev list must be COMPLETE — every loopback below PLUS the claude.ai entry.
+            // Researched dev set (verified against each client's source, #281; loopback ports are relaxed
+            // per the Native note above, and 127.0.0.1 ≠ localhost to OpenIddict, so both are listed):
             //   http://localhost/oauth/callback        → mcp-remote (default host) + MCP Inspector auto flow (any port, incl. 6274)
             //   http://127.0.0.1/oauth/callback         → mcp-remote --host 127.0.0.1
             //   http://localhost/oauth/callback/debug   → MCP Inspector manual/debug flow
+            //   http://localhost/callback               → Claude Code CLI
             //   https://claude.ai/api/mcp/auth_callback → Claude.ai / Claude Desktop / mobile (fixed hosted callback)
-            // Cursor (custom cursor:// scheme) and Claude Code CLI (/callback path) are NOT seeded by
-            // default — add them via the config override if needed (see docs/mcp-server.md).
+            // Cursor (custom cursor:// scheme) still needs adding if used. See docs/mcp-server.md.
             var mcpRedirectUris = configurationSection
                 .GetSection("Paperbase_Mcp:RedirectUris")
                 .Get<List<string>>();
@@ -160,9 +163,6 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
             {
                 mcpRedirectUris = new List<string>
                 {
-                    "http://localhost/oauth/callback",
-                    "http://127.0.0.1/oauth/callback",
-                    "http://localhost/oauth/callback/debug",
                     "https://claude.ai/api/mcp/auth_callback"
                 };
             }
