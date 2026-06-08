@@ -99,7 +99,7 @@
   }
 
   <!-- Document list -->
-  @if (documents().totalCount > 0 && tableReady()) {
+  @if (documents().totalCount > 0) {
     <div class="card shadow-sm document-list-table">
       <div class="card-body p-0">
         <ng-template #actionsTemplate let-doc>
@@ -126,23 +126,25 @@
           }
         </ng-template>
 
-        @if (hasDocumentActions) {
-          <abp-extensible-table
-            [data]="documents().items"
-            [recordsTotal]="documents().totalCount"
-            [list]="list"
-            [actionsTemplate]="actionsTemplate"
-            actionsText="AbpUi::Actions"
-            [actionsColumnWidth]="150"
-            (tableActivate)="onTableActivate($event)"
-          />
-        } @else {
-          <abp-extensible-table
-            [data]="documents().items"
-            [recordsTotal]="documents().totalCount"
-            [list]="list"
-            (tableActivate)="onTableActivate($event)"
-          />
+        @for (key of [tableKey()]; track key) {
+          @if (hasDocumentActions) {
+            <abp-extensible-table
+              [data]="documents().items"
+              [recordsTotal]="documents().totalCount"
+              [list]="list"
+              [actionsTemplate]="actionsTemplate"
+              actionsText="AbpUi::Actions"
+              [actionsColumnWidth]="150"
+              (tableActivate)="onTableActivate($event)"
+            />
+          } @else {
+            <abp-extensible-table
+              [data]="documents().items"
+              [recordsTotal]="documents().totalCount"
+              [list]="list"
+              (tableActivate)="onTableActivate($event)"
+            />
+          }
         }
       </div>
     </div>

@@ -104,7 +104,10 @@ export class DocumentListComponent implements OnInit {
 
   documents = signal<ClientPagedResult<DocumentListItemDto>>({ totalCount: 0, items: [] });
   isLoading = signal(true);
-  tableReady = signal(false);
+  // Bumped whenever the dynamic columns change. ExtensibleTableComponent snapshots its
+  // column list at construction, so the template keys the table on this value (@for …
+  // track key) to force a fresh instance — deterministic, no setTimeout/flicker.
+  tableKey = signal(0);
 
   reviewStatusFilter = signal<DocumentReviewStatus | undefined>(undefined);
   typeFilter = signal<string>('');
@@ -129,15 +132,8 @@ export class DocumentListComponent implements OnInit {
   readonly DocumentLifecycleStatus = DocumentLifecycleStatus;
   readonly DocumentReviewStatus = DocumentReviewStatus;
 
-  private tableRebuildHandle?: ReturnType<typeof setTimeout>;
-
   constructor() {
     this.rebuildTableProps([]);
-    this.destroyRef.onDestroy(() => {
-      if (this.tableRebuildHandle) {
-        clearTimeout(this.tableRebuildHandle);
-      }
-    });
   }
 
   ngOnInit(): void {
@@ -223,17 +219,15 @@ export class DocumentListComponent implements OnInit {
   }
 
   private rebuildTableProps(fields: FieldDefinitionDto[] = this.extractedFieldColumns()): void {
-    this.tableReady.set(false);
     configureEntityTable<DocumentListItemDto>(
       this.extensions,
       PAPERBASE_TABLES.Documents,
       this.createTableProps(fields),
     );
-
-    if (this.tableRebuildHandle) {
-      clearTimeout(this.tableRebuildHandle);
-    }
-    this.tableRebuildHandle = setTimeout(() => this.tableReady.set(true), 0);
+    // Force a fresh ExtensibleTableComponent so it re-reads the just-configured columns
+    // (it snapshots its column list at construction). The @for key swap recreates it
+    // synchronously within the same change-detection pass.
+    this.tableKey.update(v => v + 1);
   }
 
   private createTableProps(fields: FieldDefinitionDto[]): EntityProp<DocumentListItemDto>[] {
