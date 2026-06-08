@@ -1,17 +1,8 @@
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
-WORKDIR /app
-
-# 默认 OCR provider (VisionLlm) 经 PDFtoImage 用 PDFium + SkiaSharp 光栅化 PDF 页，
-# SkiaSharp 在 Linux 渲染 PDF 内矢量/文字需 libfontconfig1。见 docs/ocr-vision-llm.md。
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends libfontconfig1 \
-    && rm -rf /var/lib/apt/lists/*
-
+FROM mcr.microsoft.com/dotnet/sdk:10.0
+USER $APP_UID
 EXPOSE 8080
 EXPOSE 8081
 
-# 前置：宿主机先 `dotnet publish host/src/Dignite.Paperbase.Host.csproj -c Release`
-# （默认产物落在 src/bin/Release/net10.0/publish/）。本镜像只做轻量打包，不在容器内构建。
-# build context 为 host/（见 etc/docker/docker-compose.yml 的 context: ../../）。
-COPY src/bin/Release/net10.0/publish/ .
+COPY bin/Release/net10.0/publish/ app/
+WORKDIR /app
 ENTRYPOINT ["dotnet", "Dignite.Paperbase.Host.dll"]
