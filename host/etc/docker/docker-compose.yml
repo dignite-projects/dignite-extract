@@ -4,13 +4,13 @@ services:
     container_name: paperbase-web
     build:
       context: ../../angular
-      dockerfile: Dockerfile.local      
+      dockerfile: apps/host/Dockerfile.local      
     ports:
       - "4200:80"
     depends_on:
       - paperbase-api
     volumes:
-      - ./dynamic-env.json://usr/share/nginx/html/dynamic-env.json
+      - ./dynamic-env.json:/usr/share/nginx/html/dynamic-env.json
     networks:
       - abp-network  
 

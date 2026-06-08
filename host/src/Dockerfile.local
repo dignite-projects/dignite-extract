@@ -1,8 +1,10 @@
-  FROM mcr.microsoft.com/dotnet/sdk:10.0
-  USER $APP_UID
-  EXPOSE 8080
-  EXPOSE 8081
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+WORKDIR /app
+EXPOSE 8080
+EXPOSE 8081
 
-  COPY bin/Release/net10.0/publish/ app/
-  WORKDIR /app
-  ENTRYPOINT ["dotnet", "Dignite.Paperbase.dll"]
+# 前置：宿主机先 `dotnet publish host/src/Dignite.Paperbase.Host.csproj -c Release`
+# （默认产物落在 src/bin/Release/net10.0/publish/）。本镜像只做轻量打包，不在容器内构建。
+# build context 为 host/（见 etc/docker/docker-compose.yml 的 context: ../../）。
+COPY src/bin/Release/net10.0/publish/ .
+ENTRYPOINT ["dotnet", "Dignite.Paperbase.Host.dll"]

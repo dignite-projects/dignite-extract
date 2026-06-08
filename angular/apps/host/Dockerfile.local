@@ -1,5 +1,6 @@
 FROM nginx:alpine
-WORKDIR /app
-COPY dist/PaperbaseHost /usr/share/nginx/html
-COPY dynamic-env.json /usr/share/nginx/html
-COPY /nginx.conf  /etc/nginx/conf.d/default.conf
+
+# build context 为 angular/（见 etc/docker/docker-compose.yml 的 context: ../../angular）。
+# 前置：宿主机先 `nx build host`（产物落在 dist/host/browser/，dynamic-env.json 已由 assets 打入）。
+COPY dist/host/browser /usr/share/nginx/html
+COPY apps/host/nginx.conf /etc/nginx/conf.d/default.conf
