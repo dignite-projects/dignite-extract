@@ -7,10 +7,10 @@
   },
   "oAuthConfig": {
     "issuer": "https://paperbase-api/",
-    "redirectUri": "https://paperbase",
+    "redirectUri": "https://paperbase-web",
     "clientId": "Paperbase_App",
     "responseType": "code",
-    "scope": "offline_access openid profile email phone"
+    "scope": "offline_access openid profile email phone Paperbase"
   },
   "apis": {
     "default": {
