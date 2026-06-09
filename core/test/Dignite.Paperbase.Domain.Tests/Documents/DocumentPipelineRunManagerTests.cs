@@ -87,6 +87,25 @@ public class DocumentPipelineRunManagerTests : PaperbaseDomainTestBase<Paperbase
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Ready);
     }
 
+    // #284：必填缺失(MissingRequiredFields)是 non-blocking——有它也不挡 Ready
+    // （必填缺失只进操作员队列，绝不阻断下游 DocumentReadyEto）。这是本次重构的核心正确性。
+    [Fact]
+    public async Task NonBlocking_MissingRequiredFields_Does_Not_Block_Ready()
+    {
+        var doc = CreateDocument();
+        // 预置 MissingRequiredFields（模拟字段抽取已判定必填缺失）。
+        doc.SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: true);
+
+        var textRun = await _manager.StartAsync(doc, PaperbasePipelines.TextExtraction);
+        await _manager.CompleteAsync(doc, textRun);
+        var classRun = await _manager.StartAsync(doc, PaperbasePipelines.Classification);
+        await _manager.CompleteClassificationAsync(doc, classRun, CreateContractType(), 0.92);
+
+        // 关键流水线成功 + 类型确认 + 无 blocking 原因 → Ready；MRF（non-blocking）仍保留。
+        doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Ready);
+        doc.ReviewReasons.ShouldBe(DocumentReviewReasons.MissingRequiredFields);
+    }
+
     // ────────────────────────────────────────────────────────────────────────────
     // Scenario 2: key pipeline (TextExtraction) fails → Failed
     // ────────────────────────────────────────────────────────────────────────────
