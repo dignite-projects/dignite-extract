@@ -46,12 +46,10 @@ using Volo.Abp.AspNetCore.Mvc.UI.Theme.LeptonXLite;
 using Volo.Abp.AspNetCore.Mvc.UI.Theme.LeptonXLite.Bundling;
 using Volo.Abp.AspNetCore.Mvc.UI.Theme.Shared;
 using Volo.Abp.AspNetCore.Serilog;
-using Hangfire;
 using Volo.Abp.AuditLogging.EntityFrameworkCore;
 using Volo.Abp.Autofac;
 using Volo.Abp.BackgroundJobs.EntityFrameworkCore;
 using Volo.Abp.BlobStoring;
-using Volo.Abp.Hangfire;
 using Volo.Abp.BlobStoring.FileSystem;
 using Volo.Abp.Caching;
 using Volo.Abp.Emailing;
@@ -129,15 +127,7 @@ namespace Dignite.Paperbase.Host;
     typeof(AbpFeatureManagementEntityFrameworkCoreModule),
     typeof(AbpPermissionManagementEntityFrameworkCoreModule),
     typeof(AbpSettingManagementEntityFrameworkCoreModule),
-    // 默认：ABP 内置 EF 后台作业管理器（单线程串行）——本地 / 开源部署**零额外基础设施**即可运行，无需 Hangfire。
     typeof(AbpBackgroundJobsEntityFrameworkCoreModule),
-    // 可选（#292，商业 / 稳定部署）：改用 Hangfire 拿并发 worker + 持久化续跑。切换两步：
-    //   1) 注释上面 EF 行、取消注释下面 Hangfire 行（HangfireBackgroundJobManager 带
-    //      [Dependency(ReplaceServices = true)] 接管 IBackgroundJobManager；ABP IsJobExecutionEnabled 只能停 server、
-    //      停不了 manager，故 Hangfire 是 module 级即编译/部署期决策、不可纯运行时回退到 EF）；
-    //   2) appsettings 设 "Hangfire:Enabled": true（驱动 ConfigureHangfire 配 SqlServer 存储 + WorkerCount）。
-    // Hangfire 首启 PrepareSchemaIfNecessary 自建存储表；按 LLM provider 并发额度设 WorkerCount + 同步上调 DB 连接池。
-    // typeof(Volo.Abp.BackgroundJobs.Hangfire.AbpBackgroundJobsHangfireModule),
     typeof(AbpBlobStoringFileSystemModule),
     typeof(AbpEntityFrameworkCoreSqlServerModule),
 
@@ -280,48 +270,6 @@ public class PaperbaseHostModule : AbpModule
         ConfigureAI(context, configuration);
         ConfigureOpenTelemetry(context, configuration);
         ConfigureRequestLimits(context);
-        ConfigureHangfire(context, configuration);
-    }
-
-    /// <summary>
-    /// #292：Hangfire 后台作业执行的 opt-in 配置——并发 worker + SqlServer 持久化续跑，让 #289 的批量重处理
-    /// （链式分发 + 单篇幂等底座）真正并发跑。<b>默认关闭</b>：本地 / 开源部署用 ABP 内置 EF 管理器即可，零额外基础设施。
-    /// <para>
-    /// 启用须**两步**（见 <c>[DependsOn]</c> 注释）：① 取消注释 <c>AbpBackgroundJobsHangfireModule</c>；
-    /// ② 设 <c>Hangfire:Enabled = true</c>。此方法仅在 ② 满足时配置 SqlServer 存储 + worker 数；① 不做则 manager
-    /// 仍是 EF（本方法配的存储闲置无害）。<c>Hangfire:Enabled = false</c> 时整方法早退，Hangfire 完全不参与。
-    /// </para>
-    /// <para>
-    /// <b>并发上限是关键约束</b>：所有后台作业（文本提取 / 分类 / 字段抽取）都走外部 LLM provider。Hangfire 默认
-    /// WorkerCount = ProcessorCount × 5 会瞬间打爆 provider 限速 / 配额。故 worker 数由 <c>Hangfire:WorkerCount</c>
-    /// 配置（默认保守值 5），生产按 provider 并发额度 + DB 连接池容量调。外部 LLM 调用绝不在长 UoW 内
-    /// （core 的 <c>FieldExtractionService</c> / pipeline 作业已是三段式短 UoW——切 Hangfire 后该纪律仍成立）。
-    /// </para>
-    /// </summary>
-    private void ConfigureHangfire(ServiceConfigurationContext context, IConfiguration configuration)
-    {
-        // 默认关闭——不引入 Hangfire 也能跑（ABP 内置 EF 后台作业管理器接管）。
-        if (!configuration.GetValue<bool>("Hangfire:Enabled"))
-        {
-            return;
-        }
-
-        context.Services.AddHangfire(config =>
-        {
-            config.UseSqlServerStorage(configuration.GetConnectionString("Default"));
-        });
-
-        // 并发参数走 AbpHangfireOptions.ServerOptions —— ABP 的 AbpHangfireModule 在 OnApplicationInitialization
-        // 启动**唯一**一个 BackgroundJobServer，其 WorkerCount 只从此处读。**绝不**额外调 AddHangfireServer：
-        // 那会多起一个 server（两个 worker pool 轮询同一存储），且 ABP 的 server 仍按 ProcessorCount×5 默认跑，
-        // 令此处的保守上限形同虚设（review round 1 blocker）。
-        // 整体替换 ServerOptions：当前只需 WorkerCount，队列走 Hangfire 默认 "default"（与 ABP 入队队列匹配）。
-        // 未来若多实例共享同一 Hangfire 存储需隔离，在此 BackgroundJobServerOptions 上一并设 Queues / 配 DefaultQueuePrefix。
-        var workerCount = configuration.GetValue<int?>("Hangfire:WorkerCount") ?? 5;
-        Configure<AbpHangfireOptions>(options =>
-        {
-            options.ServerOptions = new BackgroundJobServerOptions { WorkerCount = workerCount };
-        });
     }
 
     // #221：上传请求体上限作为 Kestrel / Form 层 backstop。真正的 fail-closed 友好错误在
