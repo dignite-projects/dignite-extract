@@ -46,6 +46,12 @@ export class FieldReextractionModalComponent implements OnInit {
   readonly isSubmitting = signal(false);
 
   ngOnInit(): void {
+    this.loadPreview();
+  }
+
+  loadPreview(): void {
+    this.isLoadingPreview.set(true);
+    this.previewFailed.set(false);
     this.service
       .previewFieldExtraction(this.documentTypeId)
       .pipe(takeUntilDestroyed(this.destroyRef))

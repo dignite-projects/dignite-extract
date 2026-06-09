@@ -25,8 +25,11 @@
             <div class="spinner-border text-primary" role="status"></div>
           </div>
         } @else if (previewFailed()) {
-          <div class="alert alert-danger mb-0">
-            {{ '::Document:Reprocess:PreviewFailed' | abpLocalization }}
+          <div class="alert alert-danger d-flex justify-content-between align-items-center mb-0">
+            <span>{{ '::Document:Reprocess:PreviewFailed' | abpLocalization }}</span>
+            <button type="button" class="btn btn-sm btn-outline-danger" (click)="loadPreview()">
+              {{ '::Refresh' | abpLocalization }}
+            </button>
           </div>
         } @else if (preview(); as p) {
           <div class="alert alert-secondary">

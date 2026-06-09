@@ -12,6 +12,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
+import { EMPTY, Subject, catchError, switchMap } from 'rxjs';
 import { LocalizationPipe } from '@abp/ng.core';
 import { ToasterService } from '@abp/ng.theme.shared';
 import {
@@ -67,18 +68,57 @@ export class ReclassificationModalComponent implements OnInit {
     return this.form.controls.scope.value !== ReclassificationScope.PendingReviewQueue;
   }
 
+  private readonly previewTrigger = new Subject<void>();
+
   ngOnInit(): void {
     // 无类型上下文：默认「全量·跨类型」（「仅该类型」不可选）。
     this.form.controls.scope.setValue(
       this.hasType ? ReclassificationScope.OnlyCurrentType : ReclassificationScope.AllDocuments,
       { emitEvent: false },
     );
+    this.applyIncludeTogglePolicy();
+
+    // switchMap：范围 / 开关快速切换时取消在途预览请求，避免乱序响应把过期 scope 的计数显示出来（review round 1）。
+    this.previewTrigger
+      .pipe(
+        switchMap(() => {
+          this.isLoadingPreview.set(true);
+          this.previewFailed.set(false);
+          return this.service.previewReclassification(this.buildInput()).pipe(
+            catchError(() => {
+              this.documentCount.set(null);
+              this.previewFailed.set(true);
+              this.isLoadingPreview.set(false);
+              return EMPTY;
+            }),
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(dto => {
+        this.documentCount.set(dto.documentCount);
+        this.isLoadingPreview.set(false);
+      });
 
     this.form.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.refreshPreview());
+      .subscribe(() => {
+        this.applyIncludeTogglePolicy();
+        this.previewTrigger.next();
+      });
 
-    this.refreshPreview();
+    this.previewTrigger.next();
+  }
+
+  // 待审核队列范围下「保护人工确认」开关无意义——用 reactive-forms 的 disable/enable 驱动（不用模板 [disabled]，
+  // 避免 Angular 对 formControlName 上 [disabled] 的 dev 警告，并让 FormControl.disabled 状态真正同步）。
+  private applyIncludeTogglePolicy(): void {
+    const control = this.form.controls.includeManuallyConfirmed;
+    if (this.includeToggleApplies) {
+      if (control.disabled) control.enable({ emitEvent: false });
+    } else if (control.enabled) {
+      control.disable({ emitEvent: false });
+    }
   }
 
   private buildInput(): ReclassificationScopeInput {
@@ -88,25 +128,6 @@ export class ReclassificationModalComponent implements OnInit {
       documentTypeId: Number(raw.scope) === ReclassificationScope.OnlyCurrentType ? this.documentTypeId : undefined,
       includeManuallyConfirmed: raw.includeManuallyConfirmed,
     };
-  }
-
-  refreshPreview(): void {
-    this.isLoadingPreview.set(true);
-    this.previewFailed.set(false);
-    this.service
-      .previewReclassification(this.buildInput())
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: dto => {
-          this.documentCount.set(dto.documentCount);
-          this.isLoadingPreview.set(false);
-        },
-        error: () => {
-          this.documentCount.set(null);
-          this.previewFailed.set(true);
-          this.isLoadingPreview.set(false);
-        },
-      });
   }
 
   confirm(): void {

@@ -53,7 +53,7 @@
         <!-- 保护人工确认（默认开启）：勾选才连人工确认的也重分 -->
         <div class="form-check mb-3" [class.opacity-50]="!includeToggleApplies">
           <input class="form-check-input" type="checkbox" formControlName="includeManuallyConfirmed"
-                 id="include-confirmed" [disabled]="!includeToggleApplies" />
+                 id="include-confirmed" />
           <label class="form-check-label" for="include-confirmed">
             {{ '::Document:Reprocess:Reclassification:IncludeConfirmed' | abpLocalization }}
             <span class="d-block small text-muted">{{ '::Document:Reprocess:Reclassification:IncludeConfirmed:Hint' | abpLocalization }}</span>

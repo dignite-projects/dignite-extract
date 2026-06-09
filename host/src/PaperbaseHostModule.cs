@@ -51,6 +51,7 @@ using Volo.Abp.AuditLogging.EntityFrameworkCore;
 using Volo.Abp.Autofac;
 using Volo.Abp.BackgroundJobs.Hangfire;
 using Volo.Abp.BlobStoring;
+using Volo.Abp.Hangfire;
 using Volo.Abp.BlobStoring.FileSystem;
 using Volo.Abp.Caching;
 using Volo.Abp.Emailing;
@@ -129,8 +130,10 @@ namespace Dignite.Paperbase.Host;
     typeof(AbpPermissionManagementEntityFrameworkCoreModule),
     typeof(AbpSettingManagementEntityFrameworkCoreModule),
     // #292：后台作业执行改用 Hangfire（并发 worker + 持久化续跑），取代默认 EF 单线程串行管理器。
-    // EF 背景作业表映射（DbContext.ConfigureBackgroundJobs）保留以避免 model 漂移 / 多余迁移——
-    // 该表自此闲置，Hangfire 用自己的存储表（HangfireJob / Set / State 等，首启自建）。
+    // AbpBackgroundJobsEntityFrameworkCoreModule 已从 [DependsOn] 移除（不再引入 EF 的 BackgroundJobWorker，
+    // 故无双重执行）；HangfireBackgroundJobManager 带 [Dependency(ReplaceServices = true)] 接管 IBackgroundJobManager。
+    // 仅保留 EF 包引用 + DbContext.ConfigureBackgroundJobs 表映射以避免 model 漂移 / 多余迁移——该表自此闲置，
+    // Hangfire 用自己的存储表（首启 PrepareSchemaIfNecessary 自建）。
     typeof(AbpBackgroundJobsHangfireModule),
     typeof(AbpBlobStoringFileSystemModule),
     typeof(AbpEntityFrameworkCoreSqlServerModule),
@@ -298,12 +301,16 @@ public class PaperbaseHostModule : AbpModule
             config.UseSqlServerStorage(configuration.GetConnectionString("Default"));
         });
 
+        // 并发参数走 AbpHangfireOptions.ServerOptions —— ABP 的 AbpHangfireModule 在 OnApplicationInitialization
+        // 启动**唯一**一个 BackgroundJobServer，其 WorkerCount 只从此处读。**绝不**额外调 AddHangfireServer：
+        // 那会多起一个 server（两个 worker pool 轮询同一存储），且 ABP 的 server 仍按 ProcessorCount×5 默认跑，
+        // 令此处的保守上限形同虚设（review round 1 blocker）。
         // 保守默认 5：宁可串行慢、不可打爆 LLM provider。生产经 appsettings "Hangfire:WorkerCount" 上调，
         // 并同步上调 DB 连接池（每个 worker 在短 UoW 期间占一个连接）。
         var workerCount = configuration.GetValue<int?>("Hangfire:WorkerCount") ?? 5;
-        context.Services.AddHangfireServer(options =>
+        Configure<AbpHangfireOptions>(options =>
         {
-            options.WorkerCount = workerCount;
+            options.ServerOptions = new BackgroundJobServerOptions { WorkerCount = workerCount };
         });
     }
 
