@@ -56,6 +56,9 @@ public class DocumentFieldReextractionDispatcherJob
             // 每批一个短 UoW：读 Id + enqueue 单篇任务 + enqueue 下一个 dispatcher 原子提交。
             using (var uow = _unitOfWorkManager.Begin(requiresNew: true))
             {
+                // args.DocumentTypeId 的层归属已由 DocumentReprocessingAppService.EnsureTypeInCurrentLayerAsync
+                // 在入队前校验；这里只信任授权 AppService 产出的 args。即便传入跨层 type，ambient IMultiTenant
+                // 过滤器也会让 GetIdsForReprocessingAsync 命中零行（fail-closed，不泄漏）。
                 ids = await _documentRepository.GetIdsForReprocessingAsync(
                     documentTypeId: args.DocumentTypeId,
                     reviewStatus: null,
@@ -65,6 +68,9 @@ public class DocumentFieldReextractionDispatcherJob
 
                 foreach (var id in ids)
                 {
+                    // 批量路径刻意不做 EnsureNotInProgress（与单篇 ReextractFieldsAsync 不对称）：并发的批量 + 单篇
+                    // 重抽可能让同一文档跑两个 field-extraction run，但 FieldExtractionService 的 SetFields 整组替换幂等，
+                    // 最坏只是多一次 LLM 成本 + last-writer-wins（写同样内容）。与本文件链式「分叉」同源的已接受代价。
                     await _backgroundJobManager.EnqueueAsync(
                         new DocumentFieldExtractionJobArgs { DocumentId = id });
                 }
