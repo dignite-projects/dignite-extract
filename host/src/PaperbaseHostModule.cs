@@ -1,13 +1,13 @@
 using Dignite.Paperbase.Ai;
 using Dignite.Paperbase.Documents;
-using Dignite.Paperbase.Host.Data;
 using Dignite.Paperbase.EntityFrameworkCore;
+using Dignite.Paperbase.Host.Authentication;
+using Dignite.Paperbase.Host.Data;
 using Dignite.Paperbase.Host.HealthChecks;
 using Dignite.Paperbase.Host.Localization;
 using Dignite.Paperbase.Localization;
 using Dignite.Paperbase.Ocr.VisionLlm;
 using Dignite.Paperbase.TextExtraction;
-using Volo.Abp.Localization;
 using Dignite.Paperbase.TextExtraction.ElBrunoMarkItDown;
 using Microsoft.Extensions.AI;
 using Microsoft.EntityFrameworkCore;
@@ -16,15 +16,26 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using ModelContextProtocol.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Microsoft.AspNetCore.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.OpenApi;
+using ModelContextProtocol.AspNetCore;
+using ModelContextProtocol.Authentication;
+using OpenAI;
+using OpenIddict.Server.AspNetCore;
 using OpenIddict.Validation.AspNetCore;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Volo.Abp;
 using Volo.Abp.Account;
 using Volo.Abp.Account.Web;
@@ -50,6 +61,7 @@ using Volo.Abp.FeatureManagement;
 using Volo.Abp.FeatureManagement.EntityFrameworkCore;
 using Volo.Abp.Identity;
 using Volo.Abp.Identity.EntityFrameworkCore;
+using Volo.Abp.Localization;
 using Volo.Abp.Mapperly;
 using Volo.Abp.Modularity;
 using Volo.Abp.MultiTenancy;
@@ -69,10 +81,6 @@ using Volo.Abp.Swashbuckle;
 using Volo.Abp.Timing;
 using Volo.Abp.UI.Navigation.Urls;
 using Volo.Abp.VirtualFileSystem;
-using ModelContextProtocol.AspNetCore;
-using ModelContextProtocol.Authentication;
-using Microsoft.AspNetCore.Authorization;
-using Dignite.Paperbase.Host.Authentication;
 
 namespace Dignite.Paperbase.Host;
 
@@ -218,6 +226,21 @@ public class PaperbaseHostModule : AbpModule
         {
             Microsoft.IdentityModel.Logging.IdentityModelEventSource.ShowPII = true;
             Microsoft.IdentityModel.Logging.IdentityModelEventSource.LogCompleteSecurityArtifact = true;
+        }
+
+        if (!configuration.GetValue<bool>("AuthServer:RequireHttpsMetadata"))
+        {
+            Configure<OpenIddictServerAspNetCoreOptions>(options =>
+            {
+                options.DisableTransportSecurityRequirement = true;
+            });
+
+            Configure<ForwardedHeadersOptions>(options =>
+            {
+                options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+                options.KnownIPNetworks.Clear();
+                options.KnownProxies.Clear();
+            });
         }
 
         if (hostingEnvironment.IsDevelopment())
@@ -706,7 +729,7 @@ public class PaperbaseHostModule : AbpModule
     {
         var app = context.GetApplicationBuilder();
         var env = context.GetEnvironment();
-
+        app.UseForwardedHeaders();
         if (env.IsDevelopment())
         {
             app.UseDeveloperExceptionPage();
