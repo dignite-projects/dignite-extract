@@ -10,9 +10,18 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { LocalizationPipe, PermissionService } from '@abp/ng.core';
+import { escapeHtmlChars, ListService, LocalizationPipe, LocalizationService, PermissionService } from '@abp/ng.core';
+import type { ABP } from '@abp/ng.core';
+import {
+  EntityProp,
+  EXTENSIONS_IDENTIFIER,
+  ExtensionsService,
+  ExtensibleTableComponent,
+  ePropType,
+} from '@abp/ng.components/extensible';
 import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
-import { map, Subject, takeUntil } from 'rxjs';
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
+import { map, of, Subject, takeUntil } from 'rxjs';
 import {
   CreateFieldDefinitionDto,
   DocumentTypeService,
@@ -25,6 +34,13 @@ import {
   PAPERBASE_PERMISSIONS,
   SlugSuggestionService,
 } from '@dignite/paperbase';
+import {
+  ClientPagedResult,
+  configureEntityTable,
+  pageClientItems,
+  PAPERBASE_TABLES,
+  SortAccessors,
+} from '../../shared/extensible-table';
 import { SlugSuggestionHandle, wireSlugSuggestion } from '../../shared/slug-suggestion';
 
 // Mirrors FieldDefinitionConsts (Domain.Shared): Name whitelist + length caps.
@@ -33,11 +49,33 @@ const MAX_NAME_LENGTH = 64;
 const MAX_DISPLAY_NAME_LENGTH = 128;
 const MAX_PROMPT_LENGTH = 1024;
 
+const FIELD_DEFINITION_SORTS: SortAccessors<FieldDefinitionDto> = {
+  displayOrder: field => field.displayOrder,
+  name: field => field.name,
+  displayName: field => field.displayName,
+  dataType: field => field.dataType,
+  isRequired: field => field.isRequired,
+  prompt: field => field.prompt,
+};
+
 @Component({
   selector: 'lib-field-definition-list',
   templateUrl: './field-definition-list.component.html',
   styleUrls: ['./field-definition-list.component.scss'],
-  imports: [CommonModule, ReactiveFormsModule, LocalizationPipe],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    LocalizationPipe,
+    ExtensibleTableComponent,
+    NgbDropdownModule,
+  ],
+  providers: [
+    ListService,
+    {
+      provide: EXTENSIONS_IDENTIFIER,
+      useValue: PAPERBASE_TABLES.FieldDefinitions,
+    },
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FieldDefinitionListComponent implements OnInit {
@@ -52,6 +90,9 @@ export class FieldDefinitionListComponent implements OnInit {
   private readonly toaster = inject(ToasterService);
   private readonly permissionService = inject(PermissionService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly extensions = inject(ExtensionsService);
+
+  readonly list = inject(ListService);
 
   // Create/edit/delete buttons require any FieldDefinitions write grant (#217); the route's
   // FieldDefinitions.Default only lists. ABP evaluates the `||` policy expression.
@@ -66,7 +107,8 @@ export class FieldDefinitionListComponent implements OnInit {
   documentTypeId = '';
   documentTypeDisplayName = signal('');
   documentTypeCode = signal('');
-  fields = signal<FieldDefinitionDto[]>([]);
+  allFields = signal<FieldDefinitionDto[]>([]);
+  fields = signal<ClientPagedResult<FieldDefinitionDto>>({ totalCount: 0, items: [] });
   isLoading = signal(true);
   showDeleted = signal(false);
 
@@ -78,6 +120,7 @@ export class FieldDefinitionListComponent implements OnInit {
   justDrafted = signal(false);
 
   private slugHandle?: SlugSuggestionHandle;
+  private tableQuery: Partial<ABP.PageQueryParams> = {};
 
   // #264：取消在飞起草请求的信号。关闭弹窗时 emit，避免迟到的草稿覆盖重新打开的（无关字段）表单。
   // 组件级 destroyRef 不随弹窗关闭触发（弹窗只是 editing=null，组件不销毁），故需要独立的 per-modal 取消闸门。
@@ -102,7 +145,73 @@ export class FieldDefinitionListComponent implements OnInit {
   // 驱动模板：dataType === Text 时才允许勾选"多值"。
   readonly isTextType = signal(true);
 
+  constructor() {
+    configureEntityTable<FieldDefinitionDto>(this.extensions, PAPERBASE_TABLES.FieldDefinitions, [
+      EntityProp.create<FieldDefinitionDto>({
+        type: ePropType.Number,
+        name: 'displayOrder',
+        displayName: '::FieldDefinition:DisplayOrder',
+        sortable: true,
+        columnWidth: 120,
+      }),
+      EntityProp.create<FieldDefinitionDto>({
+        type: ePropType.String,
+        name: 'name',
+        displayName: '::FieldDefinition:Name',
+        sortable: true,
+        columnWidth: 180,
+        valueResolver: data => of(`<code>${escapeHtmlChars(data.record.name)}</code>`),
+      }),
+      EntityProp.create<FieldDefinitionDto>({
+        type: ePropType.String,
+        name: 'displayName',
+        displayName: '::FieldDefinition:DisplayName',
+        sortable: true,
+      }),
+      EntityProp.create<FieldDefinitionDto>({
+        type: ePropType.String,
+        name: 'dataType',
+        displayName: '::FieldDefinition:DataType',
+        sortable: true,
+        columnWidth: 170,
+        valueResolver: data => {
+          const localization = data.getInjected(LocalizationService);
+          const label = fieldDataTypeOptions.find(o => o.value === data.record.dataType)?.key ?? String(data.record.dataType);
+          const suffix = data.record.allowMultiple ? '[]' : '';
+          return of(`<span class="badge bg-light text-dark border">${escapeHtmlChars(localization.instant(label))}${suffix}</span>`);
+        },
+      }),
+      EntityProp.create<FieldDefinitionDto>({
+        type: ePropType.String,
+        name: 'isRequired',
+        displayName: '::FieldDefinition:Required',
+        sortable: true,
+        columnWidth: 150,
+        valueResolver: data => {
+          const localization = data.getInjected(LocalizationService);
+          return of(data.record.isRequired
+            ? `<span class="badge bg-warning text-dark">${escapeHtmlChars(localization.instant('::FieldDefinition:Required'))}</span>`
+            : '<span class="text-muted">-</span>');
+        },
+      }),
+      EntityProp.create<FieldDefinitionDto>({
+        type: ePropType.String,
+        name: 'prompt',
+        displayName: '::FieldDefinition:Prompt',
+        sortable: true,
+        columnWidth: 320,
+        valueResolver: data => {
+          const prompt = data.record.prompt;
+          return of(prompt
+            ? `<span class="d-inline-block text-truncate" style="max-width:280px" title="${escapeHtmlChars(prompt)}">${escapeHtmlChars(prompt)}</span>`
+            : '<span class="text-muted">-</span>');
+        },
+      }),
+    ]);
+  }
+
   ngOnInit(): void {
+    this.hookTableQuery();
     this.documentTypeId = this.route.snapshot.paramMap.get('typeId') ?? '';
     this.resolveDocumentType();
     this.slugHandle = wireSlugSuggestion({
@@ -149,7 +258,7 @@ export class FieldDefinitionListComponent implements OnInit {
 
   // LLM 不可用 / 未翻译时的本地回退：取与现有字段名不冲突的最小 field_{n}。
   private nextFieldSlug(): string {
-    const existing = new Set(this.fields().map(f => f.name));
+    const existing = new Set(this.allFields().map(f => f.name));
     let i = 1;
     while (existing.has(`field_${i}`)) i++;
     return `field_${i}`;
@@ -176,15 +285,33 @@ export class FieldDefinitionListComponent implements OnInit {
     });
     source$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: list => {
-        this.fields.set([...list].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)));
+        this.allFields.set([...list].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)));
+        this.list.totalCount = list.length;
+        this.applyTableQuery();
         this.isLoading.set(false);
       },
-      error: () => this.isLoading.set(false),
+      error: () => {
+        this.allFields.set([]);
+        this.fields.set({ totalCount: 0, items: [] });
+        this.list.totalCount = 0;
+        this.isLoading.set(false);
+      },
     });
   }
 
+  private hookTableQuery(): void {
+    this.list.query$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(query => this.applyTableQuery(query));
+  }
+
+  private applyTableQuery(query: Partial<ABP.PageQueryParams> = this.tableQuery): void {
+    this.tableQuery = query;
+    this.fields.set(pageClientItems(this.allFields(), query, FIELD_DEFINITION_SORTS));
+  }
+
   openCreate(): void {
-    const nextOrder = this.fields().reduce((max, f) => Math.max(max, f.displayOrder ?? 0), -1) + 1;
+    const nextOrder = this.allFields().reduce((max, f) => Math.max(max, f.displayOrder ?? 0), -1) + 1;
     this.form.reset({
       name: '',
       displayName: '',

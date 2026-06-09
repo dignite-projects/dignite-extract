@@ -45,7 +45,7 @@
   }
 
   <!-- Empty state -->
-  @if (!isLoading() && fields().length === 0) {
+  @if (!isLoading() && fields().totalCount === 0) {
     <div class="card shadow-sm">
       <div class="card-body text-center py-5">
         <i class="fas fa-list-ul fa-3x text-muted mb-3 d-block"></i>
@@ -57,72 +57,51 @@
   }
 
   <!-- Fields table -->
-  @if (!isLoading() && fields().length > 0) {
+  @if (!isLoading() && fields().totalCount > 0) {
     <div class="card shadow-sm">
-      <div class="table-responsive">
-        <table class="table table-hover mb-0 align-middle">
-          <thead class="table-light">
-            <tr>
-              <th style="width: 56px">{{ '::FieldDefinition:DisplayOrder' | abpLocalization }}</th>
-              <th>{{ '::FieldDefinition:Name' | abpLocalization }}</th>
-              <th>{{ '::FieldDefinition:DisplayName' | abpLocalization }}</th>
-              <th>{{ '::FieldDefinition:DataType' | abpLocalization }}</th>
-              <th>{{ '::FieldDefinition:Required' | abpLocalization }}</th>
-              <th>{{ '::FieldDefinition:Prompt' | abpLocalization }}</th>
-              <th style="width: 110px"></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (field of fields(); track field.id) {
-              <tr>
-                <td class="text-muted">{{ field.displayOrder }}</td>
-                <td><code>{{ field.name }}</code></td>
-                <td class="fw-semibold">{{ field.displayName }}</td>
-                <td><span class="badge bg-light text-dark border">{{ dataTypeLabel(field.dataType) | abpLocalization }}{{ field.allowMultiple ? '[]' : '' }}</span></td>
-                <td>
-                  @if (field.isRequired) {
-                    <span class="badge bg-warning text-dark">{{ '::FieldDefinition:Required' | abpLocalization }}</span>
-                  } @else {
-                    <span class="text-muted">—</span>
-                  }
-                </td>
-                <td class="text-muted small text-truncate" style="max-width: 280px;" [title]="field.prompt">
-                  {{ field.prompt || '—' }}
-                </td>
-                <td class="text-end">
-                  <div class="d-flex gap-1 justify-content-end">
-                    @if (showDeleted()) {
-                      @if (canManage) {
-                        <button
-                          class="btn btn-sm btn-outline-success"
-                          (click)="restore(field)"
-                          title="{{ '::FieldDefinition:Restore' | abpLocalization }}"
-                        >
-                          <i class="fas fa-rotate-left"></i>
-                        </button>
-                      }
-                    } @else if (canManage) {
-                      <button
-                        class="btn btn-sm btn-outline-secondary"
-                        (click)="openEdit(field)"
-                        title="{{ '::Edit' | abpLocalization }}"
-                      >
-                        <i class="fas fa-pen"></i>
-                      </button>
-                      <button
-                        class="btn btn-sm btn-outline-danger"
-                        (click)="delete(field)"
-                        title="{{ '::Delete' | abpLocalization }}"
-                      >
-                        <i class="fas fa-trash"></i>
-                      </button>
-                    }
-                  </div>
-                </td>
-              </tr>
+      <div class="card-body p-0">
+        <ng-template #actionsTemplate let-field>
+          @if (showDeleted()) {
+            @if (canManage) {
+              <div ngbDropdown container="body" class="d-inline-block">
+                <button type="button" class="btn btn-sm btn-primary" ngbDropdownToggle>
+                  {{ 'AbpUi::Actions' | abpLocalization }}
+                </button>
+                <div ngbDropdownMenu>
+                  <button type="button" ngbDropdownItem (click)="restore(field)">
+                    <i class="fas fa-rotate-left me-2"></i>
+                    {{ '::FieldDefinition:Restore' | abpLocalization }}
+                  </button>
+                </div>
+              </div>
             }
-          </tbody>
-        </table>
+          } @else if (canManage) {
+            <div ngbDropdown container="body" class="d-inline-block">
+              <button type="button" class="btn btn-sm btn-primary" ngbDropdownToggle>
+                {{ 'AbpUi::Actions' | abpLocalization }}
+              </button>
+              <div ngbDropdownMenu>
+                <button type="button" ngbDropdownItem (click)="openEdit(field)">
+                  <i class="fas fa-pen me-2"></i>
+                  {{ '::Edit' | abpLocalization }}
+                </button>
+                <button type="button" ngbDropdownItem (click)="delete(field)">
+                  <i class="fas fa-trash me-2"></i>
+                  {{ '::Delete' | abpLocalization }}
+                </button>
+              </div>
+            </div>
+          }
+        </ng-template>
+
+        <abp-extensible-table
+          [data]="fields().items"
+          [recordsTotal]="fields().totalCount"
+          [list]="list"
+          [actionsTemplate]="actionsTemplate"
+          actionsText="AbpUi::Actions"
+          [actionsColumnWidth]="150"
+        />
       </div>
     </div>
   }

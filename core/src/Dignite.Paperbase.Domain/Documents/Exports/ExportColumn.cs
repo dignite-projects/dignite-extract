@@ -1,12 +1,12 @@
 using System;
-using System.Linq;
 using Volo.Abp;
 
 namespace Dignite.Paperbase.Documents.Exports;
 
 /// <summary>
 /// 导出模板的一列定义（值对象，#207 收敛为 ExtractedField-only）。每列引用一个类型绑定字段值
-/// （按不可变 <see cref="FieldDefinitionId"/>），渲染为输出文件中名为 <see cref="ColumnName"/> 的列。
+/// （按不可变 <see cref="FieldDefinitionId"/>）。输出文件中的列标题在导出时取 <c>FieldDefinition.DisplayName</c>，
+/// 无需在模板列上单独配置——字段改名后导出结果自动跟随。
 /// <para>
 /// 系统通用字段（<c>LifecycleStatus</c> / <c>ReviewStatus</c> / <c>Title</c>）由导出引擎
 /// <b>固定输出</b>，不走模板列配置——它们是 Paperbase 稳定元数据契约，无需像业务字段一样配置（#207）。
@@ -24,29 +24,12 @@ public class ExportColumn
     /// </summary>
     public Guid FieldDefinitionId { get; }
 
-    /// <summary>输出文件中的列标题（人类可读，允许中日文，拒绝控制字符）。</summary>
-    public string ColumnName { get; }
-
     /// <summary>列在输出中的排序（升序）。</summary>
     public int Order { get; }
 
-    public ExportColumn(Guid fieldDefinitionId, string columnName, int order)
+    public ExportColumn(Guid fieldDefinitionId, int order)
     {
         FieldDefinitionId = Check.NotDefaultOrNull<Guid>(fieldDefinitionId, nameof(fieldDefinitionId));
-        ColumnName = ValidateColumnName(columnName);
         Order = order;
-    }
-
-    private static string ValidateColumnName(string columnName)
-    {
-        Check.NotNullOrWhiteSpace(columnName, nameof(columnName), ExportTemplateConsts.MaxColumnNameLength);
-
-        if (columnName.Any(char.IsControl))
-        {
-            throw new BusinessException(PaperbaseErrorCodes.Export.InvalidColumnName)
-                .WithData("columnName", columnName);
-        }
-
-        return columnName;
     }
 }

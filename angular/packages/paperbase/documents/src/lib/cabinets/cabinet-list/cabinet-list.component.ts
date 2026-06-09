@@ -9,24 +9,52 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { LocalizationPipe, PermissionService } from '@abp/ng.core';
+import { escapeHtmlChars, ListService, LocalizationPipe, PermissionService } from '@abp/ng.core';
+import type { ABP } from '@abp/ng.core';
+import {
+  EntityProp,
+  EXTENSIONS_IDENTIFIER,
+  ExtensionsService,
+  ExtensibleTableComponent,
+  ePropType,
+} from '@abp/ng.components/extensible';
 import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
+import { of } from 'rxjs';
 import {
   CabinetDto,
   CabinetService,
   CreateCabinetDto,
   PAPERBASE_PERMISSIONS,
 } from '@dignite/paperbase';
+import {
+  ClientPagedResult,
+  configureEntityTable,
+  pageClientItems,
+  PAPERBASE_TABLES,
+  SortAccessors,
+} from '../../shared/extensible-table';
 
 // Mirrors CabinetConsts (Domain.Shared): Name / Description length caps.
 const MAX_NAME_LENGTH = 128;
 const MAX_DESCRIPTION_LENGTH = 512;
 
+const CABINET_SORTS: SortAccessors<CabinetDto> = {
+  name: cabinet => cabinet.name,
+};
+
 @Component({
   selector: 'lib-cabinet-list',
   templateUrl: './cabinet-list.component.html',
   styleUrls: ['./cabinet-list.component.scss'],
-  imports: [CommonModule, ReactiveFormsModule, LocalizationPipe],
+  imports: [CommonModule, ReactiveFormsModule, LocalizationPipe, ExtensibleTableComponent, NgbDropdownModule],
+  providers: [
+    ListService,
+    {
+      provide: EXTENSIONS_IDENTIFIER,
+      useValue: PAPERBASE_TABLES.Cabinets,
+    },
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CabinetListComponent implements OnInit {
@@ -36,24 +64,48 @@ export class CabinetListComponent implements OnInit {
   private readonly toaster = inject(ToasterService);
   private readonly permissionService = inject(PermissionService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly extensions = inject(ExtensionsService);
+
+  readonly list = inject(ListService);
 
   readonly canCreate = this.permissionService.getGrantedPolicy(PAPERBASE_PERMISSIONS.Cabinets.Create);
   readonly canUpdate = this.permissionService.getGrantedPolicy(PAPERBASE_PERMISSIONS.Cabinets.Update);
   readonly canDelete = this.permissionService.getGrantedPolicy(PAPERBASE_PERMISSIONS.Cabinets.Delete);
 
-  cabinets = signal<CabinetDto[]>([]);
+  allCabinets = signal<CabinetDto[]>([]);
+  cabinets = signal<ClientPagedResult<CabinetDto>>({ totalCount: 0, items: [] });
   isLoading = signal(true);
 
   // null = closed; 'create' / CabinetDto = open in the matching mode.
   editing = signal<CabinetDto | 'create' | null>(null);
   isSubmitting = signal(false);
+  private tableQuery: Partial<ABP.PageQueryParams> = {};
 
   readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(MAX_NAME_LENGTH)]],
     description: ['', [Validators.maxLength(MAX_DESCRIPTION_LENGTH)]],
   });
 
+  constructor() {
+    configureEntityTable<CabinetDto>(this.extensions, PAPERBASE_TABLES.Cabinets, [
+      EntityProp.create<CabinetDto>({
+        type: ePropType.String,
+        name: 'name',
+        displayName: '::Cabinet:Name',
+        sortable: true,
+        valueResolver: data => {
+          const name = escapeHtmlChars(data.record.name);
+          const description = data.record.description
+            ? `<div class="small text-muted fw-normal mt-1">${escapeHtmlChars(data.record.description)}</div>`
+            : '';
+          return of(`<span class="fw-semibold"><i class="fas fa-folder text-warning me-2"></i>${name}</span>${description}`);
+        },
+      }),
+    ]);
+  }
+
   ngOnInit(): void {
+    this.hookTableQuery();
     this.load();
   }
 
@@ -67,11 +119,29 @@ export class CabinetListComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: list => {
-          this.cabinets.set(list);
+          this.allCabinets.set(list);
+          this.list.totalCount = list.length;
+          this.applyTableQuery();
           this.isLoading.set(false);
         },
-        error: () => this.isLoading.set(false),
+        error: () => {
+          this.allCabinets.set([]);
+          this.cabinets.set({ totalCount: 0, items: [] });
+          this.list.totalCount = 0;
+          this.isLoading.set(false);
+        },
       });
+  }
+
+  private hookTableQuery(): void {
+    this.list.query$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(query => this.applyTableQuery(query));
+  }
+
+  private applyTableQuery(query: Partial<ABP.PageQueryParams> = this.tableQuery): void {
+    this.tableQuery = query;
+    this.cabinets.set(pageClientItems(this.allCabinets(), query, CABINET_SORTS));
   }
 
   openCreate(): void {

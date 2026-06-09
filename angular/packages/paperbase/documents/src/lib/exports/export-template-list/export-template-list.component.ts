@@ -9,10 +9,23 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { LocalizationPipe, PermissionService } from '@abp/ng.core';
-import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
+import { escapeHtmlChars, ListService, LocalizationPipe, LocalizationService, PermissionService } from '@abp/ng.core';
+import type { ABP } from '@abp/ng.core';
 import {
+  EntityProp,
+  EXTENSIONS_IDENTIFIER,
+  ExtensionsService,
+  ExtensibleTableComponent,
+  ePropType,
+} from '@abp/ng.components/extensible';
+import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
+import { of } from 'rxjs';
+import {
+  CabinetDto,
+  CabinetService,
   CreateExportTemplateDto,
+  DocumentLifecycleStatus,
   DocumentTypeDto,
   DocumentTypeService,
   ExportColumnInput,
@@ -22,29 +35,60 @@ import {
   FieldDefinitionDto,
   FieldDefinitionService,
   PAPERBASE_PERMISSIONS,
+  documentLifecycleStatusOptions,
   exportFormatOptions,
 } from '@dignite/paperbase';
+import {
+  ClientPagedResult,
+  configureEntityTable,
+  pageClientItems,
+  PAPERBASE_TABLES,
+  SortAccessors,
+} from '../../shared/extensible-table';
 
 // Mirrors ExportTemplateConsts (Domain.Shared).
 const MAX_NAME_LENGTH = 128;
-const MAX_COLUMN_NAME_LENGTH = 128;
+
+const EXPORT_TEMPLATE_SORTS: SortAccessors<ExportTemplateDto> = {
+  name: template => template.name,
+  format: template => template.format,
+  documentTypeId: template => template.documentTypeId,
+  columns: template => template.columns?.length ?? 0,
+};
 
 @Component({
   selector: 'lib-export-template-list',
   templateUrl: './export-template-list.component.html',
   styleUrls: ['./export-template-list.component.scss'],
-  imports: [CommonModule, ReactiveFormsModule, LocalizationPipe],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    LocalizationPipe,
+    ExtensibleTableComponent,
+    NgbDropdownModule,
+  ],
+  providers: [
+    ListService,
+    {
+      provide: EXTENSIONS_IDENTIFIER,
+      useValue: PAPERBASE_TABLES.ExportTemplates,
+    },
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ExportTemplateListComponent implements OnInit {
   private readonly service = inject(ExportTemplateService);
   private readonly documentTypeService = inject(DocumentTypeService);
   private readonly fieldDefinitionService = inject(FieldDefinitionService);
+  private readonly cabinetService = inject(CabinetService);
   private readonly fb = inject(FormBuilder);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toaster = inject(ToasterService);
   private readonly permissionService = inject(PermissionService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly extensions = inject(ExtensionsService);
+
+  readonly list = inject(ListService);
 
   readonly canManage = this.permissionService.getGrantedPolicy(
     PAPERBASE_PERMISSIONS.Documents.Templates.Default,
@@ -55,14 +99,28 @@ export class ExportTemplateListComponent implements OnInit {
 
   readonly formatOptions = exportFormatOptions;
   readonly ExportFormat = ExportFormat;
+  readonly DocumentLifecycleStatus = DocumentLifecycleStatus;
+  readonly lifecycleStatusOptions = documentLifecycleStatusOptions;
 
-  templates = signal<ExportTemplateDto[]>([]);
+  allTemplates = signal<ExportTemplateDto[]>([]);
+  templates = signal<ClientPagedResult<ExportTemplateDto>>({ totalCount: 0, items: [] });
   documentTypes = signal<DocumentTypeDto[]>([]);
   fieldDefinitions = signal<FieldDefinitionDto[]>([]);
+  cabinets = signal<CabinetDto[]>([]);
   isLoading = signal(true);
   editing = signal<ExportTemplateDto | 'create' | null>(null);
   isSubmitting = signal(false);
   exportingId = signal<string | null>(null);
+  /** 正在配置筛选条件的导出模板；非 null 时显示筛选 modal。 */
+  filteringTemplate = signal<ExportTemplateDto | null>(null);
+  private tableQuery: Partial<ABP.PageQueryParams> = {};
+
+  readonly filterForm = this.fb.nonNullable.group({
+    lifecycleStatus: [null as DocumentLifecycleStatus | null],
+    cabinetId: [null as string | null],
+    creationTimeMin: [null as string | null],
+    creationTimeMax: [null as string | null],
+  });
 
   readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(MAX_NAME_LENGTH)]],
@@ -75,9 +133,54 @@ export class ExportTemplateListComponent implements OnInit {
     return this.form.controls.columns;
   }
 
+  constructor() {
+    configureEntityTable<ExportTemplateDto>(this.extensions, PAPERBASE_TABLES.ExportTemplates, [
+      EntityProp.create<ExportTemplateDto>({
+        type: ePropType.String,
+        name: 'name',
+        displayName: '::ExportTemplate:Name',
+        sortable: true,
+      }),
+      EntityProp.create<ExportTemplateDto>({
+        type: ePropType.String,
+        name: 'format',
+        displayName: '::ExportTemplate:Format',
+        sortable: true,
+        columnWidth: 150,
+        valueResolver: data => {
+          const localization = data.getInjected(LocalizationService);
+          return of(`<span class="badge bg-secondary">${escapeHtmlChars(localization.instant(this.formatLabel(data.record.format)))}</span>`);
+        },
+      }),
+      EntityProp.create<ExportTemplateDto>({
+        type: ePropType.String,
+        name: 'documentTypeId',
+        displayName: '::ExportTemplate:DocumentType',
+        sortable: true,
+        columnWidth: 220,
+        valueResolver: data => {
+          const label = this.documentTypeLabel(data.record.documentTypeId);
+          return of(label
+            ? `<span class="badge bg-info text-dark">${escapeHtmlChars(label)}</span>`
+            : '<span class="text-muted">-</span>');
+        },
+      }),
+      EntityProp.create<ExportTemplateDto>({
+        type: ePropType.Number,
+        name: 'columns',
+        displayName: '::ExportTemplate:Columns',
+        sortable: true,
+        columnWidth: 150,
+        valueResolver: data => of(data.record.columns?.length ?? 0),
+      }),
+    ]);
+  }
+
   ngOnInit(): void {
+    this.hookTableQuery();
     this.load();
     this.loadDocumentTypes();
+    this.loadCabinets();
   }
 
   refresh(): void {
@@ -91,18 +194,48 @@ export class ExportTemplateListComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: list => {
-          this.templates.set(list);
+          this.allTemplates.set(list);
+          this.list.totalCount = list.length;
+          this.applyTableQuery();
           this.isLoading.set(false);
         },
-        error: () => this.isLoading.set(false),
+        error: () => {
+          this.allTemplates.set([]);
+          this.templates.set({ totalCount: 0, items: [] });
+          this.list.totalCount = 0;
+          this.isLoading.set(false);
+        },
       });
+  }
+
+  private hookTableQuery(): void {
+    this.list.query$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(query => this.applyTableQuery(query));
+  }
+
+  private applyTableQuery(query: Partial<ABP.PageQueryParams> = this.tableQuery): void {
+    this.tableQuery = query;
+    this.templates.set(pageClientItems(this.allTemplates(), query, EXPORT_TEMPLATE_SORTS));
   }
 
   private loadDocumentTypes(): void {
     this.documentTypeService
       .getVisible()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: list => this.documentTypes.set(list) });
+      .subscribe({
+        next: list => {
+          this.documentTypes.set(list);
+          this.applyTableQuery();
+        },
+      });
+  }
+
+  private loadCabinets(): void {
+    this.cabinetService
+      .getList()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: list => this.cabinets.set(list) });
   }
 
   openCreate(): void {
@@ -123,15 +256,14 @@ export class ExportTemplateListComponent implements OnInit {
     this.loadFieldDefinitions(template.documentTypeId);
     [...(template.columns ?? [])]
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      .forEach(c => this.addColumn(c.fieldDefinitionId, c.columnName));
+      .forEach(c => this.addColumn(c.fieldDefinitionId));
     this.editing.set(template);
   }
 
-  addColumn(fieldDefinitionId = '', columnName = ''): void {
+  addColumn(fieldDefinitionId = ''): void {
     this.columns.push(
       this.fb.nonNullable.group({
         fieldDefinitionId: [fieldDefinitionId, [Validators.required]],
-        columnName: [columnName, [Validators.required, Validators.maxLength(MAX_COLUMN_NAME_LENGTH)]],
       }),
     );
   }
@@ -177,11 +309,8 @@ export class ExportTemplateListComponent implements OnInit {
     const raw = this.form.getRawValue();
     // Order = array position; the editor's row order is the source of truth.
     const columns: ExportColumnInput[] = this.columns.controls.map((ctrl, i) => {
-      const v = ctrl.getRawValue() as {
-        fieldDefinitionId: string;
-        columnName: string;
-      };
-      return { fieldDefinitionId: v.fieldDefinitionId, columnName: v.columnName, order: i };
+      const v = ctrl.getRawValue() as { fieldDefinitionId: string };
+      return { fieldDefinitionId: v.fieldDefinitionId, order: i };
     });
 
     if (mode === 'create') {
@@ -241,11 +370,30 @@ export class ExportTemplateListComponent implements OnInit {
   }
 
   exportTemplate(template: ExportTemplateDto): void {
+    this.filterForm.reset({ lifecycleStatus: null, cabinetId: null, creationTimeMin: null, creationTimeMax: null });
+    this.filteringTemplate.set(template);
+  }
+
+  closeFilterModal(): void {
+    this.filteringTemplate.set(null);
+  }
+
+  startExport(): void {
+    const template = this.filteringTemplate();
+    if (!template) return;
+
+    const f = this.filterForm.getRawValue();
     this.exportingId.set(template.id!);
-    // v1: export all documents the template applies to (backend enforces the per-export cap).
-    // Document-checkbox / filter selection can be layered on later from the document list.
+    this.filteringTemplate.set(null);
+
     this.service
-      .export({ templateId: template.id! })
+      .export({
+        templateId: template.id!,
+        lifecycleStatus: f.lifecycleStatus ?? undefined,
+        cabinetId: f.cabinetId ?? undefined,
+        creationTimeMin: f.creationTimeMin ?? undefined,
+        creationTimeMax: f.creationTimeMax ?? undefined,
+      })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: blob => {

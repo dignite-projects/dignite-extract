@@ -9,12 +9,18 @@ using Dignite.Paperbase.Localization;
 using Dignite.Paperbase.Ocr.VisionLlm;
 using Dignite.Paperbase.TextExtraction;
 using Dignite.Paperbase.TextExtraction.ElBrunoMarkItDown;
-using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.AI;
+using Microsoft.EntityFrameworkCore;
+using OpenAI;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.AspNetCore.HttpOverrides;
+using ModelContextProtocol.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -372,6 +378,15 @@ public class PaperbaseHostModule : AbpModule
                 BearerMethodsSupported = new List<string> { "header" },
                 ResourceName = "Paperbase MCP"
             };
+        });
+
+        // McpAuth 仅用于 /.well-known/oauth-protected-resource 自服务和 /mcp 端点 401 challenge，
+        // 不是用户可交互的外部登录 provider。清掉 DisplayName，ABP Account 模块不会把它渲染成登录页按钮。
+        context.Services.Configure<AuthenticationOptions>(options =>
+        {
+            var scheme = options.Schemes.FirstOrDefault(s => s.Name == McpAuthenticationDefaults.AuthenticationScheme);
+            if (scheme != null)
+                scheme.DisplayName = null;
         });
 
         // 只覆盖 challenge、不动 authenticate：保留 ABP dynamic claims 富化的 principal（见 handler 注释）。

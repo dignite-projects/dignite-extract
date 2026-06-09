@@ -3,7 +3,6 @@ namespace Dignite.Paperbase.Documents.Exports;
 public static class ExportTemplateConsts
 {
     public static int MaxNameLength { get; set; } = 128;
-    public static int MaxColumnNameLength { get; set; } = 128;
 
     public static int MaxColumnCount { get; set; } = 100;
 

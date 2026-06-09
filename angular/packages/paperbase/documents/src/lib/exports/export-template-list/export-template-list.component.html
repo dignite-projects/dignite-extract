@@ -29,7 +29,7 @@
     </div>
   }
 
-  @if (!isLoading() && templates().length === 0) {
+  @if (!isLoading() && templates().totalCount === 0) {
     <div class="card shadow-sm">
       <div class="card-body text-center py-5">
         <i class="fas fa-file-export fa-3x text-muted mb-3 d-block"></i>
@@ -38,74 +38,116 @@
     </div>
   }
 
-  @if (!isLoading() && templates().length > 0) {
+  @if (!isLoading() && templates().totalCount > 0) {
     <div class="card shadow-sm">
-      <div class="table-responsive">
-        <table class="table table-hover mb-0 align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>{{ '::ExportTemplate:Name' | abpLocalization }}</th>
-              <th>{{ '::ExportTemplate:Format' | abpLocalization }}</th>
-              <th>{{ '::ExportTemplate:DocumentType' | abpLocalization }}</th>
-              <th>{{ '::ExportTemplate:Columns' | abpLocalization }}</th>
-              <th style="width: 160px"></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (t of templates(); track t.id) {
-              <tr>
-                <td class="fw-semibold">{{ t.name }}</td>
-                <td><span class="badge bg-secondary">{{ formatLabel(t.format) | abpLocalization }}</span></td>
-                <td>
-                  @if (documentTypeLabel(t.documentTypeId); as code) {
-                    <span class="badge bg-info text-dark">{{ code }}</span>
-                  } @else {
-                    <span class="text-muted">-</span>
-                  }
-                </td>
-                <td class="text-muted">{{ t.columns?.length ?? 0 }}</td>
-                <td class="text-end">
-                  <div class="d-flex gap-1 justify-content-end">
-                    @if (canExport) {
-                      <button
-                        class="btn btn-sm btn-outline-success"
-                        (click)="exportTemplate(t)"
-                        [disabled]="exportingId() === t.id"
-                        title="{{ '::ExportTemplate:Export' | abpLocalization }}"
-                      >
-                        @if (exportingId() === t.id) {
-                          <span class="spinner-border spinner-border-sm"></span>
-                        } @else {
-                          <i class="fas fa-download"></i>
-                        }
-                      </button>
+      <div class="card-body p-0">
+        <ng-template #actionsTemplate let-template>
+          @if (canExport || canManage) {
+            <div ngbDropdown container="body" class="d-inline-block">
+              <button type="button" class="btn btn-sm btn-primary" ngbDropdownToggle>
+                {{ 'AbpUi::Actions' | abpLocalization }}
+              </button>
+              <div ngbDropdownMenu>
+                @if (canExport) {
+                  <button
+                    type="button"
+                    ngbDropdownItem
+                    (click)="exportTemplate(template)"
+                    [disabled]="exportingId() === template.id"
+                  >
+                    @if (exportingId() === template.id) {
+                      <span class="spinner-border spinner-border-sm me-2"></span>
+                    } @else {
+                      <i class="fas fa-download me-2"></i>
                     }
-                    @if (canManage) {
-                      <button
-                        class="btn btn-sm btn-outline-secondary"
-                        (click)="openEdit(t)"
-                        title="{{ '::Edit' | abpLocalization }}"
-                      >
-                        <i class="fas fa-pen"></i>
-                      </button>
-                      <button
-                        class="btn btn-sm btn-outline-danger"
-                        (click)="delete(t)"
-                        title="{{ '::Delete' | abpLocalization }}"
-                      >
-                        <i class="fas fa-trash"></i>
-                      </button>
-                    }
-                  </div>
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
+                    {{ '::ExportTemplate:Export' | abpLocalization }}
+                  </button>
+                }
+                @if (canManage) {
+                  <button type="button" ngbDropdownItem (click)="openEdit(template)">
+                    <i class="fas fa-pen me-2"></i>
+                    {{ '::Edit' | abpLocalization }}
+                  </button>
+                  <button type="button" ngbDropdownItem (click)="delete(template)">
+                    <i class="fas fa-trash me-2"></i>
+                    {{ '::Delete' | abpLocalization }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </ng-template>
+
+        <abp-extensible-table
+          [data]="templates().items"
+          [recordsTotal]="templates().totalCount"
+          [list]="list"
+          [actionsTemplate]="actionsTemplate"
+          actionsText="AbpUi::Actions"
+          [actionsColumnWidth]="150"
+        />
       </div>
     </div>
   }
 </div>
+
+<!-- Export filter modal -->
+@if (filteringTemplate(); as tmpl) {
+  <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);" (click)="closeFilterModal()">
+    <div class="modal-dialog modal-dialog-centered" (click)="$event.stopPropagation()">
+      <div class="modal-content">
+        <form [formGroup]="filterForm" (ngSubmit)="startExport()">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-filter me-2"></i>
+              {{ '::ExportTemplate:FilterAndExport' | abpLocalization }}
+            </h5>
+            <button type="button" class="btn-close" (click)="closeFilterModal()"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">{{ '::Document:Status' | abpLocalization }}</label>
+              <select class="form-select" formControlName="lifecycleStatus">
+                <option [ngValue]="null">{{ '::Document:Filter:AllStatuses' | abpLocalization }}</option>
+                @for (opt of lifecycleStatusOptions; track opt.value) {
+                  <option [ngValue]="opt.value">{{ '::Document:Status:' + opt.key | abpLocalization }}</option>
+                }
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">{{ '::Document:Cabinet' | abpLocalization }}</label>
+              <select class="form-select" formControlName="cabinetId">
+                <option [ngValue]="null">{{ '::Document:Filter:AllCabinets' | abpLocalization }}</option>
+                @for (c of cabinets(); track c.id) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="form-label">{{ '::ExportTemplate:Filter:DateFrom' | abpLocalization }}</label>
+                <input type="date" class="form-control" formControlName="creationTimeMin" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">{{ '::ExportTemplate:Filter:DateTo' | abpLocalization }}</label>
+                <input type="date" class="form-control" formControlName="creationTimeMax" />
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeFilterModal()">
+              {{ '::Cancel' | abpLocalization }}
+            </button>
+            <button type="submit" class="btn btn-success">
+              <i class="fas fa-download me-1"></i>
+              {{ '::ExportTemplate:Export' | abpLocalization }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+}
 
 <!-- Create / Edit modal -->
 @if (editing(); as mode) {
@@ -166,14 +208,9 @@
             }
 
             <div formArrayName="columns">
-              <div class="row g-2 mb-1 text-muted small d-none d-md-flex">
-                <div class="col-md-5">{{ '::ExportTemplate:ColumnKey' | abpLocalization }}</div>
-                <div class="col-md-6">{{ '::ExportTemplate:ColumnName' | abpLocalization }}</div>
-                <div class="col-md-1"></div>
-              </div>
               @for (col of columns.controls; track $index) {
                 <div class="row g-2 mb-2 align-items-center" [formGroupName]="$index">
-                  <div class="col-md-5">
+                  <div class="col-11">
                     <select class="form-select form-select-sm" formControlName="fieldDefinitionId">
                       <option value="" disabled>
                         {{ '::ExportTemplate:ColumnKey' | abpLocalization }}
@@ -183,15 +220,7 @@
                       }
                     </select>
                   </div>
-                  <div class="col-md-6">
-                    <input
-                      type="text"
-                      class="form-control form-control-sm"
-                      formControlName="columnName"
-                      placeholder="{{ '::ExportTemplate:ColumnName' | abpLocalization }}"
-                    />
-                  </div>
-                  <div class="col-md-1 text-end">
+                  <div class="col-1 text-end">
                     <button
                       type="button"
                       class="btn btn-sm btn-outline-danger"

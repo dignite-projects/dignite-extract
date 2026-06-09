@@ -68,8 +68,7 @@ public static class PaperbaseErrorCodes
         public const string TemplateNameAlreadyExists = "Paperbase:ExportTemplateNameAlreadyExists";
         public const string TemplateRequiresColumn = "Paperbase:ExportTemplateRequiresColumn";
         public const string TemplateTooManyColumns = "Paperbase:ExportTemplateTooManyColumns";
-        public const string TemplateDuplicateColumnName = "Paperbase:ExportTemplateDuplicateColumnName";
-        public const string InvalidColumnName = "Paperbase:InvalidExportColumnName";
+        public const string TemplateDuplicateField = "Paperbase:ExportTemplateDuplicateField";
         public const string DocumentLimitExceeded = "Paperbase:ExportDocumentLimitExceeded";
     }
 

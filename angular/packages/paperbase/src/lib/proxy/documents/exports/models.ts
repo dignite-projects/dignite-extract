@@ -11,13 +11,11 @@ export interface CreateExportTemplateDto {
 
 export interface ExportColumnDto {
   fieldDefinitionId?: string;
-  columnName?: string;
   order?: number;
 }
 
 export interface ExportColumnInput {
   fieldDefinitionId: string;
-  columnName: string;
   order?: number;
 }
 
@@ -25,6 +23,9 @@ export interface ExportDocumentsInput {
   templateId?: string;
   documentIds?: string[] | null;
   lifecycleStatus?: DocumentLifecycleStatus | null;
+  cabinetId?: string | null;
+  creationTimeMin?: string | null;
+  creationTimeMax?: string | null;
 }
 
 export interface ExportTemplateDto extends EntityDto<string> {

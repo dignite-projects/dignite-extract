@@ -79,12 +79,12 @@ public class ExportTemplate : FullAuditedAggregateRoot<Guid>, IMultiTenant
         }
 
         var duplicate = columns
-            .GroupBy(c => c.ColumnName, StringComparer.Ordinal)
+            .GroupBy(c => c.FieldDefinitionId)
             .FirstOrDefault(g => g.Count() > 1);
         if (duplicate != null)
         {
-            throw new BusinessException(PaperbaseErrorCodes.Export.TemplateDuplicateColumnName)
-                .WithData("columnName", duplicate.Key);
+            throw new BusinessException(PaperbaseErrorCodes.Export.TemplateDuplicateField)
+                .WithData("fieldDefinitionId", duplicate.Key);
         }
 
         Columns = columns.OrderBy(c => c.Order).ToList();

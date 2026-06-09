@@ -31,7 +31,7 @@
   }
 
   <!-- Empty state -->
-  @if (!isLoading() && cabinets().length === 0) {
+  @if (!isLoading() && cabinets().totalCount === 0) {
     <div class="card shadow-sm">
       <div class="card-body text-center py-5">
         <i class="fas fa-folder-open fa-3x text-muted mb-3 d-block"></i>
@@ -41,52 +41,41 @@
   }
 
   <!-- Cabinets table -->
-  @if (!isLoading() && cabinets().length > 0) {
+  @if (!isLoading() && cabinets().totalCount > 0) {
     <div class="card shadow-sm">
-      <div class="table-responsive">
-        <table class="table table-hover mb-0 align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>{{ '::Cabinet:Name' | abpLocalization }}</th>
-              <th style="width: 120px"></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (cabinet of cabinets(); track cabinet.id) {
-              <tr>
-                <td class="fw-semibold">
-                  <i class="fas fa-folder text-warning me-2"></i>
-                  {{ cabinet.name }}
-                  @if (cabinet.description) {
-                    <div class="small text-muted fw-normal mt-1">{{ cabinet.description }}</div>
-                  }
-                </td>
-                <td class="text-end">
-                  <div class="d-flex gap-1 justify-content-end">
-                    @if (canUpdate) {
-                      <button
-                        class="btn btn-sm btn-outline-secondary"
-                        (click)="openEdit(cabinet)"
-                        title="{{ '::Edit' | abpLocalization }}"
-                      >
-                        <i class="fas fa-pen"></i>
-                      </button>
-                    }
-                    @if (canDelete) {
-                      <button
-                        class="btn btn-sm btn-outline-danger"
-                        (click)="delete(cabinet)"
-                        title="{{ '::Delete' | abpLocalization }}"
-                      >
-                        <i class="fas fa-trash"></i>
-                      </button>
-                    }
-                  </div>
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
+      <div class="card-body p-0">
+        <ng-template #actionsTemplate let-cabinet>
+          @if (canUpdate || canDelete) {
+            <div ngbDropdown container="body" class="d-inline-block">
+              <button type="button" class="btn btn-sm btn-primary" ngbDropdownToggle>
+                {{ 'AbpUi::Actions' | abpLocalization }}
+              </button>
+              <div ngbDropdownMenu>
+                @if (canUpdate) {
+                  <button type="button" ngbDropdownItem (click)="openEdit(cabinet)">
+                    <i class="fas fa-pen me-2"></i>
+                    {{ '::Edit' | abpLocalization }}
+                  </button>
+                }
+                @if (canDelete) {
+                  <button type="button" ngbDropdownItem (click)="delete(cabinet)">
+                    <i class="fas fa-trash me-2"></i>
+                    {{ '::Delete' | abpLocalization }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </ng-template>
+
+        <abp-extensible-table
+          [data]="cabinets().items"
+          [recordsTotal]="cabinets().totalCount"
+          [list]="list"
+          [actionsTemplate]="actionsTemplate"
+          actionsText="AbpUi::Actions"
+          [actionsColumnWidth]="150"
+        />
       </div>
     </div>
   }

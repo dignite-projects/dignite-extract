@@ -40,7 +40,7 @@
   }
 
   <!-- Empty state -->
-  @if (!isLoading() && types().length === 0) {
+  @if (!isLoading() && types().totalCount === 0) {
     <div class="card shadow-sm">
       <div class="card-body text-center py-5">
         <i class="fas fa-tags fa-3x text-muted mb-3 d-block"></i>
@@ -52,69 +52,57 @@
   }
 
   <!-- Types table -->
-  @if (!isLoading() && types().length > 0) {
+  @if (!isLoading() && types().totalCount > 0) {
     <div class="card shadow-sm">
-      <div class="table-responsive">
-        <table class="table table-hover mb-0 align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>{{ '::DocumentType:TypeCode' | abpLocalization }}</th>
-              <th>{{ '::DocumentType:DisplayName' | abpLocalization }}</th>
-              <th>{{ '::DocumentType:ConfidenceThreshold' | abpLocalization }}</th>
-              <th>{{ '::DocumentType:Priority' | abpLocalization }}</th>
-              <th style="width: 160px"></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (type of types(); track type.id) {
-              <tr>
-                <td><span class="badge bg-info text-dark">{{ type.typeCode }}</span></td>
-                <td class="fw-semibold">{{ type.displayName }}</td>
-                <td class="text-muted">{{ ((type.confidenceThreshold ?? 0) * 100).toFixed(0) }}%</td>
-                <td class="text-muted">{{ type.priority }}</td>
-                <td class="text-end">
-                  <div class="d-flex gap-1 justify-content-end">
-                    @if (showDeleted()) {
-                      @if (canManage) {
-                        <button
-                          class="btn btn-sm btn-outline-success"
-                          (click)="restore(type)"
-                          title="{{ '::DocumentType:Restore' | abpLocalization }}"
-                        >
-                          <i class="fas fa-rotate-left"></i>
-                        </button>
-                      }
-                    } @else {
-                      <button
-                        class="btn btn-sm btn-outline-primary"
-                        (click)="manageFields(type)"
-                        title="{{ '::DocumentType:ManageFields' | abpLocalization }}"
-                      >
-                        <i class="fas fa-list-ul"></i>
-                      </button>
-                      @if (canManage) {
-                        <button
-                          class="btn btn-sm btn-outline-secondary"
-                          (click)="openEdit(type)"
-                          title="{{ '::Edit' | abpLocalization }}"
-                        >
-                          <i class="fas fa-pen"></i>
-                        </button>
-                        <button
-                          class="btn btn-sm btn-outline-danger"
-                          (click)="delete(type)"
-                          title="{{ '::Delete' | abpLocalization }}"
-                        >
-                          <i class="fas fa-trash"></i>
-                        </button>
-                      }
-                    }
-                  </div>
-                </td>
-              </tr>
+      <div class="card-body p-0">
+        <ng-template #actionsTemplate let-type>
+          @if (showDeleted()) {
+            @if (canManage) {
+              <div ngbDropdown container="body" class="d-inline-block">
+                <button type="button" class="btn btn-sm btn-primary" ngbDropdownToggle>
+                  {{ 'AbpUi::Actions' | abpLocalization }}
+                </button>
+                <div ngbDropdownMenu>
+                  <button type="button" ngbDropdownItem (click)="restore(type)">
+                    <i class="fas fa-rotate-left me-2"></i>
+                    {{ '::DocumentType:Restore' | abpLocalization }}
+                  </button>
+                </div>
+              </div>
             }
-          </tbody>
-        </table>
+          } @else {
+            <div ngbDropdown container="body" class="d-inline-block">
+              <button type="button" class="btn btn-sm btn-primary" ngbDropdownToggle>
+                {{ 'AbpUi::Actions' | abpLocalization }}
+              </button>
+              <div ngbDropdownMenu>
+                <button type="button" ngbDropdownItem (click)="manageFields(type)">
+                  <i class="fas fa-list-ul me-2"></i>
+                  {{ '::DocumentType:ManageFields' | abpLocalization }}
+                </button>
+                @if (canManage) {
+                  <button type="button" ngbDropdownItem (click)="openEdit(type)">
+                    <i class="fas fa-pen me-2"></i>
+                    {{ '::Edit' | abpLocalization }}
+                  </button>
+                  <button type="button" ngbDropdownItem (click)="delete(type)">
+                    <i class="fas fa-trash me-2"></i>
+                    {{ '::Delete' | abpLocalization }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </ng-template>
+
+        <abp-extensible-table
+          [data]="types().items"
+          [recordsTotal]="types().totalCount"
+          [list]="list"
+          [actionsTemplate]="actionsTemplate"
+          actionsText="AbpUi::Actions"
+          [actionsColumnWidth]="150"
+        />
       </div>
     </div>
   }
