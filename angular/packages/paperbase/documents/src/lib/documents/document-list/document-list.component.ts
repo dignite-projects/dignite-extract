@@ -436,10 +436,12 @@ export class DocumentListComponent implements OnInit {
     this.refreshListFromFirstPage();
   }
 
-  // #284：只有"分类未定"(UnresolvedClassification)才显示确认分类按钮；必填缺失走详情页补录。
+  // #284：只有仍"需关注"(requiresReview，服务端已含 disposition 判据——已拒绝文档不再需关注)
+  // 且"分类未定"(UnresolvedClassification)才显示确认分类按钮；必填缺失走详情页补录。
   needsConfirmation(doc: DocumentListItemDto): boolean {
-    return ((doc.reviewReasons ?? DocumentReviewReasons.None) & DocumentReviewReasons.UnresolvedClassification)
-      !== DocumentReviewReasons.None;
+    return doc.requiresReview === true &&
+      ((doc.reviewReasons ?? DocumentReviewReasons.None) & DocumentReviewReasons.UnresolvedClassification)
+        !== DocumentReviewReasons.None;
   }
 
   // #284：纯可用性轴——去掉旧的 review 混判（双轴正交后两个 badge 各自渲染，不再互斥）。

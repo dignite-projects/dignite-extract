@@ -16,8 +16,14 @@ public static class ReviewReasonPolicy
     /// <summary>是否含任一 blocking 原因（Ready 闸门判据）。</summary>
     public static bool HasBlocking(DocumentReviewReasons reasons) => (reasons & Blocking) != DocumentReviewReasons.None;
 
-    /// <summary>是否含任一未解决原因（"是否需操作员关注" / 审核队列判据）。</summary>
-    public static bool RequiresAttention(DocumentReviewReasons reasons) => reasons != DocumentReviewReasons.None;
+    /// <summary>
+    /// 操作员是否仍需关注该文档（出口 <c>RequiresReview</c> / 审核队列的<b>唯一判据</b>，#284 review-fix）：
+    /// 有未解决原因<b>且</b>未被拒绝。<c>RejectReview</c> 刻意保留客观原因（拒绝可恢复），故已拒绝文档虽带原因
+    /// 也不再算"需关注"——避免详情页"已拒绝 + 待审"自相矛盾、过滤计数虚高。审核队列 EF 查询用等价内联谓词
+    /// （<c>ReviewReasons != None &amp;&amp; ReviewDisposition != Rejected</c>，见 <c>DocumentAppService.ApplyFilter</c>），两处同源。
+    /// </summary>
+    public static bool RequiresAttention(DocumentReviewReasons reasons, DocumentReviewDisposition disposition)
+        => reasons != DocumentReviewReasons.None && disposition != DocumentReviewDisposition.Rejected;
 
     /// <summary>
     /// 单个原因是否 blocking——供出口 DTO 的 <c>IsBlocking</c> 投影（服务端按 policy 填，客户端不再自行判断）。

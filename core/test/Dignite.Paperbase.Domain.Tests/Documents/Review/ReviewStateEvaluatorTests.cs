@@ -56,13 +56,20 @@ public class ReviewStateEvaluatorTests
         ReviewReasonPolicy.HasBlocking(reasons).ShouldBe(expected);
     }
 
-    // 任一未解决原因都需操作员关注（进队列）。
+    // #284 review-fix：操作员"需关注"统一判据 = 有未解决原因 且 未被拒绝（Rejected 抑制需关注——操作员已处置）。
+    // 钉死四象限 + (MissingRequiredFields, Confirmed)→true：防止把判据误写成 disposition==NotReviewed。
     [Theory]
-    [InlineData(DocumentReviewReasons.None, false)]
-    [InlineData(DocumentReviewReasons.MissingRequiredFields, true)]
-    [InlineData(DocumentReviewReasons.UnresolvedClassification, true)]
-    public void RequiresAttention_True_When_Any_Reason(DocumentReviewReasons reasons, bool expected)
+    [InlineData(DocumentReviewReasons.None, DocumentReviewDisposition.NotReviewed, false)]
+    [InlineData(DocumentReviewReasons.None, DocumentReviewDisposition.Confirmed, false)]
+    [InlineData(DocumentReviewReasons.None, DocumentReviewDisposition.Rejected, false)]
+    [InlineData(DocumentReviewReasons.UnresolvedClassification, DocumentReviewDisposition.NotReviewed, true)]
+    [InlineData(DocumentReviewReasons.MissingRequiredFields, DocumentReviewDisposition.NotReviewed, true)]
+    [InlineData(DocumentReviewReasons.MissingRequiredFields, DocumentReviewDisposition.Confirmed, true)]
+    [InlineData(DocumentReviewReasons.UnresolvedClassification, DocumentReviewDisposition.Rejected, false)]
+    [InlineData(DocumentReviewReasons.MissingRequiredFields, DocumentReviewDisposition.Rejected, false)]
+    public void RequiresAttention_True_When_Has_Reason_And_Not_Rejected(
+        DocumentReviewReasons reasons, DocumentReviewDisposition disposition, bool expected)
     {
-        ReviewReasonPolicy.RequiresAttention(reasons).ShouldBe(expected);
+        ReviewReasonPolicy.RequiresAttention(reasons, disposition).ShouldBe(expected);
     }
 }

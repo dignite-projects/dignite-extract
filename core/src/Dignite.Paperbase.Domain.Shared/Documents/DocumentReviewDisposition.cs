@@ -5,7 +5,7 @@ namespace Dignite.Paperbase.Documents;
 /// 与<b>待审原因</b>（<see cref="DocumentReviewReasons"/>，客观未解决问题）正交：处置轴只由操作员动作写
 /// （确认 / 拒绝），原因轴只由 pipeline / evaluator 写，写入点零交叉。
 /// <para>
-/// "是否需要操作员关注"由 <c>ReviewReasons != None</c> 派生，<b>不</b>在本枚举里用一个值表达——
+/// "是否需要操作员关注"由 <c>ReviewReasons != None 且本枚举 != Rejected</c> 派生（见 <see cref="ReviewReasonPolicy"/>），<b>不</b>在本枚举里用一个值表达——
 /// 旧的 <c>PendingReview</c> 已迁为 <see cref="DocumentReviewReasons.UnresolvedClassification"/>（它是"原因"不是"处置"）。
 /// 成员数值与旧 <c>DocumentReviewStatus</c> 对齐（DB 列 int 值不变）：None→NotReviewed(0)、Reviewed→Confirmed(20)、Rejected(30)。
 /// </para>

@@ -13,6 +13,7 @@ using Volo.Abp.BackgroundJobs;
 using Volo.Abp.BlobStoring;
 using Volo.Abp.EventBus.Distributed;
 using Volo.Abp.Modularity;
+using Volo.Abp.Validation;
 using Xunit;
 
 namespace Dignite.Paperbase.Documents;
@@ -146,6 +147,110 @@ public class DocumentAppService_Review_Tests
         detail.IsBlocking.ShouldBeFalse();   // MRF 是 non-blocking
         detail.MissingFieldNames.ShouldNotBeNull();
         detail.MissingFieldNames.ShouldContain("金额");
+    }
+
+    [Fact]
+    public async Task GetAsync_For_Rejected_Document_Does_Not_Report_RequiresReview()
+    {
+        // #284 review-fix：拒绝可恢复故保留客观原因(UC)，但出口 RequiresReview 必为 false、明细置空——
+        // 统一判据 RequiresAttention(reasons, disposition) 排除 Rejected，避免"已拒绝 + 待审"自相矛盾、计数虚高。
+        var rejected = await CreatePendingReviewDocumentAsync("low confidence");
+        rejected.RejectReview("scan unusable");
+        // 拒绝刻意不动 ReviewReasons：UC 原因仍在，仅 disposition 转 Rejected。
+        rejected.ReviewReasons.ShouldBe(DocumentReviewReasons.UnresolvedClassification);
+        rejected.ReviewDisposition.ShouldBe(DocumentReviewDisposition.Rejected);
+        StubGet(rejected);
+
+        var dto = await _appService.GetAsync(rejected.Id);
+
+        dto.RequiresReview.ShouldBeFalse();
+        dto.ReviewReasonDetails.ShouldBeNull();
+    }
+
+    [Fact]
+    public void ConfirmClassification_Clears_Stale_RejectionReason()
+    {
+        // #284 review-fix：操作员对已拒绝文档 Reclassify 指派类型 → ConfirmClassification 把处置转回 Confirmed，
+        // 陈旧 RejectionReason 必须清空（仅 Rejected 时该有值）。ConfirmClassification 为 internal，反射调用
+        //（与 GetAsync_With_Missing_Required_Field 的 ApplyAutomaticClassificationResult 同手法）。
+        var doc = CreateDocument();
+        doc.RejectReview("scan unusable");
+        doc.RejectionReason.ShouldBe("scan unusable");
+
+        typeof(Document)
+            .GetMethod("ConfirmClassification",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(doc, [Guid.NewGuid()]);
+
+        doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.Confirmed);
+        doc.RejectionReason.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetAsync_With_Confirmed_Type_But_Missing_Required_Field_Still_Requires_Review()
+    {
+        // #284 review-fix：操作员已确认类型(Confirmed)但字段重抽仍缺必填 → MRF 置位、disposition=Confirmed。
+        // 统一判据 disposition!=Rejected 对 Confirmed 也成立 → RequiresReview 仍 true（与 NotReviewed 不同的处置态分支，
+        // 钉死"误写成 disposition==NotReviewed"的回归）。
+        var typeId = Guid.NewGuid();
+        var doc = CreateDocument();
+        typeof(Document)
+            .GetMethod("ConfirmClassification",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(doc, [typeId]);
+        doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.Confirmed);
+        doc.SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: true);
+        StubGet(doc);
+
+        var amountDef = new FieldDefinition(
+            Guid.NewGuid(), tenantId: null, documentTypeId: typeId,
+            name: "amount", displayName: "金额", prompt: null,
+            dataType: FieldDataType.Number, displayOrder: 0, isRequired: true);
+        GetRequiredService<IFieldDefinitionRepository>()
+            .GetListAsync(typeId, Arg.Any<CancellationToken>())
+            .Returns(new List<FieldDefinition> { amountDef });
+
+        var dto = await _appService.GetAsync(doc.Id);
+
+        dto.RequiresReview.ShouldBeTrue();
+        dto.ReviewReasonDetails.ShouldNotBeNull();
+        dto.ReviewReasonDetails.ShouldContain(d => d.Reason == DocumentReviewReasons.MissingRequiredFields);
+    }
+
+    [Fact]
+    public async Task GetAsync_With_MRF_Flag_But_No_Missing_Names_Skips_Detail_But_Keeps_RequiresReview()
+    {
+        // #284 fix #4：MRF 位置位但缺失字段名解析为空（in-flight schema 漂移：曾缺的必填被软删 / 翻非必填）→
+        // 跳过空壳明细、明细返回 null，但 RequiresReview 仍 true（MRF flag 由抽取阶段权威维护，不因明细暂空翻转）。
+        var typeId = Guid.NewGuid();
+        var doc = CreateDocument();
+        typeof(Document)
+            .GetMethod("ApplyAutomaticClassificationResult",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(doc, [typeId, 0.99]);
+        doc.SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: true);
+        StubGet(doc);
+
+        // 该类型当前无必填字段（全非必填 / 已软删）→ 缺失字段名集为空。
+        GetRequiredService<IFieldDefinitionRepository>()
+            .GetListAsync(typeId, Arg.Any<CancellationToken>())
+            .Returns(new List<FieldDefinition>());
+
+        var dto = await _appService.GetAsync(doc.Id);
+
+        dto.RequiresReview.ShouldBeTrue();
+        dto.ReviewReasonDetails.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task RejectReviewAsync_With_Empty_Reason_Throws_Validation()
+    {
+        // #284：拒绝理由必填（RejectReviewInput.Reason [Required]）——空理由必须被 AppService 校验拦截。
+        var doc = await CreatePendingReviewDocumentAsync("needs review");
+        StubGet(doc);
+
+        await Should.ThrowAsync<AbpValidationException>(() =>
+            _appService.RejectReviewAsync(doc.Id, new RejectReviewInput { Reason = "" }));
     }
 
     private void StubGet(Document doc)

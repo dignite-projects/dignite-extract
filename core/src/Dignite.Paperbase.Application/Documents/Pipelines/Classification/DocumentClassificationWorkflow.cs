@@ -127,7 +127,7 @@ public class DocumentClassificationWorkflow : ITransientDependency
         if (!TryNormalizeConfidence(rawConfidence, out var confidenceScore))
         {
             Logger.LogWarning(
-                "LLM returned out-of-range classification confidence {Confidence} (typeCode={TypeCode}); routing to PendingReview.",
+                "LLM returned out-of-range classification confidence {Confidence} (typeCode={TypeCode}); routing to manual review.",
                 rawConfidence, typeCode);
             typeCode = null;
             confidenceScore = 0d;
@@ -139,9 +139,9 @@ public class DocumentClassificationWorkflow : ITransientDependency
                 rawConfidence, typeCode, confidenceScore);
         }
 
-        // Reason 由 BackgroundJob 路由：
-        //   高置信度（>= ConfidenceThreshold）→ CompleteClassificationAsync，ClassificationReason 固定为 null；
-        //   低置信度 / 无法分类       → CompleteClassificationWithLowConfidenceAsync，Reason 写入 Document.ClassificationReason。
+        // Reason（LLM 给的分类理由）随 outcome 透传给 BackgroundJob 仅作日志 / 诊断——#284 起不再持久化到 Document
+        // （旧 ClassificationReason 字段已删）：高置信度路径忽略；低置信度路径仅记 log。操作员"为什么没分对"由
+        // DocumentPipelineRun 的候选类型（ClassificationCandidates）+ 前端通用文案承载。
         // Run.StatusMessage 在两条路径下均不写入（MarkSucceeded 不接受 statusMessage），避免与技术错误信息混淆。
         var outcome = new DocumentClassificationOutcome
         {

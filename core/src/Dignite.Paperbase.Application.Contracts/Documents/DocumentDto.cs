@@ -22,7 +22,7 @@ public class DocumentDto : EntityDto<Guid>
     /// <summary>待审原因集合（#284，<c>[Flags]</c>）。客户端直接渲染原因 badge，不自行推断。</summary>
     public DocumentReviewReasons ReviewReasons { get; set; }
 
-    /// <summary>是否需要操作员关注（#284）= <c>ReviewReasons != None</c>。服务端出口以免客户端推断。</summary>
+    /// <summary>是否需要操作员关注（#284）= <c>ReviewReasons != None 且 ReviewDisposition != Rejected</c>（已拒绝文档保留客观原因但操作员已处置，不再算需关注）。服务端出口以免客户端推断。</summary>
     public bool RequiresReview { get; set; }
 
     /// <summary>待审原因结构化明细（#284）。详情厚/列表薄——仅单文档详情组装；无未解决原因时为 null。</summary>

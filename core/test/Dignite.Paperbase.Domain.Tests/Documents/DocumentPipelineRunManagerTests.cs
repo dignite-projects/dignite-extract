@@ -158,8 +158,8 @@ public class DocumentPipelineRunManagerTests : PaperbaseDomainTestBase<Paperbase
 
     // ────────────────────────────────────────────────────────────────────────────
     // Scenario 6: CompleteClassificationWithLowConfidenceAsync completes Run and
-    //             sets ReviewStatus to PendingReview (low-confidence signal is on
-    //             Document.ReviewStatus, not on the Run)
+    //             sets ReviewReasons=UnresolvedClassification (low-confidence signal is on
+    //             Document.ReviewReasons, not on the Run)
     // ────────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -214,8 +214,9 @@ public class DocumentPipelineRunManagerTests : PaperbaseDomainTestBase<Paperbase
     }
 
     // ────────────────────────────────────────────────────────────────────────────
-    // Scenario 7: CompleteManualClassificationAsync writes TypeCode, marks Reviewed,
-    //             completes Run (manual-override signal is on Document.ReviewStatus)
+    // Scenario 7: CompleteManualClassificationAsync writes TypeCode, marks
+    //             ReviewDisposition=Confirmed, completes Run (manual-override signal
+    //             is on Document.ReviewDisposition)
     // ────────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -250,13 +251,13 @@ public class DocumentPipelineRunManagerTests : PaperbaseDomainTestBase<Paperbase
     {
         var doc = CreateDocument();
 
-        // 第一次低置信度 → PendingReview（写入 ClassificationReason）
+        // 第一次低置信度 → 置 UnresolvedClassification 待审原因（#284：不再持久化分类理由）
         var run1 = await _manager.StartAsync(doc, PaperbasePipelines.Classification);
         await _manager.CompleteClassificationWithLowConfidenceAsync(doc, run1, "AI confidence too low");
         doc.ReviewReasons.ShouldBe(DocumentReviewReasons.UnresolvedClassification);
         doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.NotReviewed);
 
-        // 重试自动分类成功 → 高置信度路径必须清空 ClassificationReason
+        // 重试自动分类成功 → 高置信度路径必须清除 UnresolvedClassification 待审原因
         var run2 = await _manager.StartAsync(doc, PaperbasePipelines.Classification);
         var contractType = CreateContractType();
         await _manager.CompleteClassificationAsync(doc, run2, contractType, 0.95);
@@ -265,6 +266,27 @@ public class DocumentPipelineRunManagerTests : PaperbaseDomainTestBase<Paperbase
         doc.DocumentTypeId.ShouldBe(contractType.Id);
         doc.ClassificationConfidence.ShouldBe(0.95);
         doc.ReviewReasons.ShouldBe(DocumentReviewReasons.None); // 高置信度路径清除待审原因
+    }
+
+    [Fact]
+    public async Task AutoClassification_After_Reject_Clears_Stale_RejectionReason()
+    {
+        // #284 review-fix：拒绝可恢复——被拒文档（RejectionReason 有值）经高置信度自动重分类
+        // （ApplyAutomaticClassificationResult）后，陈旧 RejectionReason 必须清空、处置回 NotReviewed
+        //（RejectionReason 仅在 ReviewDisposition=Rejected 时该有值）。
+        var doc = CreateDocument();
+
+        var run1 = await _manager.StartAsync(doc, PaperbasePipelines.Classification);
+        await _manager.CompleteClassificationWithLowConfidenceAsync(doc, run1, "AI confidence too low");
+        doc.RejectReview("scan unusable");
+        doc.RejectionReason.ShouldBe("scan unusable");
+        doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.Rejected);
+
+        var run2 = await _manager.StartAsync(doc, PaperbasePipelines.Classification);
+        await _manager.CompleteClassificationAsync(doc, run2, CreateContractType(), 0.95);
+
+        doc.RejectionReason.ShouldBeNull();
+        doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.NotReviewed);
     }
 
     // ────────────────────────────────────────────────────────────────────────────

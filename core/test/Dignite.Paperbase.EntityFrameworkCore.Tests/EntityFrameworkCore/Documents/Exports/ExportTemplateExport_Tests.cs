@@ -107,7 +107,9 @@ public class ExportTemplateExport_Tests : PaperbaseEntityFrameworkCoreTestBase
 
         // 固定系统字段列在前（LifecycleStatus / ReviewStatus / Title），模板抽取列在后。
         csv.ShouldContain("LifecycleStatus,ReviewStatus,Title,金额,对方");
-        csv.ShouldContain("Uploaded,None,Invoice A,1000,Acme");
+        // #284：ReviewStatus 列值取 ReviewDisposition（DB 列名保持 "ReviewStatus" 不变以稳定导出 schema）。
+        // 默认处置 NotReviewed；UC（分类未定）文档 DocumentTypeId=null，被类型绑定导出过滤掉、不会出现在此处。
+        csv.ShouldContain("Uploaded,NotReviewed,Invoice A,1000,Acme");
     }
 
     [Fact]

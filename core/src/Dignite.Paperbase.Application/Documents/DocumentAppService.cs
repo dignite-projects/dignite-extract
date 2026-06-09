@@ -632,7 +632,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
     }
 
     /// <summary>
-    /// Confirm 与 Reclassify 共享实现：按不可变 DocumentTypeId 解析类型后写入 Reviewed 状态，
+    /// Confirm 与 Reclassify 共享实现：按不可变 DocumentTypeId 解析类型后写入 ReviewDisposition=Confirmed（清 UnresolvedClassification 原因），
     /// 发布 DocumentClassifiedEto（投射回可重命名 TypeCode 出口契约）让下游消费方重跑字段抽取。
     /// </summary>
     protected virtual async Task<DocumentDto> ApplyManualClassificationAsync(Guid id, Guid documentTypeId)
@@ -717,7 +717,8 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
         dto.ExtractionIsComplete = document.ExtractionMetadata?.IsComplete ?? true;
         dto.ExtractionIncompleteReason = document.ExtractionMetadata?.IncompleteReason;
         // #284：审核轴——RequiresReview 派生 + 详情厚明细（含缺失必填字段名）。服务端算，客户端纯渲染。
-        dto.RequiresReview = ReviewReasonPolicy.RequiresAttention(document.ReviewReasons);
+        // 统一判据（含 disposition）：已拒绝文档虽保留客观原因也不算"需关注"，明细同步置空，避免"已拒绝 + 待审"自相矛盾。
+        dto.RequiresReview = ReviewReasonPolicy.RequiresAttention(document.ReviewReasons, document.ReviewDisposition);
         dto.ReviewReasonDetails = await BuildReviewReasonDetailsAsync(document);
         return dto;
     }
@@ -737,7 +738,7 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
             dtos[i].DocumentTypeCode = ResolveTypeCode(documents[i].DocumentTypeId, typeCodes);
             dtos[i].ExtractedFields = AssembleExtractedFields(documents[i].ExtractedFieldValues, fieldNames);
             // #284：列表薄——只出 RequiresReview（badge 用），不组装明细（详情页才有，避免列表 N+1）。
-            dtos[i].RequiresReview = ReviewReasonPolicy.RequiresAttention(documents[i].ReviewReasons);
+            dtos[i].RequiresReview = ReviewReasonPolicy.RequiresAttention(documents[i].ReviewReasons, documents[i].ReviewDisposition);
         }
     }
 
@@ -747,7 +748,8 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
     /// </summary>
     protected virtual async Task<List<ReviewReasonDetailDto>?> BuildReviewReasonDetailsAsync(Document document)
     {
-        if (document.ReviewReasons == DocumentReviewReasons.None)
+        // 与 RequiresReview 同源判据：无未解决原因 / 已拒绝（操作员已处置）→ 不组装明细。
+        if (!ReviewReasonPolicy.RequiresAttention(document.ReviewReasons, document.ReviewDisposition))
         {
             return null;
         }
@@ -765,18 +767,35 @@ public class DocumentAppService : PaperbaseAppService, IDocumentAppService
 
         if ((document.ReviewReasons & DocumentReviewReasons.MissingRequiredFields) != DocumentReviewReasons.None)
         {
-            details.Add(new ReviewReasonDetailDto
+            // MRF 位与缺失字段名可能短暂不一致（in-flight 改 schema / 重抽未落）：字段名为空时跳过该明细，
+            // 不渲染"缺失必填：0 项"的空壳条目。MRF flag 本身仍由字段抽取阶段权威维护。
+            var missingFieldNames = await BuildMissingRequiredFieldNamesAsync(document);
+            if (missingFieldNames.Count > 0)
             {
-                Reason = DocumentReviewReasons.MissingRequiredFields,
-                IsBlocking = ReviewReasonPolicy.IsBlocking(DocumentReviewReasons.MissingRequiredFields),
-                MissingFieldNames = await BuildMissingRequiredFieldNamesAsync(document)
-            });
+                details.Add(new ReviewReasonDetailDto
+                {
+                    Reason = DocumentReviewReasons.MissingRequiredFields,
+                    IsBlocking = ReviewReasonPolicy.IsBlocking(DocumentReviewReasons.MissingRequiredFields),
+                    MissingFieldNames = missingFieldNames
+                });
+            }
         }
 
-        return details;
+        // 全部原因位的明细都被跳过（如 MRF 唯一原因但字段名暂空）→ 返回 null 而非空数组，
+        // 与"无明细"语义统一（前端 reviewReasonDetails?.length 判定一致）。RequiresReview 仍由上游独立判据决定。
+        return details.Count > 0 ? details : null;
     }
 
-    /// <summary>缺失必填字段的 DisplayName（该类型当前 IsRequired 定义中未出现在已抽到值集合里的）。</summary>
+    /// <summary>
+    /// 缺失必填字段的 DisplayName（该类型当前 IsRequired 定义中未出现在已抽到值集合里的）。
+    /// <para>
+    /// #284：这里<b>故意不复用</b> <see cref="ResolveReferenceMapsAsync"/>，二者在 soft-delete 轴上语义相反、键也不同——
+    /// <c>ResolveReferenceMaps</c> 用 <c>Disable&lt;ISoftDelete&gt;</c> 按<b>已抽值的 FieldDefinitionId</b> 查，为的是让历史文档
+    /// 引用的已归档字段仍能在出口解析出字段名（值不成孤儿）；而本方法要找的是「当前仍必填却<b>缺失</b>的字段」，必须只看
+    /// <b>active</b> 定义、按 <b>DocumentTypeId</b> 全量查（缺失项天然不在 by-id 映射里）。已软删的字段不再必填，绝不能误报为待补录。
+    /// 本方法仅详情页单文档调用一次（非列表、非 N+1），无合并的性能动机。
+    /// </para>
+    /// </summary>
     protected virtual async Task<List<string>> BuildMissingRequiredFieldNamesAsync(Document document)
     {
         if (!document.DocumentTypeId.HasValue)

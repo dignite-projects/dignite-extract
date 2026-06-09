@@ -20,7 +20,7 @@ public class DocumentListItemDto : EntityDto<Guid>
     /// <summary>待审原因集合（#284，<c>[Flags]</c>）——列表用原因 badge 区分待分类确认 / 待补录字段。</summary>
     public DocumentReviewReasons ReviewReasons { get; set; }
 
-    /// <summary>是否需要操作员关注（#284）= <c>ReviewReasons != None</c>。列表薄：不带明细，详情页才有。</summary>
+    /// <summary>是否需要操作员关注（#284）= <c>ReviewReasons != None 且 ReviewDisposition != Rejected</c>。列表薄：不带明细，详情页才有。</summary>
     public bool RequiresReview { get; set; }
 
     public double ClassificationConfidence { get; set; }

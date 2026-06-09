@@ -46,8 +46,9 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// <summary>
     /// 人工审核<b>处置阶段</b>（操作员动作轴，#284）。NotReviewed（默认）/ Confirmed（人工确认类型）/
     /// Rejected（操作员拒绝，可恢复——后续 Reclassify 会转回 Confirmed）。
-    /// 与<b>待审原因</b>（<see cref="ReviewReasons"/>）正交：本字段只由操作员动作写；
-    /// "是否需操作员关注"由 <c>ReviewReasons != None</c> 派生，不在本字段表达。
+    /// 与<b>待审原因</b>（<see cref="ReviewReasons"/>）正交：本字段只由操作员动作写。
+    /// "是否需操作员关注"由 <see cref="ReviewReasonPolicy.RequiresAttention(DocumentReviewReasons, DocumentReviewDisposition)"/>
+    /// 派生（<c>ReviewReasons != None 且本字段 != Rejected</c>）——Rejected 抑制需关注（操作员已处置），其余仅由原因轴驱动。
     /// </summary>
     public virtual DocumentReviewDisposition ReviewDisposition { get; private set; }
 
@@ -262,6 +263,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         ClassificationConfidence = Check.Range(classificationConfidence, nameof(classificationConfidence), 0d, 1d);
         SetReviewReason(DocumentReviewReasons.UnresolvedClassification, present: false);
         ReviewDisposition = DocumentReviewDisposition.NotReviewed;
+        RejectionReason = null; // #284 review-fix：离开 Rejected 处置 → 清陈旧拒绝理由（仅 Rejected 时该有值）
     }
 
     /// <summary>
@@ -283,6 +285,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         SetReviewReason(DocumentReviewReasons.UnresolvedClassification, present: true);
         SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: false);
         ReviewDisposition = DocumentReviewDisposition.NotReviewed;
+        RejectionReason = null; // #284 review-fix：离开 Rejected 处置 → 清陈旧拒绝理由
         _extractedFieldValues.Clear();
     }
 
@@ -294,6 +297,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         SetReviewReason(DocumentReviewReasons.UnresolvedClassification, present: false);
         SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: false);
         ReviewDisposition = DocumentReviewDisposition.Confirmed;
+        RejectionReason = null; // #284 review-fix：拒绝可恢复——Reclassify/Confirm 后清陈旧拒绝理由
     }
 
     /// <summary>
