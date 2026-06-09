@@ -69,8 +69,9 @@ public class DocumentFieldReextractionDispatcherJob
                 foreach (var id in ids)
                 {
                     // 批量路径刻意不做 EnsureNotInProgress（与单篇 ReextractFieldsAsync 不对称）：并发的批量 + 单篇
-                    // 重抽可能让同一文档跑两个 field-extraction run，但 FieldExtractionService 的 SetFields 整组替换幂等，
-                    // 最坏只是多一次 LLM 成本 + last-writer-wins（写同样内容）。与本文件链式「分叉」同源的已接受代价。
+                    // 重抽可能让同一文档跑两个 field-extraction run，但 FieldExtractionService 的 SetFields 整组替换幂等。
+                    // 并发写同一文档时 Document 的乐观并发戳让落败者抛 AbpDbConcurrencyException → run 标记 Failed →
+                    // ABP 重试干净重抽，终态一致。最坏只是多一次 LLM 成本——与本文件链式「分叉」同源的已接受代价。
                     await _backgroundJobManager.EnqueueAsync(
                         new DocumentFieldExtractionJobArgs { DocumentId = id });
                 }
