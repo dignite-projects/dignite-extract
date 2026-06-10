@@ -36,10 +36,10 @@
             <div class="fw-semibold mb-1">
               {{ '::Document:Reprocess:AffectedCount' | abpLocalization: ((p.documentCount | number) ?? '') }}
             </div>
-            @if (p.fieldNames.length > 0) {
+            @if ((p.fieldNames?.length ?? 0) > 0) {
               <div class="small text-muted mb-1">{{ '::Document:Reprocess:FieldExtraction:FieldsToExtract' | abpLocalization }}</div>
               <div class="d-flex flex-wrap gap-1">
-                @for (name of p.fieldNames; track name) {
+                @for (name of (p.fieldNames ?? []); track name) {
                   <span class="badge bg-info text-dark">{{ name }}</span>
                 }
               </div>

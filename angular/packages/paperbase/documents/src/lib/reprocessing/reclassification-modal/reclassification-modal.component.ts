@@ -96,7 +96,7 @@ export class ReclassificationModalComponent implements OnInit {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe(dto => {
-        this.documentCount.set(dto.documentCount);
+        this.documentCount.set(dto.documentCount ?? null);
         this.isLoadingPreview.set(false);
       });
 

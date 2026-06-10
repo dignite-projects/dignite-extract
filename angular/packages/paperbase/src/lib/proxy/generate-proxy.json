@@ -3000,6 +3000,23 @@
                   }
                 },
                 {
+                  "name": "ReextractFieldsAsync",
+                  "parametersOnMethod": [
+                    {
+                      "name": "id",
+                      "typeAsString": "System.Guid, System.Private.CoreLib",
+                      "type": "System.Guid",
+                      "typeSimple": "string",
+                      "isOptional": false,
+                      "defaultValue": null
+                    }
+                  ],
+                  "returnValue": {
+                    "type": "System.Void",
+                    "typeSimple": "System.Void"
+                  }
+                },
+                {
                   "name": "UpdateExtractedFieldsAsync",
                   "parametersOnMethod": [
                     {
@@ -3676,6 +3693,44 @@
               "name": "RerecognizeAsync",
               "httpMethod": "POST",
               "url": "api/paperbase/documents/{id}/rerecognize",
+              "supportedVersions": [],
+              "parametersOnMethod": [
+                {
+                  "name": "id",
+                  "typeAsString": "System.Guid, System.Private.CoreLib",
+                  "type": "System.Guid",
+                  "typeSimple": "string",
+                  "isOptional": false,
+                  "defaultValue": null
+                }
+              ],
+              "parameters": [
+                {
+                  "nameOnMethod": "id",
+                  "name": "id",
+                  "jsonName": null,
+                  "type": "System.Guid",
+                  "typeSimple": "string",
+                  "isOptional": false,
+                  "defaultValue": null,
+                  "constraintTypes": [],
+                  "bindingSourceId": "Path",
+                  "descriptorName": ""
+                }
+              ],
+              "returnValue": {
+                "type": "System.Void",
+                "typeSimple": "System.Void"
+              },
+              "allowAnonymous": null,
+              "authorizeDatas": [],
+              "implementFrom": "Dignite.Paperbase.Documents.IDocumentAppService"
+            },
+            "ReextractFieldsAsyncById": {
+              "uniqueName": "ReextractFieldsAsyncById",
+              "name": "ReextractFieldsAsync",
+              "httpMethod": "POST",
+              "url": "api/paperbase/documents/{id}/reextract-fields",
               "supportedVersions": [],
               "parametersOnMethod": [
                 {
@@ -4978,6 +5033,244 @@
               "allowAnonymous": null,
               "authorizeDatas": [],
               "implementFrom": "Dignite.Paperbase.Documents.Pipelines.IDocumentPipelineRunAppService"
+            }
+          }
+        },
+        "Dignite.Paperbase.HttpApi.Documents.Reprocessing.DocumentReprocessingController": {
+          "controllerName": "DocumentReprocessing",
+          "controllerGroupName": "DocumentReprocessing",
+          "isRemoteService": true,
+          "isIntegrationService": false,
+          "apiVersion": null,
+          "type": "Dignite.Paperbase.HttpApi.Documents.Reprocessing.DocumentReprocessingController",
+          "interfaces": [
+            {
+              "type": "Dignite.Paperbase.Documents.Reprocessing.IDocumentReprocessingAppService",
+              "name": "IDocumentReprocessingAppService",
+              "methods": [
+                {
+                  "name": "PreviewFieldExtractionAsync",
+                  "parametersOnMethod": [
+                    {
+                      "name": "documentTypeId",
+                      "typeAsString": "System.Guid, System.Private.CoreLib",
+                      "type": "System.Guid",
+                      "typeSimple": "string",
+                      "isOptional": false,
+                      "defaultValue": null
+                    }
+                  ],
+                  "returnValue": {
+                    "type": "Dignite.Paperbase.Documents.Reprocessing.FieldReextractionPreviewDto",
+                    "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.FieldReextractionPreviewDto"
+                  }
+                },
+                {
+                  "name": "StartFieldExtractionAsync",
+                  "parametersOnMethod": [
+                    {
+                      "name": "input",
+                      "typeAsString": "Dignite.Paperbase.Documents.Reprocessing.StartFieldReextractionInput, Dignite.Paperbase.Application.Contracts",
+                      "type": "Dignite.Paperbase.Documents.Reprocessing.StartFieldReextractionInput",
+                      "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.StartFieldReextractionInput",
+                      "isOptional": false,
+                      "defaultValue": null
+                    }
+                  ],
+                  "returnValue": {
+                    "type": "Dignite.Paperbase.Documents.Reprocessing.ReprocessingStartResultDto",
+                    "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReprocessingStartResultDto"
+                  }
+                },
+                {
+                  "name": "PreviewReclassificationAsync",
+                  "parametersOnMethod": [
+                    {
+                      "name": "input",
+                      "typeAsString": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput, Dignite.Paperbase.Application.Contracts",
+                      "type": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                      "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                      "isOptional": false,
+                      "defaultValue": null
+                    }
+                  ],
+                  "returnValue": {
+                    "type": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationPreviewDto",
+                    "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationPreviewDto"
+                  }
+                },
+                {
+                  "name": "StartReclassificationAsync",
+                  "parametersOnMethod": [
+                    {
+                      "name": "input",
+                      "typeAsString": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput, Dignite.Paperbase.Application.Contracts",
+                      "type": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                      "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                      "isOptional": false,
+                      "defaultValue": null
+                    }
+                  ],
+                  "returnValue": {
+                    "type": "Dignite.Paperbase.Documents.Reprocessing.ReprocessingStartResultDto",
+                    "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReprocessingStartResultDto"
+                  }
+                }
+              ]
+            }
+          ],
+          "actions": {
+            "PreviewFieldExtractionAsyncByDocumentTypeId": {
+              "uniqueName": "PreviewFieldExtractionAsyncByDocumentTypeId",
+              "name": "PreviewFieldExtractionAsync",
+              "httpMethod": "GET",
+              "url": "api/paperbase/document-reprocessing/field-extraction/preview",
+              "supportedVersions": [],
+              "parametersOnMethod": [
+                {
+                  "name": "documentTypeId",
+                  "typeAsString": "System.Guid, System.Private.CoreLib",
+                  "type": "System.Guid",
+                  "typeSimple": "string",
+                  "isOptional": false,
+                  "defaultValue": null
+                }
+              ],
+              "parameters": [
+                {
+                  "nameOnMethod": "documentTypeId",
+                  "name": "documentTypeId",
+                  "jsonName": null,
+                  "type": "System.Guid",
+                  "typeSimple": "string",
+                  "isOptional": false,
+                  "defaultValue": null,
+                  "constraintTypes": null,
+                  "bindingSourceId": "ModelBinding",
+                  "descriptorName": ""
+                }
+              ],
+              "returnValue": {
+                "type": "Dignite.Paperbase.Documents.Reprocessing.FieldReextractionPreviewDto",
+                "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.FieldReextractionPreviewDto"
+              },
+              "allowAnonymous": null,
+              "authorizeDatas": [],
+              "implementFrom": "Dignite.Paperbase.Documents.Reprocessing.IDocumentReprocessingAppService"
+            },
+            "StartFieldExtractionAsyncByInput": {
+              "uniqueName": "StartFieldExtractionAsyncByInput",
+              "name": "StartFieldExtractionAsync",
+              "httpMethod": "POST",
+              "url": "api/paperbase/document-reprocessing/field-extraction",
+              "supportedVersions": [],
+              "parametersOnMethod": [
+                {
+                  "name": "input",
+                  "typeAsString": "Dignite.Paperbase.Documents.Reprocessing.StartFieldReextractionInput, Dignite.Paperbase.Application.Contracts",
+                  "type": "Dignite.Paperbase.Documents.Reprocessing.StartFieldReextractionInput",
+                  "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.StartFieldReextractionInput",
+                  "isOptional": false,
+                  "defaultValue": null
+                }
+              ],
+              "parameters": [
+                {
+                  "nameOnMethod": "input",
+                  "name": "input",
+                  "jsonName": null,
+                  "type": "Dignite.Paperbase.Documents.Reprocessing.StartFieldReextractionInput",
+                  "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.StartFieldReextractionInput",
+                  "isOptional": false,
+                  "defaultValue": null,
+                  "constraintTypes": null,
+                  "bindingSourceId": "Body",
+                  "descriptorName": ""
+                }
+              ],
+              "returnValue": {
+                "type": "Dignite.Paperbase.Documents.Reprocessing.ReprocessingStartResultDto",
+                "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReprocessingStartResultDto"
+              },
+              "allowAnonymous": null,
+              "authorizeDatas": [],
+              "implementFrom": "Dignite.Paperbase.Documents.Reprocessing.IDocumentReprocessingAppService"
+            },
+            "PreviewReclassificationAsyncByInput": {
+              "uniqueName": "PreviewReclassificationAsyncByInput",
+              "name": "PreviewReclassificationAsync",
+              "httpMethod": "POST",
+              "url": "api/paperbase/document-reprocessing/reclassification/preview",
+              "supportedVersions": [],
+              "parametersOnMethod": [
+                {
+                  "name": "input",
+                  "typeAsString": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput, Dignite.Paperbase.Application.Contracts",
+                  "type": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                  "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                  "isOptional": false,
+                  "defaultValue": null
+                }
+              ],
+              "parameters": [
+                {
+                  "nameOnMethod": "input",
+                  "name": "input",
+                  "jsonName": null,
+                  "type": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                  "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                  "isOptional": false,
+                  "defaultValue": null,
+                  "constraintTypes": null,
+                  "bindingSourceId": "Body",
+                  "descriptorName": ""
+                }
+              ],
+              "returnValue": {
+                "type": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationPreviewDto",
+                "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationPreviewDto"
+              },
+              "allowAnonymous": null,
+              "authorizeDatas": [],
+              "implementFrom": "Dignite.Paperbase.Documents.Reprocessing.IDocumentReprocessingAppService"
+            },
+            "StartReclassificationAsyncByInput": {
+              "uniqueName": "StartReclassificationAsyncByInput",
+              "name": "StartReclassificationAsync",
+              "httpMethod": "POST",
+              "url": "api/paperbase/document-reprocessing/reclassification",
+              "supportedVersions": [],
+              "parametersOnMethod": [
+                {
+                  "name": "input",
+                  "typeAsString": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput, Dignite.Paperbase.Application.Contracts",
+                  "type": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                  "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                  "isOptional": false,
+                  "defaultValue": null
+                }
+              ],
+              "parameters": [
+                {
+                  "nameOnMethod": "input",
+                  "name": "input",
+                  "jsonName": null,
+                  "type": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                  "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput",
+                  "isOptional": false,
+                  "defaultValue": null,
+                  "constraintTypes": null,
+                  "bindingSourceId": "Body",
+                  "descriptorName": ""
+                }
+              ],
+              "returnValue": {
+                "type": "Dignite.Paperbase.Documents.Reprocessing.ReprocessingStartResultDto",
+                "typeSimple": "Dignite.Paperbase.Documents.Reprocessing.ReprocessingStartResultDto"
+              },
+              "allowAnonymous": null,
+              "authorizeDatas": [],
+              "implementFrom": "Dignite.Paperbase.Documents.Reprocessing.IDocumentReprocessingAppService"
             }
           }
         },
@@ -8561,6 +8854,184 @@
           "isRequired": true,
           "minLength": 0,
           "maxLength": 2048,
+          "minimum": null,
+          "maximum": null,
+          "regex": null,
+          "isNullable": false
+        }
+      ]
+    },
+    "Dignite.Paperbase.Documents.Reprocessing.FieldReextractionPreviewDto": {
+      "baseType": null,
+      "isEnum": false,
+      "enumNames": null,
+      "enumValues": null,
+      "genericArguments": null,
+      "properties": [
+        {
+          "name": "DocumentTypeId",
+          "jsonName": null,
+          "type": "System.Guid",
+          "typeSimple": "string",
+          "isRequired": false,
+          "minLength": null,
+          "maxLength": null,
+          "minimum": null,
+          "maximum": null,
+          "regex": null,
+          "isNullable": false
+        },
+        {
+          "name": "DocumentCount",
+          "jsonName": null,
+          "type": "System.Int64",
+          "typeSimple": "number",
+          "isRequired": false,
+          "minLength": null,
+          "maxLength": null,
+          "minimum": null,
+          "maximum": null,
+          "regex": null,
+          "isNullable": false
+        },
+        {
+          "name": "FieldNames",
+          "jsonName": null,
+          "type": "[System.String]",
+          "typeSimple": "[string]",
+          "isRequired": false,
+          "minLength": null,
+          "maxLength": null,
+          "minimum": null,
+          "maximum": null,
+          "regex": null,
+          "isNullable": false
+        }
+      ]
+    },
+    "Dignite.Paperbase.Documents.Reprocessing.ReclassificationPreviewDto": {
+      "baseType": null,
+      "isEnum": false,
+      "enumNames": null,
+      "enumValues": null,
+      "genericArguments": null,
+      "properties": [
+        {
+          "name": "DocumentCount",
+          "jsonName": null,
+          "type": "System.Int64",
+          "typeSimple": "number",
+          "isRequired": false,
+          "minLength": null,
+          "maxLength": null,
+          "minimum": null,
+          "maximum": null,
+          "regex": null,
+          "isNullable": false
+        }
+      ]
+    },
+    "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScope": {
+      "baseType": "System.Enum",
+      "isEnum": true,
+      "enumNames": [
+        "OnlyCurrentType",
+        "AllDocuments",
+        "PendingReviewQueue"
+      ],
+      "enumValues": [
+        0,
+        10,
+        20
+      ],
+      "genericArguments": null,
+      "properties": null
+    },
+    "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScopeInput": {
+      "baseType": null,
+      "isEnum": false,
+      "enumNames": null,
+      "enumValues": null,
+      "genericArguments": null,
+      "properties": [
+        {
+          "name": "Scope",
+          "jsonName": null,
+          "type": "Dignite.Paperbase.Documents.Reprocessing.ReclassificationScope",
+          "typeSimple": "enum",
+          "isRequired": true,
+          "minLength": null,
+          "maxLength": null,
+          "minimum": null,
+          "maximum": null,
+          "regex": null,
+          "isNullable": false
+        },
+        {
+          "name": "DocumentTypeId",
+          "jsonName": null,
+          "type": "System.Guid?",
+          "typeSimple": "string?",
+          "isRequired": false,
+          "minLength": null,
+          "maxLength": null,
+          "minimum": null,
+          "maximum": null,
+          "regex": null,
+          "isNullable": true
+        },
+        {
+          "name": "IncludeManuallyConfirmed",
+          "jsonName": null,
+          "type": "System.Boolean",
+          "typeSimple": "boolean",
+          "isRequired": false,
+          "minLength": null,
+          "maxLength": null,
+          "minimum": null,
+          "maximum": null,
+          "regex": null,
+          "isNullable": false
+        }
+      ]
+    },
+    "Dignite.Paperbase.Documents.Reprocessing.ReprocessingStartResultDto": {
+      "baseType": null,
+      "isEnum": false,
+      "enumNames": null,
+      "enumValues": null,
+      "genericArguments": null,
+      "properties": [
+        {
+          "name": "EstimatedDocumentCount",
+          "jsonName": null,
+          "type": "System.Int64",
+          "typeSimple": "number",
+          "isRequired": false,
+          "minLength": null,
+          "maxLength": null,
+          "minimum": null,
+          "maximum": null,
+          "regex": null,
+          "isNullable": false
+        }
+      ]
+    },
+    "Dignite.Paperbase.Documents.Reprocessing.StartFieldReextractionInput": {
+      "baseType": null,
+      "isEnum": false,
+      "enumNames": null,
+      "enumValues": null,
+      "genericArguments": null,
+      "properties": [
+        {
+          "name": "DocumentTypeId",
+          "jsonName": null,
+          "type": "System.Guid",
+          "typeSimple": "string",
+          "isRequired": true,
+          "minLength": null,
+          "maxLength": null,
           "minimum": null,
           "maximum": null,
           "regex": null,

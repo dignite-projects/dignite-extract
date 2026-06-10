@@ -1,23 +1,23 @@
 import type { ReclassificationScope } from './reclassification-scope.enum';
 
 export interface FieldReextractionPreviewDto {
-  documentTypeId: string;
-  documentCount: number;
-  fieldNames: string[];
+  documentTypeId?: string;
+  documentCount?: number;
+  fieldNames?: string[];
 }
 
 export interface ReclassificationPreviewDto {
-  documentCount: number;
+  documentCount?: number;
 }
 
 export interface ReclassificationScopeInput {
   scope: ReclassificationScope;
-  documentTypeId?: string;
-  includeManuallyConfirmed: boolean;
+  documentTypeId?: string | null;
+  includeManuallyConfirmed?: boolean;
 }
 
 export interface ReprocessingStartResultDto {
-  estimatedDocumentCount: number;
+  estimatedDocumentCount?: number;
 }
 
 export interface StartFieldReextractionInput {
