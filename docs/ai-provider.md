@@ -176,7 +176,7 @@ These knobs describe *how Paperbase calls the model* (language hint, text trunca
 | Key | Default | Description |
 | --- | --- | --- |
 | `DefaultLanguage` | `"ja"` | Language hint appended to every system prompt. Match this to your primary user base — Paperbase prompts are written language-agnostic and switch via this hint |
-| `MaxTextLengthPerExtraction` | `8000` | Per-call character cap on Markdown fed to classification / field extraction. CJK-safe (one character ≈ one CJK glyph). Raise for long contracts / policies if your model's context window allows |
+| `MaxTextLengthPerExtraction` | `8000` | Per-call character cap on Markdown fed to **classification** and **cabinet suggestion** (both only need the document's opening for a verdict). **Field extraction is not capped** — it sends the full Markdown, since a type-bound field can appear anywhere in the document and tail truncation would silently drop it. CJK-safe (one character ≈ one CJK glyph). Raise for long contracts / policies if your model's context window allows |
 
 Per-pipeline tuning lives in `PaperbaseAIBehavior` — see [classification.md](classification.md) for the keys the classification workflow reads.
 

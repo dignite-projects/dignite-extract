@@ -113,6 +113,7 @@ Feature docs (start here for any specific topic):
 * [Local development setup](./docs/local-development.md) — prerequisites, Docker sidecars, configuration, troubleshooting
 * [Text extraction](./docs/text-extraction.md) — Markdown-first contract, PaddleOCR / Azure DI configuration
 * [Classification](./docs/classification.md) — document-type pipeline and prompt tuning
+* [Reprocessing](./docs/reprocessing.md) — bulk re-run of classification / field extraction over existing documents after a config change
 * [AI provider](./docs/ai-provider.md) — provider wiring for the two keyed chat clients (title generator + structured)
 * [Observability](./docs/observability.md) — OpenTelemetry pipeline, aspire-dashboard for local dev, switching OTLP backends
 * [Pipeline runs](./docs/pipeline-runs.md) — run history and review-UI payloads

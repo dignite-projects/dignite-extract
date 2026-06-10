@@ -67,3 +67,4 @@ The prompt language follows `PaperbaseAIBehavior:DefaultLanguage` (see [ai-provi
 
 - [Text extraction](text-extraction.md) — produces the `Document.Markdown` consumed here
 - [Pipeline runs](pipeline-runs.md) — the `Candidates` payload schema for the review UI
+- [Reprocessing](reprocessing.md) — re-running classification over existing documents in bulk after you change a type's prompt / threshold or add a new type
