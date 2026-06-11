@@ -5,39 +5,39 @@
         "imports":[
           {
             "names":[
-              "PAPERBASE_ROUTES"
+              "DOCUMENTAI_ROUTES"
             ],
-            "namespace": "@dignite/paperbase"
+            "namespace": "@dignite/document-ai"
           } 
         ],
         "routes":[
-          "{ path: 'paperbase', children: PAPERBASE_ROUTES, canActivate: [authGuard] }"
+          "{ path: 'document-ai', children: DOCUMENTAI_ROUTES, canActivate: [authGuard] }"
         ]
       },
       "appModuleConfiguration":{
         "imports":[
           {
             "names":[
-              "providePaperbase"
+              "provideDocumentAI"
             ],
-            "namespace": "@dignite/paperbase/config"
+            "namespace": "@dignite/document-ai/config"
           }
         ],
         "providerNames":[
-          "providePaperbase()"
+          "provideDocumentAI()"
         ]
       },
       "tsJsonPathRecordConfigurations":[
         {
-          "name": "@dignite/paperbase",
+          "name": "@dignite/document-ai",
           "paths": [
-            "angular/projects/paperbase/src/public-api.ts"
+            "angular/projects/document-ai/src/public-api.ts"
           ]
         },
         {
-          "name": "@dignite/paperbase/config",
+          "name": "@dignite/document-ai/config",
           "paths": [
-            "angular/projects/paperbase/config/src/public-api.ts"
+            "angular/projects/document-ai/config/src/public-api.ts"
           ]
         }
       ]
