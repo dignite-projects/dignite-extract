@@ -49,7 +49,7 @@ A manually confirmed type (`ReviewDisposition = Confirmed`) is a higher-priority
 
 On the document detail page, next to **Re-recognize**, a lighter **Re-extract fields** button re-runs only field extraction for that one document on its existing classification — no reclassification, no OCR. Use it when you tweaked a field definition and want to refresh one document without touching its type.
 
-It differs from **Re-recognize** (`RerecognizeAsync`, [#263](https://github.com/dignite-projects/dignite-paperbase/issues/263)), which re-runs *classification* and cascades — a destructive operation. Re-extract fields is the safe leaf version. It is rejected if the document is in the recycle bin, not yet classified, has no Markdown, or already has a field-extraction run in progress.
+It differs from **Re-recognize** (`RerecognizeAsync`, [#263](https://github.com/dignite-projects/document-ai/issues/263)), which re-runs *classification* and cascades — a destructive operation. Re-extract fields is the safe leaf version. It is rejected if the document is in the recycle bin, not yet classified, has no Markdown, or already has a field-extraction run in progress.
 
 ## How batches run (mechanism)
 

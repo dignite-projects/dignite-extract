@@ -3,7 +3,7 @@
 本文件由 `maf-workflow-reviewer` agent 在审查 PR 时引用，用于快速定位 Document AI 内部 **LLM 调用点**的典型错误（反例 A / B 是安全问题，反例 C 是 MCP schema 正确性问题）。规则适用于所有 LLM 入口：
 
 - 当前已落地：`DocumentClassificationWorkflow` / `FieldExtractionWorkflow` + `FieldExtractionEventHandler`（字段架构 v2 统一 Host + 租户 (B 机制)）/ `DocumentTextExtractionBackgroundJob.TryGenerateTitleAsync`
-- 未来扩展：MCP server tool（[#170](https://github.com/dignite-projects/dignite-paperbase/issues/170)）、Webhook 触发的 LLM 路径、任何由 LLM 输出影响参数的查询路径
+- 未来扩展：MCP server tool（[#170](https://github.com/dignite-projects/document-ai/issues/170)）、Webhook 触发的 LLM 路径、任何由 LLM 输出影响参数的查询路径
 
 所有示例均为**伪代码**，不可编译，仅用于说明意图。
 
