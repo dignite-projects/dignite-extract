@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Dignite.DocumentAI.Documents;
 using Dignite.DocumentAI.Documents.Cabinets;
 using Dignite.DocumentAI.Documents.DocumentTypes;
@@ -76,7 +77,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
 
     /// <summary>
     /// 文档分类置信度（0.0 ~ 1.0），为最后一次成功分类 Run 的快照。
-    /// 当 <see cref="DocumentTypeCode"/> 为 null 时此值为 0；是否等待人工确认由 <see cref="ReviewDisposition"/> / <see cref="ReviewReasons"/> 表达。
+    /// 当 <see cref="DocumentTypeId"/> 为 null 时此值为 0；是否等待人工确认由 <see cref="ReviewDisposition"/> / <see cref="ReviewReasons"/> 表达。
     /// 人工确认（<see cref="DocumentReviewDisposition.Confirmed"/>）时固定写入 1.0。
     /// </summary>
     public virtual double ClassificationConfidence { get; private set; }
@@ -151,28 +152,42 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
             return;
         }
 
-        var trimmed = title.Trim();
-        Title = trimmed.Length <= DocumentConsts.MaxTitleLength
-            ? trimmed
-            : trimmed[..DocumentConsts.MaxTitleLength];
+        // Title 是 LLM 输出（攻击者可经文档内容间接操控）：控制字符（含 \r \n \t / null byte）折叠为空格、
+        // 连续空白合并为单个空格，再 Trim + 截断——手法与 FieldDefinition.NormalizeDisplayName 一致
+        // （含截断后丢弃末位孤立高代理项，防切断代理对破坏 JSON 序列化 / DB 往返）。
+        var cleaned = new string(title.Select(c => char.IsControl(c) ? ' ' : c).ToArray()).Trim();
+        cleaned = Regex.Replace(cleaned, @"\s+", " ");
+        if (cleaned.Length > DocumentConsts.MaxTitleLength)
+        {
+            cleaned = cleaned[..DocumentConsts.MaxTitleLength];
+            if (cleaned.Length > 0 && char.IsHighSurrogate(cleaned[^1]))
+            {
+                cleaned = cleaned[..^1];
+            }
+
+            cleaned = cleaned.Trim();
+        }
+
+        Title = cleaned.Length == 0 ? null : cleaned;
     }
 
     /// <summary>
-    /// 写入 OCR / 抽取阶段检测到的语言（#210：终结此前 write-never 死字段）。空 / 空白入参<b>不</b>覆盖
-    /// （检测不到语言时保留既有值），超长截断到 <see cref="DocumentConsts.MaxLanguageLength"/>。
+    /// 写入 OCR / 抽取阶段检测到的语言（#210：终结此前 write-never 死字段）。
+    /// 候选值先 Trim 再经 <see cref="LanguageTagValidator"/> 白名单校验——该值会在 MCP 出口的资源元数据
+    /// header 以裸值（PromptBoundary 之外）透出，白名单是契约级注入防线（与 DocumentType.TypeCodePattern
+    /// "白名单即注入防线"同源）。空 / 空白 / 不匹配白名单的入参<b>不</b>覆盖
+    /// （按"未检测到语言"丢弃，保留既有值）。
     /// 由 <see cref="Pipelines.DocumentPipelineRunManager.CompleteTextExtractionAsync"/> 在文本提取完成时调用。
     /// </summary>
     internal void SetLanguage(string? language)
     {
-        if (string.IsNullOrWhiteSpace(language))
+        var normalized = LanguageTagValidator.Normalize(language);
+        if (normalized == null)
         {
             return;
         }
 
-        var trimmed = language.Trim();
-        Language = trimmed.Length <= DocumentConsts.MaxLanguageLength
-            ? trimmed
-            : trimmed[..DocumentConsts.MaxLanguageLength];
+        Language = normalized;
     }
 
     /// <summary>

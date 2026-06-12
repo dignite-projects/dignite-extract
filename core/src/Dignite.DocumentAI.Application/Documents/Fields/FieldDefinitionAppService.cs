@@ -32,7 +32,8 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
     public virtual async Task<List<FieldDefinitionDto>> GetListAsync(GetFieldDefinitionListInput input)
     {
         // 仅当前租户层字段（CLAUDE.md "两层 mutually exclusive 不混"）——租户隔离由 ABP IMultiTenant 全局过滤器施加。
-        // 按不可变 DocumentTypeId 精确匹配单层（#207）；类型不存在时自然返回空集。
+        // DocumentTypeId 指定时按不可变 Id 精确匹配单类型（#207），类型不存在时自然返回空集；
+        // 留空 = 当前层全部字段定义（批量路径，供 MCP list_document_types 等一次取全、消 per-type N+1）。
         if (input.OnlyDeleted)
         {
             // 回收站视图仅 schema 管理屏幕消费——保持 admin 门（#223）。
@@ -42,26 +43,40 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
             using (DataFilter.Disable<ISoftDelete>())
             {
                 var queryable = await _repository.GetQueryableAsync();
+                var deletedQuery = queryable.Where(f => f.IsDeleted);
+                if (input.DocumentTypeId != null)
+                {
+                    deletedQuery = deletedQuery.Where(f => f.DocumentTypeId == input.DocumentTypeId);
+                }
                 var deleted = await AsyncExecuter.ToListAsync(
-                    queryable
-                        .Where(f =>
-                            f.DocumentTypeId == input.DocumentTypeId &&
-                            f.IsDeleted)
-                        .OrderByDescending(f => f.DeletionTime));
+                    deletedQuery.OrderByDescending(f => f.DeletionTime));
                 return ObjectMapper.Map<List<FieldDefinition>, List<FieldDefinitionDto>>(deleted);
             }
         }
 
         // 活跃字段读 schema 与管理 schema 解耦（#223）：文档操作者（Documents.Default）需要读字段定义
         // 驱动动态字段列 / 详情字段编辑 / 导出列选择；字段管理员（FieldDefinitions.Default）读自己的管理列表。
-        // 二者任一即可——fail-closed OR 断言。
+        // 二者任一即可——fail-closed OR 断言。批量（DocumentTypeId 留空）与按类型查询同一权限门：
+        // 不放大可见范围——逐类型枚举本就能拿到同一集合。
         if (!await AuthorizationService.IsGrantedAsync(DocumentAIPermissions.Documents.Default) &&
             !await AuthorizationService.IsGrantedAsync(DocumentAIPermissions.FieldDefinitions.Default))
         {
             throw new AbpAuthorizationException();
         }
 
-        var list = await _repository.GetListAsync(input.DocumentTypeId);
+        if (input.DocumentTypeId == null)
+        {
+            // 批量路径：当前层全部活跃字段一次查询（IMultiTenant + ISoftDelete 过滤器照常施加），
+            // 先按 DocumentTypeId 再按 DisplayOrder 稳定排序，调用方内存分组。
+            var queryable = await _repository.GetQueryableAsync();
+            var all = await AsyncExecuter.ToListAsync(
+                queryable
+                    .OrderBy(f => f.DocumentTypeId)
+                    .ThenBy(f => f.DisplayOrder));
+            return ObjectMapper.Map<List<FieldDefinition>, List<FieldDefinitionDto>>(all);
+        }
+
+        var list = await _repository.GetListAsync(input.DocumentTypeId.Value);
         return ObjectMapper.Map<List<FieldDefinition>, List<FieldDefinitionDto>>(list);
     }
 

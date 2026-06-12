@@ -7,6 +7,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+    <!-- Host 是最终应用，不发布 NuGet 包。 -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

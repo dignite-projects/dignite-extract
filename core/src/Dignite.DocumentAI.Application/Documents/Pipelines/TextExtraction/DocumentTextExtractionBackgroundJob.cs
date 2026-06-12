@@ -94,7 +94,7 @@ public class DocumentTextExtractionBackgroundJob
 
             var result = await _textExtractor.ExtractAsync(blobStream, ctx, _cancellationTokenProvider.Token);
 
-            var title = await TryGenerateTitleAsync(result.Markdown)
+            var title = await TryGenerateTitleAsync(result.Markdown, _cancellationTokenProvider.Token)
                 ?? MarkdownTitleExtractor.ExtractTitle(result.Markdown)
                 ?? FallbackTitleFromFileName(workItem.OriginalFileName);
 

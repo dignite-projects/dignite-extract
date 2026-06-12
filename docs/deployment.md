@@ -9,7 +9,7 @@ This page covers what a host operator needs to configure to run Document AI: the
 ```text
 Document AI Host (ASP.NET Core)
   ├─► SQL Server — relational application database (entities, audit, identity, OpenIddict, OutboxEvent)
-  └─► OCR sidecar (PaddleOCR) — or Azure Document Intelligence (cloud) — text extraction
+  └─► OCR provider — Vision LLM (default, via IChatClient) / PaddleOCR sidecar / Azure Document Intelligence — text extraction
                                                                                                     
                   ↓ exports                                                                         
    REST API / MCP server / DistributedEventBus / Webhook — downstream consumers (RAG / business systems)
@@ -65,19 +65,19 @@ ABP stores some configuration values (e.g. tenant connection strings) encrypted 
 
 `appsettings.Development.json` is git-ignored; `appsettings.Production.json` should be created at deploy time and never committed.
 
-## OCR sidecar
+## OCR provider
 
 Document AI ships three OCR options ([comparison](text-extraction.md#ocr--choosing-a-provider)):
 
-- **PaddleOCR** (default) — local sidecar, CPU, never leaves the network. Runs as a Docker container; see [ocr-paddleocr.md](ocr-paddleocr.md).
+- **Vision-LLM** (current default, #259) — `IChatClient`-based, no sidecar; reuses the host's keyed vision chat client. Strongest for phone photos / thermal receipts / image-only PDFs. See [ocr-vision-llm.md](ocr-vision-llm.md).
+- **PaddleOCR** — local Docker sidecar, CPU, never leaves the network. See [ocr-paddleocr.md](ocr-paddleocr.md).
 - **Azure Document Intelligence** — cloud option for production workloads that can leave the network. See [ocr-azure-document-intelligence.md](ocr-azure-document-intelligence.md).
-- **Vision-LLM** — cloud, `IChatClient`-based, for phone-photo / thermal-receipt inputs where layout OCR fails (#259). See [ocr-vision-llm.md](ocr-vision-llm.md).
 
-Host module wires exactly one via `[DependsOn(...)]` + matching `<ProjectReference>` in `host/src/Dignite.DocumentAI.Host.csproj`.
+Host module wires exactly one via `[DependsOn(...)]` + matching `<ProjectReference>` in `host/src/Dignite.DocumentAI.Host.csproj` (switching to/from Vision-LLM also means adding/removing its keyed vision `IChatClient` registration in `ConfigureAI`).
 
 ## AI provider
 
-The two keyed `IChatClient` registrations (title generator + structured) and their model id selection are covered in [ai-provider.md](ai-provider.md). Provider wiring is host-only — credentials never reach the Application or Domain layer.
+The keyed `IChatClient` registrations (title generator + structured, plus a vision client when the default Vision-LLM OCR provider is enabled) and their model id selection are covered in [ai-provider.md](ai-provider.md). Provider wiring is host-only — credentials never reach the Application or Domain layer. The host does **not** register an `IEmbeddingGenerator` — vectorization is downstream RAG's responsibility, not the channel's.
 
 > **CLAUDE.md constraint**: LLM provider + API key are configured at the host deployment layer, **not** exposed for end-user configuration. Letting business users fill API keys is a product-philosophy mistake (they are not technical users).
 
@@ -125,6 +125,19 @@ When deploying to a new environment, upgrading critical dependencies, or shippin
 
 - [Local development setup](local-development.md) — running on a developer laptop
 - [Text extraction](text-extraction.md) — choosing and configuring an OCR provider
-- [AI provider](ai-provider.md) — wiring the two keyed `IChatClient` registrations
+- [AI provider](ai-provider.md) — wiring the keyed `IChatClient` registrations
 - [Deployment checklist](deployment-checklist.md) — release smoke tests
 - [Observability](observability.md) — OpenTelemetry export targets
+
+## Database portability
+
+SQL Server is the host baseline, and one schema detail is **not** portable as-is: the filtered unique indexes that enforce per-layer uniqueness.
+
+`DocumentTypes (TenantId, TypeCode)`, `FieldDefinitions (TenantId, DocumentTypeId, Name)`, `ExportTemplates (TenantId, Name)`, and `Cabinets (TenantId, Name)` are all declared as **unique indexes with a `HasFilter("IsDeleted = 0")` predicate**. The Host layer stores its rows with `TenantId IS NULL`, and these indexes rely on SQL Server's semantics that a **unique index treats NULLs as equal** — which is exactly what makes "one `host.contract` row in the Host layer" enforceable.
+
+Two things break on other providers:
+
+- **PostgreSQL** defaults to `NULLS DISTINCT` for unique indexes, so multiple Host rows with the same `TypeCode` / `Name` would be allowed — Host-layer uniqueness silently stops being enforced. (PostgreSQL 15+ can opt back in with `NULLS NOT DISTINCT`, which EF Core does not emit by default.)
+- The `HasFilter("IsDeleted = 0")` literal is SQL-Server syntax and is not portable verbatim (quoting and boolean handling differ).
+
+If you ever retarget the core modules at a non-SQL-Server provider, re-evaluate these four indexes (filtered-unique semantics + the filter literal) before trusting the two-layer uniqueness guarantee. For the SQL Server baseline shipped here, the behavior is correct.

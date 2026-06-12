@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
     <RootNamespace>Dignite.DocumentAI</RootNamespace>
+    <Description>ABP Studio module installer package for Dignite Document AI, carrying the module definition files used when installing the module into a solution.</Description>
   </PropertyGroup>
 
   <ItemGroup>

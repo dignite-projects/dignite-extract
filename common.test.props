@@ -5,6 +5,7 @@
              stable-in-practice surfaces. Mirror the src suppression for tests. -->
         <NoWarn>$(NoWarn);CS1591;CS0436;MAAI001</NoWarn>
         <NuGetAudit>false</NuGetAudit>
+        <IsPackable>false</IsPackable>
         <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
         <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
         <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>

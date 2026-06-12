@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.EventBus.Distributed;
 using Volo.Abp.MultiTenancy;
+using Volo.Abp.Threading;
 using Volo.Abp.Timing;
 using Volo.Abp.Uow;
 
@@ -50,6 +51,10 @@ public class FieldExtractionService : ITransientDependency
     private readonly IClock _clock;
     private readonly ICurrentTenant _currentTenant;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
+    // 后台作业路径上 ABP 的 BackgroundJobExecuter 会用 ICancellationTokenProvider.Use(...) 压入
+    // 作业执行上下文的取消令牌（与 DocumentTextExtractionBackgroundJob 同例）；事件路径无 ambient
+    // 令牌时回退 CancellationToken.None，行为不变。
+    private readonly ICancellationTokenProvider _cancellationTokenProvider;
     private readonly ILogger<FieldExtractionService> _logger;
 
     public FieldExtractionService(
@@ -62,6 +67,7 @@ public class FieldExtractionService : ITransientDependency
         IClock clock,
         ICurrentTenant currentTenant,
         IUnitOfWorkManager unitOfWorkManager,
+        ICancellationTokenProvider cancellationTokenProvider,
         ILogger<FieldExtractionService> logger)
     {
         _documentRepository = documentRepository;
@@ -73,6 +79,7 @@ public class FieldExtractionService : ITransientDependency
         _clock = clock;
         _currentTenant = currentTenant;
         _unitOfWorkManager = unitOfWorkManager;
+        _cancellationTokenProvider = cancellationTokenProvider;
         _logger = logger;
     }
 
@@ -233,7 +240,7 @@ public class FieldExtractionService : ITransientDependency
                     documentId);
             }
 
-            var extracted = await _workflow.ExtractAsync(descriptors, markdown);
+            var extracted = await _workflow.ExtractAsync(descriptors, markdown, _cancellationTokenProvider.Token);
 
             // 阶段 3：短 UoW 写 Document + publish FieldsExtractedEto——两件事在同一 UoW 内由 ABP outbox
             // 原子持久化，避免"字段写入成功但事件丢失"。

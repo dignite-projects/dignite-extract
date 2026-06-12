@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Dignite.DocumentAI.Ai;
@@ -30,7 +31,8 @@ public class DocumentTypeResourcesTestModule : AbpModule
 /// <see cref="DocumentTypeResources"/> read 行为：按 type code 返回字段 schema——DisplayName（类型 + 字段）
 /// 经 <c>PromptBoundary</c> 包裹、字段按 DisplayOrder 排序、找不到类型抛 <see cref="McpException"/>。
 /// 权限断言、参数校验、租户隔离都在 AppService 内（此处以 mock 替身），故那些行为由 AppService 测试覆盖、不在此重复。
-/// resources/list 动态枚举是 MCP server 集成行为，不在单元测试范畴。
+/// resources/list 的投影逻辑（<see cref="DocumentTypeResources.ListVisibleAsync"/>，由 module handler 委托）
+/// 也在此覆盖：按 TypeCode 稳定排序 + 硬上限截断（<see cref="DocumentAIMcpConsts.MaxDocumentTypeResults"/>）。
 /// </summary>
 public class DocumentTypeResources_Tests : DocumentAITestBase<DocumentTypeResourcesTestModule>
 {
@@ -140,5 +142,53 @@ public class DocumentTypeResources_Tests : DocumentAITestBase<DocumentTypeResour
         await Should.ThrowAsync<McpException>(async () =>
             await DocumentTypeResources.ReadAsync(
                 "nonexistent", _documentTypeAppService, _fieldDefinitionAppService));
+    }
+
+    [Fact]
+    public async Task Resources_list_projects_visible_types_ordered_by_type_code()
+    {
+        // 上限内行为：每个可见类型一条 Resource（URI / Name 按 TypeCode），按 TypeCode 稳定排序。
+        _documentTypeAppService
+            .GetVisibleAsync()
+            .Returns(new List<DocumentTypeDto>
+            {
+                new() { Id = Guid.NewGuid(), TypeCode = "invoice.vat", DisplayName = "增值税发票" },
+                new() { Id = Guid.NewGuid(), TypeCode = "contract.general", DisplayName = "合同" }
+            });
+
+        var result = await DocumentTypeResources.ListVisibleAsync(_documentTypeAppService);
+
+        result.Resources.Count.ShouldBe(2);
+        result.Resources[0].Name.ShouldBe("contract.general");
+        result.Resources[0].Uri.ShouldBe(DocumentTypeResourceUri.Format("contract.general"));
+        result.Resources[0].MimeType.ShouldBe("application/json");
+        result.Resources[1].Name.ShouldBe("invoice.vat");
+        result.Resources[1].Uri.ShouldBe(DocumentTypeResourceUri.Format("invoice.vat"));
+    }
+
+    [Fact]
+    public async Task Resources_list_truncates_beyond_cap()
+    {
+        // 结果集硬上限（llm-call-anti-patterns 反例 B 要点 3）：租户 admin 可自建任意多类型——
+        // resources/list 协议条目无处携带截断信号，直接截断（完整发现走 list_document_types tool）。
+        var total = DocumentAIMcpConsts.MaxDocumentTypeResults + 3;
+        var types = Enumerable.Range(0, total)
+            .Select(i => new DocumentTypeDto
+            {
+                Id = Guid.NewGuid(),
+                TypeCode = $"type.{i:D4}",
+                DisplayName = $"Type {i}"
+            })
+            // 乱序交给投影——截断必须建立在投影自己的 TypeCode 稳定排序之上。
+            .OrderByDescending(t => t.TypeCode, StringComparer.Ordinal)
+            .ToList();
+        _documentTypeAppService.GetVisibleAsync().Returns(types);
+
+        var result = await DocumentTypeResources.ListVisibleAsync(_documentTypeAppService);
+
+        result.Resources.Count.ShouldBe(DocumentAIMcpConsts.MaxDocumentTypeResults);
+        // 保留 TypeCode 字典序最前的一段、丢弃尾部。
+        result.Resources[0].Name.ShouldBe("type.0000");
+        result.Resources[^1].Name.ShouldBe($"type.{DocumentAIMcpConsts.MaxDocumentTypeResults - 1:D4}");
     }
 }

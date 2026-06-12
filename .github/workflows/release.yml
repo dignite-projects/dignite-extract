@@ -1,0 +1,96 @@
+# Release 工作流（待命状态）：0.1.0 暂不打 tag，本工作流先就位、不会被触发。
+# 触发方式：推送 v* tag（如 v0.1.0）或手动 workflow_dispatch（手动触发只构建 / 打包 / 上传
+# artifact，不创建 GitHub Release）。
+#
+# 注意：NuGet 包版本来自 common.props 的 <Version>，tag 不驱动版本号——打 tag 前先确认
+# common.props 已更新到目标版本。
+#
+# npm 包（@dignite/document-ai）发布暂不自动化，手动流程：
+#   cd angular
+#   npx nx build document-ai --configuration production
+#   npm publish dist/document-ai
+# （版本号在 angular/packages/document-ai/package.json；待发布节奏稳定后再并入本工作流。）
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # softprops/action-gh-release 创建 draft Release 需要
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore Dignite.DocumentAI.slnx
+
+      - name: Build
+        run: dotnet build Dignite.DocumentAI.slnx --no-restore --configuration Release
+
+      # 与 ci.yml 相同的后端测试集（全部无外部依赖：SQLite in-memory / mock / 最小 TestServer）。
+      - name: Run domain tests
+        run: dotnet test core/test/Dignite.DocumentAI.Domain.Tests/Dignite.DocumentAI.Domain.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      - name: Run application tests
+        run: dotnet test core/test/Dignite.DocumentAI.Application.Tests/Dignite.DocumentAI.Application.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      - name: Run EF Core tests
+        run: dotnet test core/test/Dignite.DocumentAI.EntityFrameworkCore.Tests/Dignite.DocumentAI.EntityFrameworkCore.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      - name: Run MCP tests
+        run: dotnet test core/test/Dignite.DocumentAI.Mcp.Tests/Dignite.DocumentAI.Mcp.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      - name: Run OCR VisionLlm tests
+        run: dotnet test core/test/Dignite.DocumentAI.Ocr.VisionLlm.Tests/Dignite.DocumentAI.Ocr.VisionLlm.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      - name: Run host tests
+        run: dotnet test host/test/Dignite.DocumentAI.Host.Tests/Dignite.DocumentAI.Host.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      # IsPackable=false 的项目（host / 测试项目，测试项目由 Microsoft.NET.Test.Sdk 隐式置 false）
+      # 会被自动跳过，只产出 core/src 下的 NuGet 包。
+      - name: Pack
+        run: dotnet pack Dignite.DocumentAI.slnx --no-build --configuration Release -o ./artifacts
+
+      - name: Upload NuGet packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts/*.nupkg
+          if-no-files-found: error
+
+      # secrets 不能直接出现在 if: 表达式里——经 env 注入后在 shell 内检测，未配置则跳过推送。
+      - name: Push to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::notice::NUGET_API_KEY secret 未配置，跳过 NuGet 推送（包已作为 workflow artifact 上传）。"
+            exit 0
+          fi
+          dotnet nuget push ./artifacts/*.nupkg \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      # 仅 tag 推送时创建 draft Release（workflow_dispatch 没有 tag 上下文）；draft 需人工审阅
+      # release notes 后再发布。
+      - name: Create draft GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: artifacts/*.nupkg

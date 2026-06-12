@@ -844,7 +844,7 @@ namespace Dignite.DocumentAI.Host.Migrations
                     CabinetId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     DocumentTypeId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     LifecycleStatus = table.Column<int>(type: "int", nullable: false),
-                    ReviewStatus = table.Column<int>(type: "int", nullable: false),
+                    ReviewDisposition = table.Column<int>(type: "int", nullable: false),
                     ReviewReasons = table.Column<int>(type: "int", nullable: false),
                     Markdown = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     Title = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
@@ -1012,7 +1012,7 @@ namespace Dignite.DocumentAI.Host.Migrations
                 {
                     table.PrimaryKey("PK_DocAIDocumentPipelineRuns", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_DocumentAIDocumentPipelineRuns_DocumentAIDocuments_DocumentId",
+                        name: "FK_DocAIDocumentPipelineRuns_DocAIDocuments_DocumentId",
                         column: x => x.DocumentId,
                         principalTable: "DocAIDocuments",
                         principalColumn: "Id",
@@ -1390,9 +1390,9 @@ namespace Dignite.DocumentAI.Host.Migrations
                 column: "LifecycleStatus");
 
             migrationBuilder.CreateIndex(
-                name: "IX_DocAIDocuments_ReviewStatus",
+                name: "IX_DocAIDocuments_ReviewDisposition",
                 table: "DocAIDocuments",
-                column: "ReviewStatus");
+                column: "ReviewDisposition");
 
             migrationBuilder.CreateIndex(
                 name: "IX_DocAIDocuments_TenantId_DocumentTypeId",

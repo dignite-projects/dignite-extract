@@ -13,11 +13,6 @@ namespace Dignite.DocumentAI.EntityFrameworkCore;
 
 public static class DocumentAIDbContextModelCreatingExtensions
 {
-    // 单一来源（#216）：与 DocumentAIHostDbContextModelSnapshot 中 EF 生成的同名 FK 锚定，
-    // 防止后续重命名 source 侧 string 时静默触发 DropForeignKey + AddForeignKey 迁移。
-    private const string DocumentPipelineRunDocumentForeignKey =
-        "FK_DocumentAIDocumentPipelineRuns_DocumentAIDocuments_DocumentId";
-
     // ExportTemplate.Columns 是有序列定义数组，整体读写（无单列查询需求）——走 ABP 框架的
     // AbpJsonValueConverter<T> 整体序列化成大文本列（不绑 provider-specific native json：SQL Server 落
     // nvarchar(max)，其它 provider 自选）。ExportColumn 为 get-only 值对象，System.Text.Json 用其唯一带参
@@ -60,8 +55,8 @@ public static class DocumentAIDbContextModelCreatingExtensions
             b.ConfigureByConvention();
 
             b.Property(x => x.LifecycleStatus).IsRequired();
-            // #284：处置轴 ReviewDisposition 复用旧 DB 列名 ReviewStatus（int 值不变，迁移不重命名列）。
-            b.Property(x => x.ReviewDisposition).HasColumnName("ReviewStatus").IsRequired();
+            // #284 双轴模型：处置轴。曾锚定旧列名 ReviewStatus；#295 squash 重建 schema 后列名随属性名。
+            b.Property(x => x.ReviewDisposition).IsRequired();
             // #284：待审原因集合（[Flags] int 单列，跨库可移植 #206）+ 独立拒绝理由。
             b.Property(x => x.ReviewReasons).IsRequired();
             b.Property(x => x.RejectionReason).HasMaxLength(DocumentConsts.MaxRejectionReasonLength);
@@ -181,13 +176,12 @@ public static class DocumentAIDbContextModelCreatingExtensions
             b.Property(x => x.StatusMessage).HasMaxLength(DocumentPipelineRunConsts.MaxStatusMessageLength);
 
             // #216：从 child entity 升为独立聚合根后，由子侧显式声明 FK + CASCADE。
-            // HasConstraintName 显式锁定 FK 名 = 拆分前 EF 自动生成的名字，避免 HasMany→HasOne 迁移
-            // 误判为"换 FK"产生 DropForeignKey+AddForeignKey 危险序列（EF Core issue #19137 家族）。
+            // 曾用 HasConstraintName 锚定拆分前的 FK 名（防 Drop+Add 危险序列，EF Core issue #19137 家族）；
+            // #295 squash 重建 schema 后已无旧名可保，FK 名回归 EF 约定生成。
             b.HasOne<Document>()
                 .WithMany()
                 .HasForeignKey(x => x.DocumentId)
-                .OnDelete(DeleteBehavior.Cascade)
-                .HasConstraintName(DocumentPipelineRunDocumentForeignKey);
+                .OnDelete(DeleteBehavior.Cascade);
 
             // #216 D2 / #239：UNIQUE 索引是 AttemptNumber 并发安全的唯一数据完整性保证，完全 DB 无关
             // （SqlServer / PostgreSQL / MySQL 一致）。并发撞同 (Doc, Pipeline, Attempt) 时 DB 抛
@@ -211,6 +205,9 @@ public static class DocumentAIDbContextModelCreatingExtensions
             b.Property(x => x.Priority).IsRequired();
 
             // 唯一约束：(TenantId, TypeCode)；跨层可共用相同 TypeCode。软删过滤。
+            // 可移植性：Host 层（TenantId IS NULL）的层内唯一性依赖 SQL Server"唯一索引视 NULL 相等"语义；
+            // PostgreSQL 默认 NULLS DISTINCT 会让该约束对 Host 行静默失效，且 HasFilter 字面量不跨库——
+            // 迁移 provider 时需重审（本文件共 4 处 (TenantId, ...) + IsDeleted 过滤唯一索引同此）。
             b.HasIndex(x => new { x.TenantId, x.TypeCode })
                 .IsUnique()
                 .HasFilter("IsDeleted = 0");

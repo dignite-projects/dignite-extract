@@ -37,6 +37,22 @@ jobs:
       - name: Run application tests
         run: dotnet test core/test/Dignite.DocumentAI.Application.Tests/Dignite.DocumentAI.Application.Tests.csproj --no-build --configuration Release --verbosity normal
 
+      # SQLite in-memory（DocumentAIEntityFrameworkCoreTestModule），无外部数据库依赖。
+      - name: Run EF Core tests
+        run: dotnet test core/test/Dignite.DocumentAI.EntityFrameworkCore.Tests/Dignite.DocumentAI.EntityFrameworkCore.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      # TestBase + NSubstitute mock（无 DB / 无 LLM）；含 MCP inputSchema 回归守护（Autofac 容器下生成 schema）。
+      - name: Run MCP tests
+        run: dotnet test core/test/Dignite.DocumentAI.Mcp.Tests/Dignite.DocumentAI.Mcp.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      # 纯单元测试：mock IChatClient + IPdfRasterizer，不依赖原生 PDFium / 外部 LLM。
+      - name: Run OCR VisionLlm tests
+        run: dotnet test core/test/Dignite.DocumentAI.Ocr.VisionLlm.Tests/Dignite.DocumentAI.Ocr.VisionLlm.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      # 最小 ASP.NET TestServer 镜像 host 的 MCP 授权接线（#278 回归护栏），不引 ABP 宿主 / DB / OpenIddict。
+      - name: Run host tests
+        run: dotnet test host/test/Dignite.DocumentAI.Host.Tests/Dignite.DocumentAI.Host.Tests.csproj --no-build --configuration Release --verbosity normal
+
       - name: Build Docker image
         run: docker build -f host/Dockerfile -t docai-api:${{ github.sha }} .
         if: github.event_name == 'push'

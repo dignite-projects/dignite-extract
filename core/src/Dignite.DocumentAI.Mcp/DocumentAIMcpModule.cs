@@ -1,8 +1,6 @@
-using System.Linq;
 using Dignite.DocumentAI.Documents.DocumentTypes;
 using Dignite.DocumentAI.Mcp.Documents;
 using Microsoft.Extensions.DependencyInjection;
-using ModelContextProtocol.Protocol;
 using Volo.Abp.Modularity;
 
 namespace Dignite.DocumentAI;
@@ -36,25 +34,12 @@ public class DocumentAIMcpModule : AbpModule
             // list 与 read 职责分离：本 handler 只填充 resources/list，template read 不受影响。
             .WithListResourcesHandler(async (ctx, ct) =>
             {
-                // 委托 IDocumentTypeAppService.GetVisibleAsync：fail-closed 权限断言（方法体内 OR 断言，
-                // MCP dispatch 不经 HTTP [Authorize] 但进程内 AppService 调用照常触发）+ ambient 租户隔离
-                // （两层独立单层模型，只返回当前主体那一层的类型）都在 AppService 内统一执行。
-                // 文档类型数量有限且应被看见，故枚举进 resources/list。
+                // 委托 DocumentTypeResources.ListVisibleAsync：fail-closed 权限断言（AppService 方法体内
+                // OR 断言，MCP dispatch 不经 HTTP [Authorize] 但进程内 AppService 调用照常触发）+ ambient
+                // 租户隔离（两层独立单层模型）+ 按 TypeCode 排序后的结果集硬上限截断
+                // （DocumentAIMcpConsts.MaxDocumentTypeResults）都在投影内统一执行。
                 var documentTypeAppService = ctx.Services!.GetRequiredService<IDocumentTypeAppService>();
-                var types = await documentTypeAppService.GetVisibleAsync();
-
-                return new ListResourcesResult
-                {
-                    Resources = types
-                        .Select(t => new Resource
-                        {
-                            Uri = DocumentTypeResourceUri.Format(t.TypeCode),
-                            Name = t.TypeCode,
-                            Description = "DocumentAI document type field schema.",
-                            MimeType = "application/json"
-                        })
-                        .ToList()
-                };
+                return await DocumentTypeResources.ListVisibleAsync(documentTypeAppService);
             });
     }
 }
