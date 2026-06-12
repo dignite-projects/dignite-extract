@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a defect in Dignite Document AI (channel-layer backend, OCR pipeline, exit contracts, or operator UI).
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please search existing issues first.
+        For security vulnerabilities, do **not** open a public issue — see [SECURITY.md](../../SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I upload an image-only PDF, classification stays in "Processing" forever…
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps so a maintainer can reproduce it.
+      placeholder: |
+        1. Configure OCR provider = …
+        2. Upload …
+        3. Observe …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Text extraction / OCR pipeline
+        - Classification
+        - Field extraction
+        - REST API exit
+        - MCP server exit
+        - Integration events / Webhook
+        - Export templates
+        - Operator Angular UI
+        - Host / deployment / migrations
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: ocr-provider
+    attributes:
+      label: OCR provider in use
+      description: Vision LLM (default) / PaddleOCR / Azure Document Intelligence — and the chat/vision model id if relevant.
+      placeholder: Vision LLM, gpt-4o-mini
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Version / commit, .NET SDK, database (SQL Server / LocalDB), OS, and (if UI) Node.js + browser.
+      placeholder: |
+        - Commit: abc1234
+        - .NET SDK: 10.0.x
+        - Database: SQL Server 2022
+        - OS: Windows 11 / Ubuntu 24.04
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Backend logs, browser console, or pipeline-run diagnostics. Redact secrets and personal data.
+      render: shell
+    validations:
+      required: false

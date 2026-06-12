@@ -22,7 +22,7 @@ physical paper / scans / photos / PDF images / Office files
 
 ```
 document-ai/
-├── core/      # Channel implementation — ABP layers (Abstractions / Domain.Shared / Domain / Application / EntityFrameworkCore / HttpApi)
+├── core/      # Channel implementation — ABP layers (Abstractions / Domain.Shared / Domain / Application / EntityFrameworkCore / HttpApi / Mcp)
 ├── host/      # Host application — provider wiring (OCR + AI) and middleware (ASP.NET Core API)
 ├── angular/   # Angular SPA (operator UI)
 └── docs/      # Operator-facing documentation (design decisions go to GitHub Issues, not here)
@@ -41,9 +41,9 @@ Business modules (contract management / invoice management / HR records / etc.) 
 
 ## Getting started (local development)
 
-### 1. Start the PaddleOCR sidecar
+### 1. Start the PaddleOCR sidecar (only if you enable the PaddleOCR provider)
 
-PaddleOCR is the default OCR provider. It runs as a Docker container:
+The host currently wires the **Vision LLM** OCR provider by default (see [Choosing an OCR provider](#choosing-an-ocr-provider)), which needs no sidecar — it reuses the `DocumentAI` AI-provider configuration below. If you switch the host to the PaddleOCR provider, start its Docker container first:
 
 ```bash
 cd host
@@ -52,9 +52,9 @@ docker compose up -d paddleocr
 
 First run downloads ~600 MB of model weights and takes 30–60 seconds. Subsequent starts are instant.
 
-### 2. Configure the database
+### 2. Configure the database and the AI provider
 
-Create `host/src/appsettings.Development.json` with your local SQL Server connection string:
+Create `host/src/appsettings.Development.json` with your local SQL Server connection string and an LLM provider key:
 
 ```json
 {
@@ -64,11 +64,19 @@ Create `host/src/appsettings.Development.json` with your local SQL Server connec
   },
   "StringEncryption": {
     "DefaultPassPhrase": "any-random-string-here"
+  },
+  "DocumentAI": {
+    "Endpoint": "https://api.openai.com/v1",
+    "ApiKey": "YOUR_REAL_API_KEY",
+    "ChatModelId": "gpt-4o-mini",
+    "VisionOcrModelId": "gpt-4o-mini"
   }
 }
 ```
 
 > This file is git-ignored. In Development mode, the application automatically generates temporary OpenIddict certificates — no `.pfx` file is needed. For LocalDB, the committed `appsettings.json` default (`Server=(LocalDb)\MSSQLLocalDB;...`) already works without any override.
+
+An LLM provider is **mandatory** — classification and field extraction have no non-LLM fallback, and the host fails fast at startup while `DocumentAI:ApiKey` is still the committed placeholder. Any OpenAI-compatible endpoint works; with the default Vision LLM OCR provider, `VisionOcrModelId` must point at a vision-capable model. See [docs/ai-provider.md](./docs/ai-provider.md).
 
 ### 3. Install client-side libraries
 
@@ -88,8 +96,10 @@ API: `https://localhost:44348`. Swagger: `https://localhost:44348/swagger`.
 
 ### 5. Install frontend dependencies and run Angular
 
+The Angular SPA lives in the repository-root `angular/` directory (an Nx workspace):
+
 ```bash
-cd host/angular
+cd angular
 npm install
 npm start
 ```
@@ -98,7 +108,11 @@ SPA: `http://localhost:4200`. Default seeded credentials: `admin` / `1q2w3E*`.
 
 ## Choosing an OCR provider
 
-Document AI ships two OCR providers — local **PaddleOCR** (default, CPU, no network) and cloud **Azure Document Intelligence**. PaddleOCR is the zero-config default for development; Azure DI is the recommended production option when data is allowed to leave the network.
+Document AI ships three OCR providers; the host enables exactly one (`[DependsOn(...)]` in `host/src/DocumentAIHostModule.cs` + the matching `ProjectReference` in `host/src/Dignite.DocumentAI.Host.csproj`):
+
+* **Vision LLM** — the host's current default (#259). Sends images / rasterized PDF pages to a vision-capable `IChatClient` model; the strongest option for phone photos, thermal receipts, and image-only PDFs. No sidecar — only a vision model id. See [docs/ocr-vision-llm.md](./docs/ocr-vision-llm.md).
+* **PaddleOCR** — local Docker sidecar (PP-StructureV3, CPU); data never leaves the network. See [docs/ocr-paddleocr.md](./docs/ocr-paddleocr.md).
+* **Azure Document Intelligence** — cloud option (`prebuilt-layout`, high accuracy) when data is allowed to leave the network. See [docs/ocr-azure-document-intelligence.md](./docs/ocr-azure-document-intelligence.md).
 
 Full selection guidance, configuration, and resource footprint: see [docs/text-extraction.md](./docs/text-extraction.md).
 
@@ -111,9 +125,14 @@ For database connection strings, OpenIddict signing certificate, string-encrypti
 Feature docs (start here for any specific topic):
 
 * [Local development setup](./docs/local-development.md) — prerequisites, Docker sidecars, configuration, troubleshooting
-* [Text extraction](./docs/text-extraction.md) — Markdown-first contract, PaddleOCR / Azure DI configuration
+* [Text extraction](./docs/text-extraction.md) — Markdown-first contract, the two extraction paths, OCR provider comparison
+* [PaddleOCR](./docs/ocr-paddleocr.md) — local OCR sidecar (PP-StructureV3, CPU); model choice and resource footprint
+* [Azure Document Intelligence](./docs/ocr-azure-document-intelligence.md) — cloud OCR (`prebuilt-layout`); resource setup and F0 tier limits
+* [Vision-LLM OCR](./docs/ocr-vision-llm.md) — multimodal-`IChatClient` OCR for photos / thermal receipts / image-only PDFs
 * [Classification](./docs/classification.md) — document-type pipeline and prompt tuning
 * [Reprocessing](./docs/reprocessing.md) — bulk re-run of classification / field extraction over existing documents after a config change
+* [Export templates](./docs/export-templates.md) — per-tenant CSV / XLSX file egress: field projection, rename, ordering — zero business transformation
+* [MCP server](./docs/mcp-server.md) — document resources + structured search tool over Streamable HTTP, OpenIddict Bearer auth
 * [AI provider](./docs/ai-provider.md) — provider wiring for the two keyed chat clients (title generator + structured)
 * [Observability](./docs/observability.md) — OpenTelemetry pipeline, aspire-dashboard for local dev, switching OTLP backends
 * [Pipeline runs](./docs/pipeline-runs.md) — run history and review-UI payloads
@@ -122,7 +141,10 @@ Feature docs (start here for any specific topic):
 
 External references:
 
-* [Angular Application](./host/angular/README.md)
 * [ABP Framework Documentation](https://abp.io/docs/latest)
 * [Application (Single Layer) Startup Template](https://abp.io/docs/latest/solution-templates/application-single-layer)
 * [Configuring OpenIddict for Production](https://abp.io/docs/latest/Deployment/Configuring-OpenIddict#production-environment)
+
+## License
+
+Dignite Document AI is licensed under the [Apache License 2.0](./LICENSE).

@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel;
 using System.Linq;
 using System.Text.Json;
@@ -15,9 +16,9 @@ namespace Dignite.DocumentAI.Mcp.Documents;
 /// 把 DocumentAI 文档类型暴露为 MCP 资源（read 路径）。资源模板 <c>docai://document-types/{code}</c>，
 /// 返回该类型的字段 schema（每字段 name / dataType / allowMultiple / displayName / required + 类型 displayName）。
 /// 让下游 AI 发现某类型有哪些字段、什么数据类型，据此给检索 tool 的 <c>fieldFilters</c> / <c>includeFields</c>
-/// 填对字段名。"有哪些类型"由 resources/list 动态枚举（见 <c>DocumentAIMcpModule</c>）——与文档相反
-/// （文档数量无限、不枚举、按 id 走 search tool 发现）。list 与 read 职责分离：list 靠 handler 枚举，
-/// read 靠本类的 UriTemplate 自动路由。
+/// 填对字段名。"有哪些类型"由 resources/list 动态枚举（handler 在 <c>DocumentAIMcpModule</c> 注册、
+/// 投影逻辑在本类 <see cref="ListVisibleAsync"/>）——与文档相反（文档数量无限、不枚举、按 id 走 search tool
+/// 发现）。list 与 read 职责分离：list 靠 handler 枚举，read 靠本类的 UriTemplate 自动路由。
 /// <para>
 /// 出口适配器是薄壳——委托 <see cref="IDocumentTypeAppService.GetVisibleAsync"/>（按 code 过滤当前层）+
 /// <see cref="IFieldDefinitionAppService.GetListAsync"/>（该类型字段定义）：权限断言、租户隔离都在 AppService
@@ -80,6 +81,35 @@ public sealed class DocumentTypeResources
             Uri = DocumentTypeResourceUri.Format(documentType.TypeCode),
             MimeType = "application/json",
             Text = JsonSerializer.Serialize(schema)
+        };
+    }
+
+    /// <summary>
+    /// <c>resources/list</c> 的动态枚举投影（由 <c>DocumentAIMcpModule</c> 的 list handler 委托调用；
+    /// 无 <c>[McpServerResource]</c> 注解，不参与 read 模板扫描）。委托
+    /// <see cref="IDocumentTypeAppService.GetVisibleAsync"/>：fail-closed 权限断言 + ambient 租户隔离
+    /// 在 AppService 内统一执行。按 TypeCode 稳定排序后截断到
+    /// <see cref="DocumentAIMcpConsts.MaxDocumentTypeResults"/>（结果集硬上限，llm-call-anti-patterns
+    /// 反例 B 要点 3——租户 admin 可自建任意多类型）；resources/list 协议条目无处携带截断信号，直接截断即可，
+    /// 完整发现（含 truncated / totalCount 信号）走 <c>list_document_types</c> tool。
+    /// </summary>
+    public static async Task<ListResourcesResult> ListVisibleAsync(IDocumentTypeAppService documentTypeAppService)
+    {
+        var types = await documentTypeAppService.GetVisibleAsync();
+
+        return new ListResourcesResult
+        {
+            Resources = types
+                .OrderBy(t => t.TypeCode, StringComparer.Ordinal)
+                .Take(DocumentAIMcpConsts.MaxDocumentTypeResults)
+                .Select(t => new Resource
+                {
+                    Uri = DocumentTypeResourceUri.Format(t.TypeCode),
+                    Name = t.TypeCode,
+                    Description = "DocumentAI document type field schema.",
+                    MimeType = "application/json"
+                })
+                .ToList()
         };
     }
 }

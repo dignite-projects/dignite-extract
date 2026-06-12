@@ -13,7 +13,7 @@ using Volo.Abp.EntityFrameworkCore;
 namespace Dignite.DocumentAI.Host.Migrations
 {
     [DbContext(typeof(DocumentAIHostDbContext))]
-    [Migration("20260611090301_Initial")]
+    [Migration("20260612073403_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -172,8 +172,7 @@ namespace Dignite.DocumentAI.Host.Migrations
                         .HasColumnType("nvarchar(2048)");
 
                     b.Property<int>("ReviewDisposition")
-                        .HasColumnType("int")
-                        .HasColumnName("ReviewStatus");
+                        .HasColumnType("int");
 
                     b.Property<int>("ReviewReasons")
                         .HasColumnType("int");
@@ -2542,8 +2541,7 @@ namespace Dignite.DocumentAI.Host.Migrations
                         .WithMany()
                         .HasForeignKey("DocumentId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_DocumentAIDocumentPipelineRuns_DocumentAIDocuments_DocumentId");
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Volo.Abp.AuditLogging.AuditLogAction", b =>

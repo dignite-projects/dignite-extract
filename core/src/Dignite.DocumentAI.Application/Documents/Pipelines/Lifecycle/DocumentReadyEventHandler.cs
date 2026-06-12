@@ -41,7 +41,7 @@ public class DocumentReadyEventHandler
         _logger = logger;
     }
 
-    public async Task HandleEventAsync(DocumentLifecycleStatusChangedEvent eventData)
+    public virtual async Task HandleEventAsync(DocumentLifecycleStatusChangedEvent eventData)
     {
         if (eventData.NewStatus != DocumentLifecycleStatus.Ready)
         {

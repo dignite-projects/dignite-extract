@@ -169,8 +169,7 @@ namespace Dignite.DocumentAI.Host.Migrations
                         .HasColumnType("nvarchar(2048)");
 
                     b.Property<int>("ReviewDisposition")
-                        .HasColumnType("int")
-                        .HasColumnName("ReviewStatus");
+                        .HasColumnType("int");
 
                     b.Property<int>("ReviewReasons")
                         .HasColumnType("int");
@@ -2539,8 +2538,7 @@ namespace Dignite.DocumentAI.Host.Migrations
                         .WithMany()
                         .HasForeignKey("DocumentId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_DocumentAIDocumentPipelineRuns_DocumentAIDocuments_DocumentId");
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Volo.Abp.AuditLogging.AuditLogAction", b =>

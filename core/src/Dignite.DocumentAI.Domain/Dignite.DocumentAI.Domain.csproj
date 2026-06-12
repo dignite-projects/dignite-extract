@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Dignite.DocumentAI</RootNamespace>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <Description>Domain layer of Dignite Document AI: the Document aggregate root (Markdown-first text payload), document types, field definitions, cabinets, export templates, pipeline run entities and repository interfaces.</Description>
   </PropertyGroup>
 
   <ItemGroup>
