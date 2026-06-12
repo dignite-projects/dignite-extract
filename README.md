@@ -1,6 +1,6 @@
 # Dignite Document AI
 
-> **Document AI = physical paper / scans / photos / PDF images / Office files → trustworthy digitized data.**
+> **Document AI = any content requiring IDP (Intelligent Document Processing) — scans / photos / PDF images / Office files / digital-born documents → trustworthy structured data.**
 > A **channel layer**, not an end-product. It doesn't consume, doesn't own, doesn't dive into business — it hands Markdown + structured metadata to downstream RAG platforms, business systems, and AI clients via REST / EventBus / MCP server / Webhook.
 
 For the full positioning, architecture rules, OUT-of-scope list, Markdown-first contract, six-stage ETO event contract, and security covenant, see [CLAUDE.md](./CLAUDE.md). It is the truth source — this README only stages the operational entry points.
@@ -8,7 +8,7 @@ For the full positioning, architecture rules, OUT-of-scope list, Markdown-first 
 ## Data flow
 
 ```
-physical paper / scans / photos / PDF images / Office files
+content requiring IDP: scans / photos / PDF images / Office files / digital-born documents
     ↓
 [Document AI channel]: OCR + Markdown + system metadata + type-bound field extraction
     ↓ (REST / EventBus / MCP server / Webhook)
