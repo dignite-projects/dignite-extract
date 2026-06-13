@@ -16,18 +16,18 @@ namespace Dignite.DocumentAI.TextExtraction;
 public class DefaultTextExtractor : ITextExtractor, ITransientDependency
 {
     private readonly IOcrProvider _ocrProvider;
-    private readonly IMarkdownTextProvider _markdownProvider;
+    private readonly IReadOnlyList<IMarkdownTextProvider> _markdownProviders;
     private readonly DocumentAIOcrOptions _ocrOptions;
 
     public ILogger<DefaultTextExtractor> Logger { get; set; } = NullLogger<DefaultTextExtractor>.Instance;
 
     public DefaultTextExtractor(
         IOcrProvider ocrProvider,
-        IMarkdownTextProvider markdownProvider,
+        IEnumerable<IMarkdownTextProvider> markdownProviders,
         IOptions<DocumentAIOcrOptions> ocrOptions)
     {
         _ocrProvider = ocrProvider;
-        _markdownProvider = markdownProvider;
+        _markdownProviders = markdownProviders.ToList();
         _ocrOptions = ocrOptions.Value;
     }
 
@@ -50,8 +50,13 @@ public class DefaultTextExtractor : ITextExtractor, ITransientDependency
         await fileStream.CopyToAsync(seekable, cancellationToken);
         seekable.Position = 0;
 
-        var md = await _markdownProvider.ExtractAsync(seekable, context, cancellationToken);
+        var markdownProvider = SelectMarkdownProvider(context.FileExtension);
+        var md = await markdownProvider.ExtractAsync(seekable, context, cancellationToken);
 
+        // PDFs without a usable text layer (scanned / image-only) yield no meaningful text from the
+        // Markdown provider. Fall back to whole-page OCR. A PdfPig-based provider deliberately returns
+        // empty here for a no-text-layer PDF instead of OCR-ing embedded images itself, so this single
+        // fallback owns the scanned-PDF path (no double OCR).
         if (!HasMeaningfulText(md.Markdown) && IsPdfExtension(context.FileExtension))
         {
             Logger.LogDebug("Markdown provider produced no meaningful text for PDF; falling back to OCR.");
@@ -59,8 +64,53 @@ public class DefaultTextExtractor : ITextExtractor, ITransientDependency
             return await ExtractByOcrAsync(seekable, context, cancellationToken);
         }
 
-        Logger.LogDebug("Markdown extraction completed using {Provider}", _markdownProvider.GetType().Name);
+        Logger.LogDebug("Markdown extraction completed using {Provider}", markdownProvider.GetType().Name);
         return md;
+    }
+
+    /// <summary>
+    /// Selects the Markdown provider for a file extension: among providers that <see cref="IMarkdownTextProvider.CanHandle"/>
+    /// the extension, the highest <see cref="IMarkdownTextProvider.Priority"/> wins. Providers coexist and
+    /// are dispatched per file (unlike the mutually-exclusive <see cref="IOcrProvider"/>); the catch-all
+    /// fallback (ElBruno) handles every extension at the lowest priority, so a missing specialized module
+    /// degrades gracefully.
+    /// </summary>
+    protected virtual IMarkdownTextProvider SelectMarkdownProvider(string? fileExtension)
+    {
+        var ext = fileExtension ?? string.Empty;
+
+        IMarkdownTextProvider? selected = null;
+        foreach (var provider in _markdownProviders)
+        {
+            if (!provider.CanHandle(ext))
+            {
+                continue;
+            }
+
+            if (selected is null || provider.Priority > selected.Priority)
+            {
+                selected = provider;
+            }
+            else if (provider.Priority == selected.Priority)
+            {
+                // Two providers claim the same extension at the same priority: a deployment/config
+                // mistake. Pick deterministically (keep the incumbent) but surface it loudly.
+                Logger.LogWarning(
+                    "Multiple Markdown providers claim extension '{Extension}' at priority {Priority}: keeping {Incumbent}, ignoring {Candidate}.",
+                    ext, provider.Priority, selected.GetType().Name, provider.GetType().Name);
+            }
+        }
+
+        if (selected is null)
+        {
+            // Cannot happen while a catch-all provider (ElBruno) is installed. If it does, it is a
+            // module-composition error, not a per-document failure — fail loudly.
+            throw new InvalidOperationException(
+                $"No {nameof(IMarkdownTextProvider)} can handle extension '{ext}'. " +
+                $"Install a catch-all Markdown provider module (e.g. ElBruno) in the host.");
+        }
+
+        return selected;
     }
 
     protected virtual async Task<TextExtractionResult> ExtractByOcrAsync(

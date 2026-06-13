@@ -26,7 +26,9 @@ Source contract: [`ITextExtractor`](../core/src/Dignite.DocumentAI.Abstractions/
 Upload → DocumentTextExtractionBackgroundJob
               │
               ├─→ digital text layer? (PDF / DOCX / HTML / TXT / CSV / RTF / EPUB …)
-              │     └─→ IMarkdownTextProvider (e.g. ElBruno MarkItDown)
+              │     └─→ IMarkdownTextProvider, dispatched per file by extension:
+              │           • .pdf → PdfExtractor (PdfPig: text layer + embedded-image OCR, inlined)
+              │           • everything else → ElBruno MarkItDown (catch-all)
               │
               └─→ image / scan?
                     └─→ IOcrProvider (PaddleOCR / Azure Document Intelligence / Vision-LLM)
@@ -35,13 +37,20 @@ Both paths write the same shape: TextExtractionResult { Markdown, DetectedLangua
                                   → Document.Markdown
 ```
 
-The two paths are dispatched by file kind. Hosts wire one digital provider plus one OCR provider via `[DependsOn(...)]`; switching providers is a host-level swap with no Application or Domain changes.
+The image/scan path is dispatched by file kind. The digital path is dispatched **per file by extension** across coexisting Markdown providers. Hosts wire one or more Markdown providers plus exactly one OCR provider via `[DependsOn(...)]`; switching providers is a host-level swap with no Application or Domain changes.
 
-## Digital extraction — ElBruno MarkItDown
+## Digital extraction — Markdown providers (dispatched by extension)
 
-`DocumentAIElBrunoMarkItDownModule` is the default `IMarkdownTextProvider` and handles digital files (PDF with text layer, DOCX, HTML, TXT, CSV, RTF, EPUB). It is enabled automatically by the host module and needs no configuration.
+`IMarkdownTextProvider` implementations **coexist** and are dispatched **per file by extension** — unlike `IOcrProvider`, which is host-selected and mutually exclusive. Each provider self-declares the extensions it owns via `CanHandle(extension)` plus a `Priority`; `DefaultTextExtractor` picks the highest-priority provider that can handle the file, with ElBruno as the catch-all fallback. **Omitting a specialized provider module makes its extension fall back to ElBruno**, preserving prior behaviour.
 
-If a digital PDF has no text layer (scanned PDF), the digital path returns empty Markdown and the pipeline falls through to the OCR provider.
+| Provider | Owns | Notes |
+|---|---|---|
+| **PdfExtractor** (`Dignite.DocumentAI.TextExtraction.Pdf`, PdfPig) | `.pdf` | Extracts the digital text layer **and** embedded raster images. Each image is transcribed through the host-selected `IOcrProvider` and inlined into the Markdown at its reading position (#301), so embedded figures are no longer silently dropped. Vector-only graphics are an accepted blind spot (`GetImages()` does not see them). |
+| **ElBruno MarkItDown** (`Dignite.DocumentAI.TextExtraction.ElBrunoMarkItDown`) | catch-all (DOCX / HTML / TXT / CSV / RTF / EPUB, and `.pdf` when the Pdf module is absent) | Default fallback; enabled by the host module, no configuration. |
+
+**Embedded images in digital PDFs (#301).** PdfExtractor reuses the host-selected `IOcrProvider` for figure transcription — no separate vision client is wired at the Markdown-provider layer, and the semantics are transcription only (no chart/describe modes). Image-heavy PDFs are bounded by `PdfExtractorOptions` (`MaxImagesPerPdf`, `MinImagePixels` — tiny decorative images are skipped). When images are dropped (cap reached / undecodable codec such as JBIG2/JPX) or a figure's OCR is truncated, the result is marked incomplete via the #268 completeness signal.
+
+**Scanned / no-text-layer PDF.** If a PDF has no digital text layer, the Markdown provider returns empty Markdown — PdfExtractor does **not** OCR its images in that case — and the pipeline falls through to the whole-page `IOcrProvider` path. There is no double OCR.
 
 ## OCR — choosing a provider
 
@@ -71,9 +80,9 @@ These apply regardless of which provider is wired:
 
 ## Adding a custom OCR / digital provider
 
-Implement `IOcrProvider` (for image/scan input) or `IMarkdownTextProvider` (for files with a digital text layer). Both contracts are documented in their source files; both demand Markdown output.
+Implement `IOcrProvider` (for image/scan input) or `IMarkdownTextProvider` (for files with a digital text layer). Both contracts are documented in their source files; both demand Markdown output. A Markdown provider also declares which extensions it owns via `CanHandle(extension)` + `Priority` (use a non-negative priority for a specialized provider; the catch-all fallback sits at `MarkdownProviderPriorities.Fallback`).
 
-The provider lives in its own module project (`Dignite.DocumentAI.Ocr.<Vendor>` or `Dignite.DocumentAI.TextExtraction.<Vendor>`) and is enabled by the host through `[DependsOn(...)]`.
+The provider lives in its own module project (`Dignite.DocumentAI.Ocr.<Vendor>` or `Dignite.DocumentAI.TextExtraction.<Vendor>`) and is enabled by the host through `[DependsOn(...)]`. Markdown providers coexist (dispatched per file by extension), so adding one does not displace the others.
 
 **Markdown-first responsibility is on the provider, not the orchestrator.** The `OcrResult` and `TextExtractionResult` types expose only a `Markdown` field — there is no parallel `RawText` channel. If the underlying OCR engine returns plain text only (e.g. PaddleOCR PP-OCRv4), the provider itself must wrap paragraphs into flat Markdown (typically `string.Join("\n\n", paragraphs)`). Returning empty Markdown when the engine produced text is a contract violation. Custom OCR providers should expose their model choice through provider/host configuration, not through Document AI core profile codes.
 

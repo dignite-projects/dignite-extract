@@ -91,6 +91,10 @@
     <ProjectReference Include="..\..\core\src\Dignite.DocumentAI.Application\Dignite.DocumentAI.Application.csproj" />
     <ProjectReference Include="..\..\core\src\Dignite.DocumentAI.EntityFrameworkCore\Dignite.DocumentAI.EntityFrameworkCore.csproj" />
     <ProjectReference Include="..\..\core\src\Dignite.DocumentAI.TextExtraction\Dignite.DocumentAI.TextExtraction.csproj" />
+    <!-- PDF Markdown provider (PdfPig): digital-PDF text layer + embedded-image transcription via the
+         host-selected IOcrProvider (#301). Coexists with ElBruno; claims .pdf. Omit it and .pdf falls
+         back to ElBruno. -->
+    <ProjectReference Include="..\..\core\src\Dignite.DocumentAI.TextExtraction.Pdf\Dignite.DocumentAI.TextExtraction.Pdf.csproj" />
     <ProjectReference Include="..\..\core\src\Dignite.DocumentAI.TextExtraction.ElBrunoMarkItDown\Dignite.DocumentAI.TextExtraction.ElBrunoMarkItDown.csproj" />
     <!-- OCR provider — IOcrProvider implementations are mutually exclusive; enable only one.
          Current default: VisionLlm (photos / thermal receipts / image-only PDFs, #259).

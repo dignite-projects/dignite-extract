@@ -9,6 +9,7 @@ using Dignite.DocumentAI.Localization;
 using Dignite.DocumentAI.Ocr.VisionLlm;
 using Dignite.DocumentAI.TextExtraction;
 using Dignite.DocumentAI.TextExtraction.ElBrunoMarkItDown;
+using Dignite.DocumentAI.TextExtraction.Pdf;
 using Microsoft.Extensions.AI;
 using Microsoft.EntityFrameworkCore;
 using OpenAI;
@@ -139,6 +140,7 @@ namespace Dignite.DocumentAI.Host;
 
     // DocumentAI infrastructure modules
     typeof(DocumentAITextExtractionModule),
+    typeof(DocumentAITextExtractionPdfModule),             // PdfPig: digital-PDF text layer + embedded-image transcription (#301). Claims .pdf; coexists with ElBruno (catch-all). Omitting it makes .pdf fall back to ElBruno.
     typeof(DocumentAITextExtractionElBrunoMarkItDownModule),
     typeof(DocumentAIVisionLlmOcrModule)                  // Vision-LLM OCR for photos, receipts, and image PDFs; current default OCR provider (#259). IOcrProvider implementations are mutually exclusive: when switching providers, update the .csproj ProjectReference and ConfigureAI keyed vision IChatClient together. See docs/ocr-vision-llm.md.
     // typeof(DocumentAIPaddleOcrModule),                 // Local PaddleOCR sidecar (free CPU, PP-StructureV3); to switch back, uncomment this, comment VisionLlm, and restore its .csproj ProjectReference

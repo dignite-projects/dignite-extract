@@ -24,6 +24,12 @@ public class ElBrunoMarkdownProvider : IMarkdownTextProvider, ITransientDependen
         _markdownService = markdownService;
     }
 
+    /// <summary>Catch-all fallback: handles every extension so any unclaimed format degrades here.</summary>
+    public virtual bool CanHandle(string fileExtension) => true;
+
+    /// <inheritdoc/>
+    public virtual int Priority => MarkdownProviderPriorities.Fallback;
+
     public virtual async Task<TextExtractionResult> ExtractAsync(
         Stream fileStream,
         TextExtractionContext context,
