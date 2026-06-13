@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Cross-database portability for layer-scoped uniqueness** — replaced the four soft-delete-filtered unique indexes on `DocumentTypes` (`TenantId, TypeCode`), `FieldDefinitions` (`TenantId, DocumentTypeId, Name`), `ExportTemplates` (`TenantId, Name`), and `Cabinets` (`TenantId, Name`) with application-layer uniqueness enforcement in dedicated domain services (`DocumentTypeManager` / `FieldDefinitionManager` / `ExportTemplateManager` / `CabinetManager`), #304. The schema now emits no provider-specific index DDL (no `HasFilter("IsDeleted = 0")` literal, no reliance on SQL Server's "unique index treats NULLs as equal" semantics) and applies cleanly on SQL Server and PostgreSQL — removing the v0.1.0 SQL-Server-only baseline caveat. Layer-scoped uniqueness (same key allowed across the Host / tenant layers, rejected within a layer), the soft-delete-aware `delete → recreate → restore` semantics, and the egress `(TenantId, DocumentTypeCode)` contract are all unchanged; the only behavioral change is an accepted TOCTOU race window on these low-frequency, admin-managed configuration entities.
+
 ## [0.1.0] - 2026-06-13
 
 First public release of Dignite Document AI — a **channel layer** that turns physical paper / scans / photos / PDF images / Office files into trustworthy digitized data (Markdown + structured metadata) for downstream RAG platforms, business systems, and AI clients. See [CLAUDE.md](./CLAUDE.md) for the full positioning and architecture contract.
@@ -35,7 +39,6 @@ First public release of Dignite Document AI — a **channel layer** that turns p
 ### Known limitations
 
 - **Test coverage gaps** — there are no test projects yet for the TextExtraction orchestrator, `Ocr.PaddleOcr`, `Ocr.AzureDocumentIntelligence`, or `HttpApi`.
-- **SQL Server is the host baseline** — the filtered unique indexes (`IsDeleted = 0`) on `DocumentTypes` / `FieldDefinitions` / `ExportTemplates` / `Cabinets` rely on SQL Server's "unique indexes treat NULLs as equal" semantics to enforce Host-layer (`TenantId IS NULL`) uniqueness. PostgreSQL defaults to `NULLS DISTINCT`, and the `HasFilter` literal is not portable — moving to another database requires re-evaluating these indexes. See [docs/deployment.md](./docs/deployment.md).
 - **Webhook exit is not yet implemented** — the exit contract names four exits (REST / MCP server / EventBus / Webhook); this release ships the first three.
 - **MCP server is pull-only** — no resource subscriptions or lifecycle notifications yet (follow-up increment, #197).
 

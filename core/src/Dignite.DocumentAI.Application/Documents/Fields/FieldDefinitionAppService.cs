@@ -19,15 +19,18 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
     private readonly IFieldDefinitionRepository _repository;
     private readonly IDocumentTypeRepository _documentTypeRepository;
     private readonly IDocumentRepository _documentRepository;
+    private readonly FieldDefinitionManager _fieldDefinitionManager;
 
     public FieldDefinitionAppService(
         IFieldDefinitionRepository repository,
         IDocumentTypeRepository documentTypeRepository,
-        IDocumentRepository documentRepository)
+        IDocumentRepository documentRepository,
+        FieldDefinitionManager fieldDefinitionManager)
     {
         _repository = repository;
         _documentTypeRepository = documentTypeRepository;
         _documentRepository = documentRepository;
+        _fieldDefinitionManager = fieldDefinitionManager;
     }
 
     public virtual async Task<List<FieldDefinitionDto>> GetListAsync(GetFieldDefinitionListInput input)
@@ -94,19 +97,9 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
             throw new EntityNotFoundException(typeof(DocumentType), input.DocumentTypeId);
         }
 
-        // Disable ISoftDelete filter: the same (TenantId, DocumentTypeId, Name) counts as occupied even when soft-deleted,
-        // avoiding conflicts with new records on restore.
-        FieldDefinition? existing;
-        using (DataFilter.Disable<ISoftDelete>())
-        {
-            existing = await _repository.FindByNameAsync(input.DocumentTypeId, input.Name);
-        }
-        if (existing != null)
-        {
-            throw new BusinessException(DocumentAIErrorCodes.FieldDefinition.AlreadyExists)
-                .WithData("DocumentTypeCode", type.TypeCode)
-                .WithData("Name", input.Name);
-        }
+        // Soft-delete-aware duplicate check owned by the domain service (#304): the same (TenantId, DocumentTypeId, Name)
+        // counts as occupied even when soft-deleted, avoiding conflicts with new records on restore.
+        await _fieldDefinitionManager.CheckNameAvailableAsync(input.DocumentTypeId, input.Name);
 
         var entity = new FieldDefinition(
             GuidGenerator.Create(),
@@ -135,21 +128,11 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
             throw new EntityNotFoundException(typeof(FieldDefinition), id);
         }
 
-        // Rename unlock (#207): run duplicate check only when Name changes. Same layer + same type is unique, including soft-deleted occupancy.
+        // Rename unlock (#207): run the domain duplicate check only when Name changes. Same layer + same type is unique,
+        // including soft-deleted occupancy. The manager resolves the owning TypeCode for the error message only on conflict.
         if (!string.Equals(input.Name, entity.Name, StringComparison.Ordinal))
         {
-            FieldDefinition? conflict;
-            using (DataFilter.Disable<ISoftDelete>())
-            {
-                conflict = await _repository.FindByNameAsync(entity.DocumentTypeId, input.Name);
-            }
-            if (conflict != null)
-            {
-                // Resolve TypeCode only on the error path for human-readable messages; the happy path does not query it.
-                throw new BusinessException(DocumentAIErrorCodes.FieldDefinition.AlreadyExists)
-                    .WithData("DocumentTypeCode", await ResolveTypeCodeAsync(entity.DocumentTypeId) ?? string.Empty)
-                    .WithData("Name", input.Name);
-            }
+            await _fieldDefinitionManager.CheckNameAvailableAsync(entity.DocumentTypeId, input.Name);
         }
 
         // Two "forbid when extracted values exist" guards share the same fact: whether this field has any value rows.
@@ -220,20 +203,9 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
                     .WithData("Name", entity.Name);
             }
 
-            // Active field with the same name conflicts. CreateAsync duplicate checks should already prevent this; keep a defensive guard.
-            var queryable = await _repository.GetQueryableAsync();
-            var nameConflict = await AsyncExecuter.AnyAsync(
-                queryable.Where(f =>
-                    f.TenantId == entity.TenantId &&
-                    f.DocumentTypeId == entity.DocumentTypeId &&
-                    f.Name == entity.Name &&
-                    !f.IsDeleted));
-            if (nameConflict)
-            {
-                throw new BusinessException(DocumentAIErrorCodes.FieldDefinition.RestoreConflict)
-                    .WithData("DocumentTypeCode", documentTypeCode ?? string.Empty)
-                    .WithData("Name", entity.Name);
-            }
+            // Active field with the same name conflicts. CreateAsync duplicate checks should already prevent this; the domain
+            // service keeps a defensive guard and throws RestoreConflict (#304).
+            await _fieldDefinitionManager.CheckRestorableAsync(entity);
 
             entity.IsDeleted = false;
             entity.DeletionTime = null;
@@ -241,16 +213,6 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
             await _repository.UpdateAsync(entity);
 
             return ObjectMapper.Map<FieldDefinition, FieldDefinitionDto>(entity);
-        }
-    }
-
-    /// <summary>Resolves the owning type's TypeCode with soft-delete traversal, only for human-readable error messages (#207: API exports already use DocumentTypeId).</summary>
-    protected virtual async Task<string?> ResolveTypeCodeAsync(Guid documentTypeId)
-    {
-        using (DataFilter.Disable<ISoftDelete>())
-        {
-            var type = await _documentTypeRepository.FindAsync(documentTypeId);
-            return type?.TypeCode;
         }
     }
 }
