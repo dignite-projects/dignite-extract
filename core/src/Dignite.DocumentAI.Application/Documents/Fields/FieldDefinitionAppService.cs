@@ -11,8 +11,9 @@ using Volo.Abp.Domain.Entities;
 
 namespace Dignite.DocumentAI.Documents.Fields;
 
-// 授权按方法粒度声明（#223）：读字段 schema（活跃 GetListAsync）与管理 schema 解耦，
-// 故不在类级 [Authorize]——每个方法显式声明自己的权限门（与 DocumentAppService 同源 programmatic 模式）。
+// Authorization is declared per method (#223): reading field schema (active GetListAsync) is decoupled from schema management.
+// Therefore there is no class-level [Authorize]; each method explicitly declares its own permission gate,
+// using the same programmatic pattern as DocumentAppService.
 public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionAppService
 {
     private readonly IFieldDefinitionRepository _repository;
@@ -31,15 +32,16 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
 
     public virtual async Task<List<FieldDefinitionDto>> GetListAsync(GetFieldDefinitionListInput input)
     {
-        // 仅当前租户层字段（CLAUDE.md "两层 mutually exclusive 不混"）——租户隔离由 ABP IMultiTenant 全局过滤器施加。
-        // DocumentTypeId 指定时按不可变 Id 精确匹配单类型（#207），类型不存在时自然返回空集；
-        // 留空 = 当前层全部字段定义（批量路径，供 MCP list_document_types 等一次取全、消 per-type N+1）。
+        // Current tenant layer only (CLAUDE.md "two layers are mutually exclusive, no mixing").
+        // Tenant isolation is enforced by the ABP IMultiTenant global filter.
+        // When DocumentTypeId is specified, match exactly one type by immutable Id (#207); missing type naturally returns an empty set.
+        // Empty = all field definitions in the current layer, the batch path used by MCP list_document_types and similar callers to fetch once and avoid per-type N+1.
         if (input.OnlyDeleted)
         {
-            // 回收站视图仅 schema 管理屏幕消费——保持 admin 门（#223）。
+            // Trash view is consumed only by schema management screens, so keep the admin gate (#223).
             await CheckPolicyAsync(DocumentAIPermissions.FieldDefinitions.Default);
 
-            // 回收站视图：穿透 soft-delete 过滤，仅取 IsDeleted，按删除时间倒序。
+            // Trash view: traverse soft-delete filter, take only IsDeleted, ordered by deletion time descending.
             using (DataFilter.Disable<ISoftDelete>())
             {
                 var queryable = await _repository.GetQueryableAsync();
@@ -54,10 +56,11 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
             }
         }
 
-        // 活跃字段读 schema 与管理 schema 解耦（#223）：文档操作者（Documents.Default）需要读字段定义
-        // 驱动动态字段列 / 详情字段编辑 / 导出列选择；字段管理员（FieldDefinitions.Default）读自己的管理列表。
-        // 二者任一即可——fail-closed OR 断言。批量（DocumentTypeId 留空）与按类型查询同一权限门：
-        // 不放大可见范围——逐类型枚举本就能拿到同一集合。
+        // Active field schema reads are decoupled from schema management (#223): document operators (Documents.Default) need field definitions
+        // to drive dynamic field columns / detail field editing / export column selection; field admins (FieldDefinitions.Default)
+        // need to read their own management list. Either is enough: fail-closed OR assertion.
+        // Batch queries (DocumentTypeId empty) and type-scoped queries use the same permission gate and do not widen visibility;
+        // enumerating per type could already obtain the same set.
         if (!await AuthorizationService.IsGrantedAsync(DocumentAIPermissions.Documents.Default) &&
             !await AuthorizationService.IsGrantedAsync(DocumentAIPermissions.FieldDefinitions.Default))
         {
@@ -66,8 +69,8 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
 
         if (input.DocumentTypeId == null)
         {
-            // 批量路径：当前层全部活跃字段一次查询（IMultiTenant + ISoftDelete 过滤器照常施加），
-            // 先按 DocumentTypeId 再按 DisplayOrder 稳定排序，调用方内存分组。
+            // Batch path: query all active fields in the current layer once, with IMultiTenant + ISoftDelete filters still applied.
+            // Stable-sort by DocumentTypeId then DisplayOrder; callers group in memory.
             var queryable = await _repository.GetQueryableAsync();
             var all = await AsyncExecuter.ToListAsync(
                 queryable
@@ -83,14 +86,16 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
     [Authorize(DocumentAIPermissions.FieldDefinitions.Create)]
     public virtual async Task<FieldDefinitionDto> CreateAsync(CreateFieldDefinitionDto input)
     {
-        // 父类型必须存在于当前层（#207 FieldDefinition.DocumentTypeId FK RESTRICT；IMultiTenant + ISoftDelete 过滤保证跨层/已删返回 null）。
+        // Parent type must exist in the current layer (#207 FieldDefinition.DocumentTypeId FK RESTRICT).
+        // IMultiTenant + ISoftDelete filters ensure cross-layer / deleted types return null.
         var type = await _documentTypeRepository.FindAsync(input.DocumentTypeId);
         if (type == null)
         {
             throw new EntityNotFoundException(typeof(DocumentType), input.DocumentTypeId);
         }
 
-        // 关闭 ISoftDelete 过滤——同 (TenantId, DocumentTypeId, Name) 即使软删除态也算占用，避免恢复时与新记录冲突。
+        // Disable ISoftDelete filter: the same (TenantId, DocumentTypeId, Name) counts as occupied even when soft-deleted,
+        // avoiding conflicts with new records on restore.
         FieldDefinition? existing;
         using (DataFilter.Disable<ISoftDelete>())
         {
@@ -124,13 +129,13 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
     {
         var entity = await _repository.GetAsync(id);
 
-        // 跨层防御：只能改自己所在层。
+        // Cross-layer defense: callers may modify only their own layer.
         if (entity.TenantId != CurrentTenant.Id)
         {
             throw new EntityNotFoundException(typeof(FieldDefinition), id);
         }
 
-        // 重命名解锁（#207）：仅在 Name 变化时判重（同层同类型唯一，含软删占用）。
+        // Rename unlock (#207): run duplicate check only when Name changes. Same layer + same type is unique, including soft-deleted occupancy.
         if (!string.Equals(input.Name, entity.Name, StringComparison.Ordinal))
         {
             FieldDefinition? conflict;
@@ -140,17 +145,18 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
             }
             if (conflict != null)
             {
-                // 仅错误路径解析 TypeCode 供人读消息（happy path 不查）。
+                // Resolve TypeCode only on the error path for human-readable messages; the happy path does not query it.
                 throw new BusinessException(DocumentAIErrorCodes.FieldDefinition.AlreadyExists)
                     .WithData("DocumentTypeCode", await ResolveTypeCodeAsync(entity.DocumentTypeId) ?? string.Empty)
                     .WithData("Name", input.Name);
             }
         }
 
-        // 两条"已有抽取值则禁止"守卫共用同一事实（该字段是否已有任何值行），仅在确有变更需要判定时查一次库：
-        // - DataType 变更（#207）：历史值落在旧 typed 列，按新类型查会静默漏掉。
-        // - 多值收窄 multi→single（#212）：Order>0 行会变孤儿（出口只渲染 Order 0，多余值静默丢弃、存储行残留）。
-        //   single→multi 是无损放宽（既有单值行即 1 元素列表），不在此守卫内。
+        // Two "forbid when extracted values exist" guards share the same fact: whether this field has any value rows.
+        // Query once only when a relevant change needs a decision:
+        // - DataType change (#207): historical values live in the old typed column and silently disappear when queried as the new type.
+        // - Multi-value narrowing multi -> single (#212): Order>0 rows become orphans; exports render only Order 0, silently dropping extra values while storage rows remain.
+        //   single -> multi is lossless broadening because existing single-value rows become a one-element list, so it is not guarded here.
         var dataTypeChanged = input.DataType != entity.DataType;
         var multiValueNarrowed = entity.AllowMultiple && !input.AllowMultiple;
         if (dataTypeChanged || multiValueNarrowed)
@@ -195,18 +201,18 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
                 throw new EntityNotFoundException(typeof(FieldDefinition), id);
             }
 
-            // 已在 Disable<ISoftDelete> 作用域内——可解析到（即便已软删的）父类型 TypeCode 用于错误信息 / DTO。
+            // Already inside Disable<ISoftDelete>, so the parent type TypeCode can be resolved even if soft-deleted for error messages / DTO.
             var parentType = await _documentTypeRepository.FindAsync(entity.DocumentTypeId);
             var documentTypeCode = parentType?.TypeCode;
 
-            // 幂等：未删除直接返回。
+            // Idempotent: return directly when not deleted.
             if (!entity.IsDeleted)
             {
                 return ObjectMapper.Map<FieldDefinition, FieldDefinitionDto>(entity);
             }
 
-            // 父类型必须存在且活跃——严格单层匹配（与 FieldExtractionEventHandler 一致）。
-            // 父类型仍处于已删除态时，应走 IDocumentTypeAppService.RestoreAsync 的级联路径。
+            // Parent type must exist and be active, with strict single-layer matching (consistent with FieldExtractionEventHandler).
+            // If the parent type is still deleted, use the cascading path in IDocumentTypeAppService.RestoreAsync instead.
             if (parentType == null || parentType.IsDeleted)
             {
                 throw new BusinessException(DocumentAIErrorCodes.FieldDefinition.ParentTypeMissing)
@@ -214,7 +220,7 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
                     .WithData("Name", entity.Name);
             }
 
-            // 同名活跃字段冲突——CreateAsync 判重应当已防住，防御性补一道。
+            // Active field with the same name conflicts. CreateAsync duplicate checks should already prevent this; keep a defensive guard.
             var queryable = await _repository.GetQueryableAsync();
             var nameConflict = await AsyncExecuter.AnyAsync(
                 queryable.Where(f =>
@@ -238,7 +244,7 @@ public class FieldDefinitionAppService : DocumentAIAppService, IFieldDefinitionA
         }
     }
 
-    /// <summary>解析字段所属类型的 TypeCode（穿透 soft-delete），仅用于人读错误消息（#207：API 出口已是 DocumentTypeId）。</summary>
+    /// <summary>Resolves the owning type's TypeCode with soft-delete traversal, only for human-readable error messages (#207: API exports already use DocumentTypeId).</summary>
     protected virtual async Task<string?> ResolveTypeCodeAsync(Guid documentTypeId)
     {
         using (DataFilter.Disable<ISoftDelete>())

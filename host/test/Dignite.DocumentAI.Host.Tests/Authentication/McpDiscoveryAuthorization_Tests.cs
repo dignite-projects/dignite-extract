@@ -24,18 +24,20 @@ using Xunit;
 namespace Dignite.DocumentAI.Host.Authentication;
 
 /// <summary>
-/// #278 回归护栏：把"为什么 /mcp 必须用 scheme-free 授权策略 + <see cref="McpDiscoveryAuthorizationResultHandler"/>
-/// 定向 challenge、而不是把 McpAuth 直接挂进策略的 AuthenticationSchemes"这条隐性约束锁死。
+/// #278 regression guard: locks down the implicit constraint explaining why /mcp must use a scheme-free
+/// authorization policy plus <see cref="McpDiscoveryAuthorizationResultHandler"/> directed challenge,
+/// instead of attaching McpAuth directly to the policy's AuthenticationSchemes.
 ///
-/// 用最小 ASP.NET 管线（TestServer）精确镜像 host 的 MCP 接线：默认 token scheme +
-/// 一个模仿 ABP UseDynamicClaims 的富化中间件（把认证结果改写成带 stage=enriched 的 principal）+
-/// 真实的 <see cref="McpDiscoveryAuthorizationResultHandler"/> / <see cref="McpDiscoveryChallengeMarker"/> +
-/// SDK 的 AddMcp。不引 ABP 宿主 / DB / OpenIddict。
+/// Uses a minimal ASP.NET pipeline (TestServer) to mirror the host MCP wiring precisely: default token
+/// scheme, an enrichment middleware that mimics ABP UseDynamicClaims by rewriting the authentication
+/// result to a principal with stage=enriched, the real <see cref="McpDiscoveryAuthorizationResultHandler"/>
+/// / <see cref="McpDiscoveryChallengeMarker"/>, and SDK AddMcp. No ABP host, DB, or OpenIddict is used.
 ///
-/// 关键对照（<see cref="Authenticated_request_keeps_dynamic_claims_enriched_principal"/> vs
-/// <see cref="Explicit_scheme_policy_drops_enrichment_documents_the_regression"/>）：scheme-free 策略 →
-/// 端点看到 enriched principal；显式挂 scheme → PolicyEvaluator 重新认证、覆盖 context.User → 退回 raw。
-/// 后人若"顺手简化"把 McpAuth 挂回策略，前一个测试会变红。
+/// Key comparison (<see cref="Authenticated_request_keeps_dynamic_claims_enriched_principal"/> vs
+/// <see cref="Explicit_scheme_policy_drops_enrichment_documents_the_regression"/>): scheme-free policy
+/// lets the endpoint see the enriched principal; explicitly attaching a scheme makes PolicyEvaluator
+/// re-authenticate, overwrite context.User, and fall back to raw. If a future maintainer "simplifies" by
+/// putting McpAuth back on the policy, the first test turns red.
 /// </summary>
 public class McpDiscoveryAuthorization_Tests
 {
@@ -52,7 +54,8 @@ public class McpDiscoveryAuthorization_Tests
         var response = await WithTokenAsync(client).GetAsync("/mcp");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        // scheme-free 策略 → 授权读取 UseDynamicClaims 富化过的 ambient principal，不重新认证。
+        // Scheme-free policy: authorization reads the UseDynamicClaims-enriched ambient principal without
+        // re-authenticating.
         (await response.Content.ReadAsStringAsync()).ShouldBe(EnrichedClaim);
     }
 
@@ -65,7 +68,8 @@ public class McpDiscoveryAuthorization_Tests
         var response = await client.GetAsync("/mcp");
 
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
-        // McpDiscoveryAuthorizationResultHandler 把 challenge 定向到 McpAuth，注入 RFC 9728 发现指针。
+        // McpDiscoveryAuthorizationResultHandler directs challenge to McpAuth and injects the RFC 9728
+        // discovery pointer.
         var wwwAuth = response.Headers.WwwAuthenticate.ToString();
         wwwAuth.ShouldContain("resource_metadata");
         wwwAuth.ShouldContain("/.well-known/oauth-protected-resource");
@@ -74,20 +78,22 @@ public class McpDiscoveryAuthorization_Tests
     [Fact]
     public async Task Explicit_scheme_policy_drops_enrichment_documents_the_regression()
     {
-        // 反例：把 token scheme 挂进策略 AuthenticationSchemes（= 被否决的"简单版"）。
+        // Counterexample: attach the token scheme to policy AuthenticationSchemes, the rejected "simple"
+        // version.
         using var server = await BuildServerAsync(withDiscovery: false, useExplicitScheme: true);
         using var client = server.CreateClient();
 
         var response = await WithTokenAsync(client).GetAsync("/mcp");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        // PolicyEvaluator 因显式 scheme 重新认证 → 覆盖 context.User → 富化丢失，退回 raw。
+        // Because of the explicit scheme, PolicyEvaluator re-authenticates, overwrites context.User, loses
+        // enrichment, and falls back to raw.
         (await response.Content.ReadAsStringAsync()).ShouldBe(RawClaim);
     }
 
     private static HttpClient WithTokenAsync(HttpClient client)
     {
-        // StubTokenHandler 只看 Authorization header 是否存在，不校验内容。
+        // StubTokenHandler only checks that the Authorization header exists and does not validate content.
         client.DefaultRequestHeaders.Add("Authorization", "Bearer test-token");
         return client;
     }
@@ -128,7 +134,8 @@ public class McpDiscoveryAuthorization_Tests
                     app.UseRouting();
                     app.UseAuthentication();
 
-                    // 模仿 ABP UseDynamicClaims：认证后把 IAuthenticateResultFeature 改写成富化 principal。
+                    // Mimics ABP UseDynamicClaims: after authentication, rewrite IAuthenticateResultFeature
+                    // to an enriched principal.
                     app.Use(async (ctx, next) =>
                     {
                         if (ctx.User.Identity?.IsAuthenticated == true)
@@ -177,8 +184,9 @@ public class McpDiscoveryAuthorization_Tests
         return host.GetTestServer();
     }
 
-    // 站位的 token scheme：有 Authorization header 即认证成功（raw principal），否则 NoResult（触发 challenge）。
-    // 对应 OpenIddict validation 从 bearer token 重新解析出未富化 principal。
+    // Placeholder token scheme: Authorization header means authentication succeeds with a raw principal;
+    // otherwise NoResult triggers challenge. This corresponds to OpenIddict validation reparsing an
+    // unenriched principal from the bearer token.
     private sealed class StubTokenHandler : AuthenticationHandler<AuthenticationSchemeOptions>
     {
         public StubTokenHandler(

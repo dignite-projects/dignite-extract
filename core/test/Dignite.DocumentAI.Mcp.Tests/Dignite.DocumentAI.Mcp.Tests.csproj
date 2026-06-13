@@ -9,8 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- DocumentSearchTool 经 ModelContextProtocol.AspNetCore + Microsoft.AspNetCore.Authorization
-         编译，FrameworkReference 经 ProjectReference 传递，此处显式声明以确保测试主机解析到共享框架。 -->
+    <!-- DocumentSearchTool compiles through ModelContextProtocol.AspNetCore and Microsoft.AspNetCore.Authorization.
+         The FrameworkReference is transitive through ProjectReference, but is declared explicitly here so the
+         test host resolves the shared framework. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 

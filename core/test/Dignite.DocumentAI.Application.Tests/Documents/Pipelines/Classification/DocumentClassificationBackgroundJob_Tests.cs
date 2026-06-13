@@ -23,7 +23,7 @@ namespace Dignite.DocumentAI.Documents;
 [DependsOn(typeof(DocumentAIApplicationTestModule))]
 public class DocumentClassificationJobTestModule : AbpModule
 {
-    // 已知 Id 让测试断言 doc.DocumentTypeId == ContractTypeId（#207：分类结果是内部 Id）。
+    // Known Id lets tests assert doc.DocumentTypeId == ContractTypeId (#207: classification result is the internal Id).
     public static readonly Guid ContractTypeId = Guid.NewGuid();
 
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -31,15 +31,16 @@ public class DocumentClassificationJobTestModule : AbpModule
         context.Services.AddSingleton(Substitute.For<IDocumentRepository>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
-        // #216：Manager + 后台作业 BeginRun/CompleteRun/FailRun 都走 IDocumentPipelineRunRepository。
+        // #216: Manager + background-job BeginRun / CompleteRun / FailRun all use IDocumentPipelineRunRepository.
         context.Services.AddSingleton(PipelineRunRepositoryFake.Create());
 
-        // 字段架构 v2：候选集来自 IDocumentTypeRepository（DB），按 Document.TenantId 精确匹配单层
+        // Field schema v2: the candidate set comes from IDocumentTypeRepository (DB), matched exactly to
+        // one layer by Document.TenantId.
         var contractType = new DocumentType(
             ContractTypeId,
             tenantId: null,
             typeCode: "contract.general",
-            displayName: "合同",
+            displayName: "Contract",
             confidenceThreshold: 0.75,
             priority: 0);
 
@@ -63,9 +64,9 @@ public class DocumentClassificationJobTestModule : AbpModule
 }
 
 /// <summary>
-/// DocumentClassificationBackgroundJob 行为测试：验证分类结果如何驱动
-/// PipelineRun 状态流转和 DocumentClassifiedEto 发布。
-/// IChatClient 和 DocumentClassificationWorkflow 均使用 NSubstitute 替代，无真实 LLM 调用。
+/// DocumentClassificationBackgroundJob behavior tests: verifies how classification results drive
+/// PipelineRun status transitions and DocumentClassifiedEto publication.
+/// IChatClient and DocumentClassificationWorkflow are both replaced with NSubstitute, with no real LLM calls.
 /// </summary>
 public class DocumentClassificationBackgroundJob_Tests
     : DocumentAIApplicationTestBase<DocumentClassificationJobTestModule>
@@ -88,7 +89,7 @@ public class DocumentClassificationBackgroundJob_Tests
     [Fact]
     public async Task HighConfidence_Completes_Pipeline_And_Publishes_Event()
     {
-        var doc = CreateDocument("業務委託契約書の内容です。");
+        var doc = CreateDocument("This is the content of a service agreement.");
         SetupDocumentRepository(doc);
 
         _workflow
@@ -182,7 +183,7 @@ public class DocumentClassificationBackgroundJob_Tests
     [Fact]
     public async Task UnregisteredTypeCode_Marks_PendingReview_Without_Polluting_Document()
     {
-        // LLM 幻觉：返回一个不在 DocumentType 注册表中的 TypeCode
+        // LLM hallucination: returns a TypeCode that is not in the DocumentType registry.
         var doc = CreateDocument("Some document text.");
         SetupDocumentRepository(doc);
 
@@ -215,7 +216,7 @@ public class DocumentClassificationBackgroundJob_Tests
     [Fact]
     public async Task Transient_AiProviderFailure_FailsRun_And_Rethrows_For_AbpRetry()
     {
-        var doc = CreateDocument("業務委託契約書。甲：A社。乙：B社。");
+        var doc = CreateDocument("Service agreement. Party A: Company A. Party B: Company B.");
         SetupDocumentRepository(doc);
 
         _workflow
@@ -239,7 +240,7 @@ public class DocumentClassificationBackgroundJob_Tests
     [Fact]
     public async Task JsonException_Routes_To_PendingReview()
     {
-        var doc = CreateDocument("業務委託契約書。甲：A社。乙：B社。");
+        var doc = CreateDocument("Service agreement. Party A: Company A. Party B: Company B.");
         SetupDocumentRepository(doc);
 
         _workflow
@@ -266,7 +267,7 @@ public class DocumentClassificationBackgroundJob_Tests
     [Fact]
     public async Task Wrapped_JsonException_Also_Routes_To_PendingReview()
     {
-        var doc = CreateDocument("業務委託契約書。");
+        var doc = CreateDocument("Service agreement.");
         SetupDocumentRepository(doc);
 
         var inner = new JsonException("invalid token");
@@ -290,14 +291,16 @@ public class DocumentClassificationBackgroundJob_Tests
 
     private void SetupDocumentRepository(Document doc)
     {
-        // #216：分类作业三处加载从 GetWithPipelineRunsAsync 改为 GetAsync(includeDetails:false)——
-        // PipelineRun 独立聚合根后通过 runRepo 单独查。BeginRun 仍走 GetAsync。
+        // #216: classification job loading in three places changed from GetWithPipelineRunsAsync to
+        // GetAsync(includeDetails:false). After PipelineRun became an independent aggregate root, runRepo
+        // is queried separately. BeginRun still uses GetAsync.
         _documentRepository
             .GetAsync(doc.Id, false, Arg.Any<CancellationToken>())
             .Returns(doc);
 
-        // #267：CompleteRun 改走 FindWithFieldValuesAsync(includeFieldValues:true)——低置信度路径需带字段值
-        // 加载才能清空类型绑定字段。两处返回同一 doc 实例，断言（DocumentTypeId/ReviewStatus）不受影响。
+        // #267: CompleteRun now uses FindWithFieldValuesAsync(includeFieldValues:true); low-confidence paths
+        // need field values loaded to clear type-bound fields. Both return the same doc instance, so assertions
+        // for DocumentTypeId / ReviewStatus are unaffected.
         _documentRepository
             .FindWithFieldValuesAsync(doc.Id, Arg.Any<CancellationToken>())
             .Returns(doc);

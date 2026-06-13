@@ -11,9 +11,11 @@ using Volo.Abp.Domain.Entities;
 namespace Dignite.DocumentAI.Mcp.Documents;
 
 /// <summary>
-/// 文档全文读取 tool——供不支持 MCP <c>resources/read</c> 的客户端通过 tool 调用读取文档全文（#285）。
-/// 数据源与 <see cref="DocumentResources"/> 相同，无独立维护负担。支持 MCP Resources 的客户端
-/// （如 Claude Code CLI）仍走标准 Resource 路径（<c>docai://documents/{id}</c>）。
+/// Full document read tool for clients that do not support MCP <c>resources/read</c>, allowing them
+/// to read full document content through a tool call (#285). It uses the same data source as
+/// <see cref="DocumentResources"/> and adds no separate maintenance burden. Clients that support MCP
+/// Resources, such as Claude Code CLI, should still use the standard Resource path
+/// (<c>docai://documents/{id}</c>).
 /// </summary>
 [McpServerToolType]
 public sealed class DocumentTools
@@ -38,27 +40,31 @@ public sealed class DocumentTools
         DocumentDto document;
         try
         {
-            // 委托 IDocumentAppService.GetAsync 用例：fail-closed 权限断言（方法体内 CheckPolicyAsync）、
-            // ambient 租户隔离、DocumentTypeCode 穿透 soft-delete 解析都在 AppService 内统一执行。
+            // Delegate to the IDocumentAppService.GetAsync use case. Fail-closed authorization
+            // assertions (CheckPolicyAsync inside the method body), ambient tenant isolation, and
+            // DocumentTypeCode resolution through soft-delete are all centralized in the AppService.
             document = await documentAppService.GetAsync(documentId);
         }
         catch (EntityNotFoundException)
         {
-            // 跨租户 id（被 IMultiTenant 过滤器钳掉 → GetAsync 抛 EntityNotFound）与真正不存在一并按
-            // "未找到"处理，不泄漏文档存在性。
+            // Cross-tenant IDs are filtered out by IMultiTenant and cause GetAsync to throw
+            // EntityNotFound, just like truly nonexistent IDs. Treat both as "not found" to avoid
+            // leaking document existence.
             throw new McpException($"Document not found: {id}");
         }
 
         return new DocumentDetailResult
         {
             Id = document.Id,
-            // 用户派生自由文本经 PromptBoundary 包裹，防 indirect prompt injection。
+            // User-derived free text is wrapped with PromptBoundary to prevent indirect prompt
+            // injection.
             Title = PromptBoundary.WrapField(document.Title),
             DocumentTypeCode = document.DocumentTypeCode,
             LifecycleStatus = document.LifecycleStatus.ToString(),
             Language = document.Language,
             CreationTime = document.CreationTime,
-            // 正文是用户派生的外部不受信内容，WrapDocument 包裹与 DocumentResources 保持同等保护。
+            // The body is user-derived external untrusted content. WrapDocument gives it the same
+            // protection as DocumentResources.
             Markdown = PromptBoundary.WrapDocument(document.Markdown ?? string.Empty),
             ExtractedFields = DocumentFieldProjection.Project(document.ExtractedFields),
             ExtractionIsComplete = document.ExtractionIsComplete,

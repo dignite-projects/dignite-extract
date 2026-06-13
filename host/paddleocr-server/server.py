@@ -49,9 +49,10 @@ def _get_reader(lang_code: str, model_name: str):
         return _readers[key]
 
     device = _device()
-    # CPU 推理时禁用 oneDNN：PaddlePaddle 3.x PIR 执行器与 oneDNN 后端在
-    # ConvertPirAttribute2RuntimeAttribute 上有已知不兼容（pir::ArrayAttribute<DoubleAttribute>），
-    # 全局 FLAGS_use_mkldnn 不会被 PaddleX inference Config 采纳，需在构造器显式关闭。
+    # Disable oneDNN for CPU inference: PaddlePaddle 3.x PIR executor has a known incompatibility with
+    # the oneDNN backend in ConvertPirAttribute2RuntimeAttribute (pir::ArrayAttribute<DoubleAttribute>).
+    # Global FLAGS_use_mkldnn is not honored by the PaddleX inference Config, so disable it explicitly in
+    # the constructor.
     cpu_kwargs = {"enable_mkldnn": False} if device == "cpu" else {}
     if _is_structure(model_name):
         from paddleocr import PPStructureV3

@@ -7,7 +7,8 @@ using Volo.Abp.Content;
 namespace Dignite.DocumentAI.Documents.Exports;
 
 /// <summary>
-/// 导出模板管理 + 执行（per-tenant）。导出是通道的"文件出口"——仅字段投影 + 序列化，零业务转换。
+/// Export template management and execution, per tenant. Export is the channel's file output: field
+/// projection and serialization only, with no business transformation.
 /// </summary>
 public interface IExportTemplateAppService : IApplicationService
 {
@@ -21,6 +22,6 @@ public interface IExportTemplateAppService : IApplicationService
 
     Task DeleteAsync(Guid id);
 
-    /// <summary>按模板生成导出文件（CSV / XLSX）。同步返回文件流。</summary>
+    /// <summary>Generates an export file from the template (CSV / XLSX) and returns the file stream synchronously.</summary>
     Task<IRemoteStreamContent> ExportAsync(ExportDocumentsInput input);
 }

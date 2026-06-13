@@ -4,13 +4,17 @@ using System.Collections.Generic;
 namespace Dignite.DocumentAI.Documents.Exports;
 
 /// <summary>
-/// 导出查询投影——只取导出需要的字段，<strong>排除 Markdown</strong>（大 OCR/正文载荷）。
-/// 投影到非实体类型时 EF 自动不 SELECT 未引用列、也不进 change tracker，避免为上万文档把 Markdown 拉进内存。
+/// Export query projection: fetch only fields needed by export and <strong>exclude Markdown</strong>,
+/// which can be a large OCR/body payload. When projecting to a non-entity type, EF automatically does
+/// not SELECT unreferenced columns and does not track changes, avoiding loading Markdown into memory
+/// for thousands of documents.
 /// <para>
-/// 固定系统字段（#207 / #287）：<see cref="LifecycleStatus"/> / <see cref="ReviewDisposition"/> /
-/// <see cref="ReviewReasons"/> / <see cref="Title"/> 由导出引擎固定输出（不走模板列配置）。<see cref="ExtractedFields"/> 是
-/// <see cref="DocumentExtractedField"/> child 行的 typed 投影（随文档一并 SELECT，相关子查询 / JOIN，非逐文档 N+1），
-/// 模板列按 <see cref="ExtractedFieldProjection.FieldDefinitionId"/> 匹配。
+/// Fixed system fields (#207 / #287): <see cref="LifecycleStatus"/> /
+/// <see cref="ReviewDisposition"/> / <see cref="ReviewReasons"/> / <see cref="Title"/> are emitted
+/// by the export engine directly and do not go through template-column configuration.
+/// <see cref="ExtractedFields"/> is the typed projection of <see cref="DocumentExtractedField"/> child
+/// rows, selected with the document through correlated subqueries / JOINs rather than per-document
+/// N+1. Template columns match by <see cref="ExtractedFieldProjection.FieldDefinitionId"/>.
 /// </para>
 /// </summary>
 internal sealed class ExportProjection
@@ -19,19 +23,18 @@ internal sealed class ExportProjection
     public DocumentLifecycleStatus LifecycleStatus { get; init; }
     public DocumentReviewDisposition ReviewDisposition { get; init; }
 
-    /// <summary>原因轴（#287）——non-blocking 的 MissingRequiredFields 文档照常进类型绑定导出，需透出"缺必填"质量信号（处置轴的 ReviewDisposition 不暴露它）。</summary>
+    /// <summary>Reason axis (#287). Documents with non-blocking MissingRequiredFields still enter type-bound export normally, but the export must expose the "missing required fields" quality signal because the disposition axis ReviewDisposition does not.</summary>
     public DocumentReviewReasons ReviewReasons { get; init; }
 
     public List<ExtractedFieldProjection> ExtractedFields { get; init; } = new();
 }
 
-/// <summary>单个类型绑定字段值的 typed 投影——导出按字段类型（来自 FieldDefinition.DataType，#208）渲染对应列的单元格字符串，按 <see cref="FieldDefinitionId"/> 匹配模板列（#207）。</summary>
+/// <summary>Typed projection for one type-bound field value. Export renders the corresponding column cell string by field type (from FieldDefinition.DataType, #208) and matches template columns by <see cref="FieldDefinitionId"/> (#207).</summary>
 internal sealed class ExtractedFieldProjection
 {
     public Guid FieldDefinitionId { get; init; }
 
-    /// <summary>多值字段（#212）一字段多行的位序——导出按 <see cref="FieldDefinitionId"/> 匹配列时取 Order 最小行，
-    /// 与 REST/MCP 出口的 Order-0 标量渲染一致、且确定（不依赖 DB 未指定的行返回顺序）。完整多值 join 留作后续增量。</summary>
+    /// <summary>Position of one row among multiple rows for a multi-value field (#212). Export takes the smallest Order row when matching a column by <see cref="FieldDefinitionId"/>, matching the Order-0 scalar rendering in REST/MCP outbound surfaces and staying deterministic without relying on unspecified DB row order. Full multi-value join is left for a later increment.</summary>
     public int Order { get; init; }
 
     public string? TextValue { get; init; }

@@ -30,7 +30,7 @@ public class ReprocessingTestModule : AbpModule
     }
 }
 
-/// <summary>批量重处理 AppService（#289 步骤 3 / 5）——预览返回 + 范围翻译（保护人工确认 / 待审核队列）+ 入队 dispatcher。</summary>
+/// <summary>Bulk reprocessing AppService (#289 steps 3 / 5): preview return, scope translation that protects manual confirmations / pending-review queues, and dispatcher enqueue.</summary>
 public class DocumentReprocessingAppService_Tests
     : DocumentAIApplicationTestBase<ReprocessingTestModule>
 {
@@ -48,7 +48,7 @@ public class DocumentReprocessingAppService_Tests
         _fieldDefinitionRepository = GetRequiredService<IFieldDefinitionRepository>();
         _backgroundJobManager = GetRequiredService<IBackgroundJobManager>();
 
-        // 类型存在于当前层（EnsureTypeInCurrentLayerAsync 通过）。
+        // Type exists in the current layer, so EnsureTypeInCurrentLayerAsync passes.
         _documentTypeRepository.FindAsync(Arg.Any<Guid>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(ci => new DocumentType(ci.ArgAt<Guid>(0), null, "type.x", "Type X"));
         _documentRepository.CountForReprocessingAsync(
@@ -142,7 +142,7 @@ public class DocumentReprocessingAppService_Tests
     }
 }
 
-/// <summary>字段重抽 dispatcher（#289 步骤 4）——链式自延续：满批 enqueue 单篇 + 下一个 dispatcher（带游标）；不满批停止。</summary>
+/// <summary>Field re-extraction dispatcher (#289 step 4): chained self-continuation. A full batch enqueues single-document jobs plus the next dispatcher with a cursor; a partial batch stops.</summary>
 public class DocumentFieldReextractionDispatcherJob_Tests
     : DocumentAIApplicationTestBase<ReprocessingTestModule>
 {
@@ -173,7 +173,7 @@ public class DocumentFieldReextractionDispatcherJob_Tests
             .GetIdsForReprocessingAsync(typeId, null, false, firstBatchLastId, batchSize, Arg.Any<CancellationToken>())
             .Returns(secondBatch);
 
-        // 第一批（满批）→ batchSize 个单篇 + 1 个下一个 dispatcher（游标 = 末 Id）。
+        // First batch is full: batchSize single-document jobs plus one next dispatcher with cursor = last Id.
         await _job.ExecuteAsync(new DocumentFieldReextractionDispatcherArgs { DocumentTypeId = typeId, TenantId = null, AfterId = null });
 
         await _backgroundJobManager.Received(batchSize).EnqueueAsync(
@@ -184,7 +184,7 @@ public class DocumentFieldReextractionDispatcherJob_Tests
 
         _backgroundJobManager.ClearReceivedCalls();
 
-        // 第二批（不满批）→ 1 个单篇 + 0 个下一个 dispatcher（范围读尽）。
+        // Second batch is partial: one single-document job and no next dispatcher because the scope is exhausted.
         await _job.ExecuteAsync(new DocumentFieldReextractionDispatcherArgs { DocumentTypeId = typeId, TenantId = null, AfterId = firstBatchLastId });
 
         await _backgroundJobManager.Received(1).EnqueueAsync(

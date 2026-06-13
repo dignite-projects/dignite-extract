@@ -7,9 +7,10 @@ using Dignite.DocumentAI.Permissions;
 namespace Dignite.DocumentAI.Documents.Pipelines;
 
 /// <summary>
-/// <see cref="IDocumentPipelineRunAppService"/> 的实现（#216）。
-/// 权限：显式 <c>CheckPolicyAsync(Documents.Default)</c> 与 <c>DocumentAppService</c> 同源（反射 / LLM tool 路径下 <c>[Authorize]</c> 不触发）。
-/// 租户隔离：ABP <c>IMultiTenant</c> 全局过滤器自动施加。
+/// Implementation of <see cref="IDocumentPipelineRunAppService"/> (#216).
+/// Authorization: explicit <c>CheckPolicyAsync(Documents.Default)</c>, matching
+/// <c>DocumentAppService</c>, because <c>[Authorize]</c> does not fire on reflection / LLM tool paths.
+/// Tenant isolation: ABP <c>IMultiTenant</c> global filter applies automatically.
 /// </summary>
 public class DocumentPipelineRunAppService : DocumentAIAppService, IDocumentPipelineRunAppService
 {
@@ -31,16 +32,20 @@ public class DocumentPipelineRunAppService : DocumentAIAppService, IDocumentPipe
     {
         await CheckPolicyAsync(DocumentAIPermissions.Documents.Default);
 
-        // Fail-closed 安全门：必须经文档读路径断言可见性，再返回其编排状态。仅 CheckPolicyAsync 不够——
-        // PipelineRun 自身有 IMultiTenant 过滤但<b>不</b>实现 ISoftDelete（DB 级 CASCADE 才清行），
-        // 软删 Document 的 runs 仍在 child 表里；若不经 Document.GetAsync 断言，调用方猜对一个本租户但
-        // 已软删 / 未来加可见性规则隐藏的 documentId，就能从这个 endpoint 取到其编排元数据（orphan disclosure）。
-        // GetAsync 经 ISoftDelete + IMultiTenant 双过滤器：找不到 → EntityNotFoundException → 404（与契约一致）。
+        // Fail-closed safety gate: assert visibility through the document read path before returning
+        // its orchestration state. CheckPolicyAsync alone is insufficient. PipelineRun has its own
+        // IMultiTenant filter but does not implement ISoftDelete; DB-level CASCADE only clears rows on
+        // hard delete, so runs for soft-deleted Documents still exist in the child table. Without the
+        // Document.GetAsync assertion, a caller who guesses a same-tenant documentId that is
+        // soft-deleted or hidden by future visibility rules could read its orchestration metadata from
+        // this endpoint (orphan disclosure). GetAsync applies both ISoftDelete and IMultiTenant
+        // filters: not found -> EntityNotFoundException -> 404, matching the contract.
         _ = await _documentRepository.GetAsync(documentId, includeDetails: false);
 
         var runs = await _runRepository.GetListByDocumentAsync(documentId);
-        // 直接调子 mapper Map(source)（不经 ObjectMapper），让 AfterMap 触发 Candidates 解码——
-        // 与原 [UseMapper] 嵌套路径行为一致（DocumentAIApplicationMappers 注释）。
+        // Call the child mapper Map(source) directly instead of ObjectMapper so AfterMap decodes
+        // Candidates, matching the original [UseMapper] nested-path behavior; see
+        // DocumentAIApplicationMappers comments.
         return runs.Select(_runMapper.Map).ToList();
     }
 }

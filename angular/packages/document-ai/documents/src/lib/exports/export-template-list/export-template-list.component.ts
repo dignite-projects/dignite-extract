@@ -111,7 +111,7 @@ export class ExportTemplateListComponent implements OnInit {
   editing = signal<ExportTemplateDto | 'create' | null>(null);
   isSubmitting = signal(false);
   exportingId = signal<string | null>(null);
-  /** 正在配置筛选条件的导出模板；非 null 时显示筛选 modal。 */
+  /** Export template currently configuring filters; when non-null, show the filter modal. */
   filteringTemplate = signal<ExportTemplateDto | null>(null);
   private tableQuery: Partial<ABP.PageQueryParams> = {};
 

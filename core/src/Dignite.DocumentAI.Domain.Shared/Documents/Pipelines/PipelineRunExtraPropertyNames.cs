@@ -1,18 +1,19 @@
 namespace Dignite.DocumentAI.Documents.Pipelines;
 
 /// <summary>
-/// <see cref="DocumentPipelineRun.ExtraProperties"/> 的 key 常量。
-/// 每种 pipeline 约定自己使用的 key；业务模块若新增 pipeline，建议前缀 "{moduleCode}." 以避免冲突。
+/// Key constants for <see cref="DocumentPipelineRun.ExtraProperties"/>.
+/// Each pipeline defines its own keys. Business modules that add pipelines should use the recommended
+/// "{moduleCode}." prefix to avoid conflicts.
 /// </summary>
 public static class PipelineRunExtraPropertyNames
 {
     /// <summary>
-    /// 分类流水线 top-K 候选结果。
-    /// 写入时使用 <see cref="PipelineRunCandidate"/> 作为 JSON payload schema；
-    /// 读取侧通过 <see cref="DocumentPipelineRunDto.Candidates"/> 强类型暴露。
+    /// Top-K candidate results from the classification pipeline.
+    /// Written with <see cref="PipelineRunCandidate"/> as the JSON payload schema and exposed on read
+    /// side through strongly typed <see cref="DocumentPipelineRunDto.Candidates"/>.
     /// <para>
-    /// 必须是 <c>const</c>：这是 JSON 列的持久化 key 字面量。
-    /// 任何运行时改动都会让历史 <c>ExtraProperties["Candidates"]</c> 读不回。
+    /// Must be <c>const</c>: this is the persisted key literal in the JSON column. Any runtime change
+    /// would make historical <c>ExtraProperties["Candidates"]</c> unreadable.
     /// </para>
     /// </summary>
     public const string ClassificationCandidates = "Candidates";

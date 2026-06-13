@@ -9,13 +9,16 @@ using Volo.Abp.Timing;
 namespace Dignite.DocumentAI.Documents.Pipelines.Lifecycle;
 
 /// <summary>
-/// 监听 <see cref="DocumentLifecycleStatusChangedEvent"/>，在文档跃迁到
-/// <see cref="DocumentLifecycleStatus.Ready"/> 时发布 <see cref="DocumentReadyEto"/>——
-/// CLAUDE.md "出口事件契约" 中下游消费方默认订阅的可信信号。
+/// Listens to <see cref="DocumentLifecycleStatusChangedEvent"/> and publishes
+/// <see cref="DocumentReadyEto"/> when a document transitions to
+/// <see cref="DocumentLifecycleStatus.Ready"/>. This is the trusted signal downstream consumers
+/// subscribe to by default under CLAUDE.md "Outbound Event Contract".
 /// <para>
-/// Ready 闸门由分类阶段执行：自动分类置信度不足 / 无合适类型的文档被置 blocking 原因 UnresolvedClassification（进待人工审核队列），
-/// <c>DocumentTypeCode</c> 为空时 <c>DeriveLifecycle</c> 不会跃迁到 Ready。因此本 handler
-/// 不需要额外校验，<c>NewStatus == Ready</c> 即隐含通过分类 / 人工审核闸门。
+/// The Ready gate is enforced by the classification stage: documents with insufficient automatic
+/// classification confidence / no suitable type receive the blocking UnresolvedClassification reason
+/// and enter the manual review queue; when <c>DocumentTypeCode</c> is empty,
+/// <c>DeriveLifecycle</c> does not transition to Ready. Therefore this handler needs no extra check:
+/// <c>NewStatus == Ready</c> implicitly means the classification / manual-review gate passed.
 /// </para>
 /// </summary>
 public class DocumentReadyEventHandler
@@ -57,8 +60,10 @@ public class DocumentReadyEventHandler
             return;
         }
 
-        // ETO 仍携带 DocumentTypeCode 字符串（出口契约不变）——由内部 DocumentTypeId 解析（#207）。
-        // Ready 文档必有已确认类型（DeriveLifecycle 闸门），且 DeleteAsync 阻止删除在用类型，故类型必活跃。
+        // ETO still carries the DocumentTypeCode string to preserve the outbound contract, resolving
+        // it from internal DocumentTypeId (#207). Ready documents must have a confirmed type because
+        // of the DeriveLifecycle gate, and DeleteAsync prevents deleting in-use types, so the type
+        // should be active.
         string? documentTypeCode = null;
         if (document.DocumentTypeId.HasValue)
         {

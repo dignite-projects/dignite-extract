@@ -133,16 +133,16 @@ namespace Dignite.DocumentAI.Host;
 
     // DocumentAI core modules
     typeof(DocumentAIHttpApiModule),
-    typeof(DocumentAIMcpModule),          // MCP 出口适配器（与 HttpApi REST 出口平行）
+    typeof(DocumentAIMcpModule),          // MCP exit adapter, parallel to the HttpApi REST exit.
     typeof(DocumentAIApplicationModule),
     typeof(DocumentAIEntityFrameworkCoreModule),
 
     // DocumentAI infrastructure modules
     typeof(DocumentAITextExtractionModule),
     typeof(DocumentAITextExtractionElBrunoMarkItDownModule),
-    typeof(DocumentAIVisionLlmOcrModule)                  // vision-LLM OCR（照片/票据/图片型 PDF），当前默认 OCR provider（#259）。IOcrProvider 互斥：切换 provider 时同步 .csproj ProjectReference + ConfigureAI keyed vision IChatClient。详见 docs/ocr-vision-llm.md
-    // typeof(DocumentAIPaddleOcrModule),                 // 本地 PaddleOCR sidecar（免费 CPU，PP-StructureV3）；切回时取消注释、注释掉 VisionLlm，并恢复其 .csproj ProjectReference
-    // typeof(DocumentAIAzureDocumentIntelligenceModule), // 云方案（高精度），切换时同步在 .csproj 注释 / 启用 ProjectReference
+    typeof(DocumentAIVisionLlmOcrModule)                  // Vision-LLM OCR for photos, receipts, and image PDFs; current default OCR provider (#259). IOcrProvider implementations are mutually exclusive: when switching providers, update the .csproj ProjectReference and ConfigureAI keyed vision IChatClient together. See docs/ocr-vision-llm.md.
+    // typeof(DocumentAIPaddleOcrModule),                 // Local PaddleOCR sidecar (free CPU, PP-StructureV3); to switch back, uncomment this, comment VisionLlm, and restore its .csproj ProjectReference
+    // typeof(DocumentAIAzureDocumentIntelligenceModule), // Cloud option (higher accuracy); when switching, also comment / enable the matching ProjectReference in .csproj
 )]
 public class DocumentAIHostModule : AbpModule
 {
@@ -272,10 +272,10 @@ public class DocumentAIHostModule : AbpModule
         ConfigureRequestLimits(context);
     }
 
-    // #221：上传请求体上限作为 Kestrel / Form 层 backstop。真正的 fail-closed 友好错误在
-    // DocumentAppService.UploadAsync（按 DocumentConsts.MaxUploadFileBytes 校验后抛 BusinessException）；
-    // 此处留一段 multipart 信封余量（+1 MiB），使正常的最大尺寸文件不会在到达应用层前被 413 截断，
-    // 同时把 ASP.NET Core 默认的隐式 ~28.6 MB（Kestrel）/ 128 MB（Form）上限收敛为显式、可审计的边界。
+    // #221: upload request body limits as Kestrel / Form-layer backstop. The real fail-closed friendly error lives in
+    // DocumentAppService.UploadAsync, which validates against DocumentConsts.MaxUploadFileBytes and throws BusinessException.
+    // Leave multipart envelope headroom here (+1 MiB), so a normal max-size file is not cut off by 413 before reaching the application layer,
+    // while converging ASP.NET Core's implicit defaults (~28.6 MB Kestrel / 128 MB Form) into an explicit, auditable boundary.
     private static void ConfigureRequestLimits(ServiceConfigurationContext context)
     {
         var bodyLimit = DocumentConsts.MaxUploadFileBytes + 1024 * 1024;
@@ -291,10 +291,10 @@ public class DocumentAIHostModule : AbpModule
         });
     }
 
-    // 启用 ABP transactional outbox + inbox（issue #188）：
-    // - publish 路径在调用方 UoW 内 → 事件写入 AbpEventOutbox 表与业务变更原子持久化
-    // - 后台 worker 扫表真正投递到消息中间件，保证 at-least-once 投递
-    // 下游消费方按 (DocumentId, EventType, EventTime) 自行幂等以处理重投。
+    // Enable ABP transactional outbox + inbox (issue #188):
+    // - publish paths run inside the caller UoW, so events are written to AbpEventOutbox atomically with business changes
+    // - a background worker scans the table and actually delivers to the message broker, guaranteeing at-least-once delivery
+    // Downstream consumers handle redelivery idempotently by (DocumentId, EventType, EventTime).
     private void ConfigureDistributedEventBus()
     {
         Configure<AbpDistributedEventBusOptions>(options =>
@@ -338,25 +338,26 @@ public class DocumentAIHostModule : AbpModule
         ConfigureMcpAuthentication(context);
     }
 
-    // #278：给 /mcp 出口补 OAuth Protected Resource Metadata 自动发现链路（RFC 9728）。纯增量，
-    // 不破坏现有手动 token 路径。McpAuth scheme 在本 host 只承担两件事，都不参与 token 验证：
-    //   1. 自服务 `/.well-known/oauth-protected-resource`——McpAuthenticationHandler 实现
-    //      IAuthenticationRequestHandler，在 UseAuthentication() 阶段对该路径直接吐 metadata JSON，
-    //      不依赖任何授权策略，无需单独映射端点；
-    //   2. 提供 401 challenge——注入 `WWW-Authenticate: Bearer resource_metadata="..."` 指针。
-    // 注意 McpAuth 不进入 /mcp 端点的授权策略 AuthenticationSchemes（否则 PolicyEvaluator 会重新
-    // authenticate，丢掉 UseDynamicClaims 富化过的 principal），challenge 由
-    // McpDiscoveryAuthorizationResultHandler 仅对带标记的 /mcp 端点定向触发。详见该 handler 注释。
-    // token 验证、dynamic claims、租户解析全部仍走端点默认策略 + 现有 OpenIddict 链，手动 token
-    //（mcp-remote 静态 Bearer / Inspector 手填 / password-grant）零影响；发现仅在未带 token 的 401 触发。
+    // #278: add OAuth Protected Resource Metadata discovery for the /mcp export endpoint (RFC 9728). This is additive
+    // and does not break existing manual token paths. The McpAuth scheme has only two responsibilities in this host, neither involving token validation:
+    //   1. Self-serve `/.well-known/oauth-protected-resource`. McpAuthenticationHandler implements
+    //      IAuthenticationRequestHandler and directly returns metadata JSON for that path during UseAuthentication(),
+    //      without relying on any authorization policy and without separately mapping an endpoint.
+    //   2. Provide 401 challenge by injecting the `WWW-Authenticate: Bearer resource_metadata="..."` pointer.
+    // Note that McpAuth must not enter the /mcp endpoint authorization policy AuthenticationSchemes. Otherwise PolicyEvaluator would
+    // re-authenticate and lose the principal enriched by UseDynamicClaims. McpDiscoveryAuthorizationResultHandler triggers the challenge
+    // only for marked /mcp endpoints; see that handler's comments.
+    // Token validation, dynamic claims, and tenant resolution all still use the endpoint default policy + existing OpenIddict chain.
+    // Manual token paths (mcp-remote static Bearer / Inspector manual token / password-grant) are unaffected; discovery triggers only on 401 without token.
     private void ConfigureMcpAuthentication(ServiceConfigurationContext context)
     {
         var configuration = context.Services.GetConfiguration();
         var authority = configuration["AuthServer:Authority"];
         if (string.IsNullOrWhiteSpace(authority))
         {
-            // 没有 authority 就无从指向授权服务器，发现链路无意义；不注册半成品 metadata、不接管 challenge。
-            // 此时 /mcp 仍受 RequireAuthorization 保护，手动 token 路径不受影响。
+            // Without authority, there is no authorization server to point to and discovery is meaningless.
+            // Do not register half-complete metadata or take over challenge. /mcp remains protected by RequireAuthorization,
+            // and manual token paths are unaffected.
             return;
         }
 
@@ -382,8 +383,8 @@ public class DocumentAIHostModule : AbpModule
             };
         });
 
-        // McpAuth 仅用于 /.well-known/oauth-protected-resource 自服务和 /mcp 端点 401 challenge，
-        // 不是用户可交互的外部登录 provider。清掉 DisplayName，ABP Account 模块不会把它渲染成登录页按钮。
+        // McpAuth is used only for /.well-known/oauth-protected-resource self-service and /mcp endpoint 401 challenge.
+        // It is not a user-interactive external login provider. Clear DisplayName so the ABP Account module will not render it as a login-page button.
         context.Services.Configure<AuthenticationOptions>(options =>
         {
             var scheme = options.Schemes.FirstOrDefault(s => s.Name == McpAuthenticationDefaults.AuthenticationScheme);
@@ -391,7 +392,7 @@ public class DocumentAIHostModule : AbpModule
                 scheme.DisplayName = null;
         });
 
-        // 只覆盖 challenge、不动 authenticate：保留 ABP dynamic claims 富化的 principal（见 handler 注释）。
+        // Override only challenge, not authenticate: preserve the principal enriched by ABP dynamic claims (see handler comments).
         context.Services.Replace(ServiceDescriptor.Singleton<IAuthorizationMiddlewareResultHandler, McpDiscoveryAuthorizationResultHandler>());
     }
 
@@ -455,7 +456,7 @@ public class DocumentAIHostModule : AbpModule
             options.Languages.Add(new LanguageInfo("en", "en", "English"));
             options.Languages.Add(new LanguageInfo("zh-Hans", "zh-Hans", "Chinese (Simplified)"));
             options.Languages.Add(new LanguageInfo("zh-Hant", "zh-Hant", "Chinese (Traditional)"));
-            options.Languages.Add(new LanguageInfo("ja", "ja", "日语"));
+            options.Languages.Add(new LanguageInfo("ja", "ja", "Japanese"));
         });
 
     }
@@ -535,9 +536,9 @@ public class DocumentAIHostModule : AbpModule
         {
             options.Configure(configurationContext =>
             {
-                // Issue #206：移除 native json 列后不再需要 SQL Server 2025 compatibility level 170。
-                // 持久化层只用普通关系型列（typed columns + nvarchar(max)），跨任意 SQL Server 版本 / 关系型
-                // 数据库可移植——部署目标不再硬锁 SQL Server 2025。
+                // Issue #206: after removing native JSON columns, SQL Server 2025 compatibility level 170 is no longer required.
+                // The persistence layer now uses ordinary relational columns only (typed columns + nvarchar(max)), portable across
+                // SQL Server versions and relational databases. Deployment targets are no longer locked to SQL Server 2025.
                 configurationContext.UseSqlServer();
             });
         });
@@ -771,11 +772,11 @@ public class DocumentAIHostModule : AbpModule
         app.UseAbpSerilogEnrichers();
         app.UseConfiguredEndpoints(endpoints =>
         {
-            // MCP 出口端点（Streamable HTTP）。复用 host 现有 OpenIddict Bearer：
-            // RequireAuthorization 在端点强制鉴权（authenticate 走默认策略，保留 dynamic claims 富化）；
-            // tool / resource 方法体内再做显式权限断言（fail-closed 双保险）。
-            // #278：McpDiscoveryChallengeMarker 让未带 token 的 401 由 McpDiscoveryAuthorizationResultHandler
-            // 定向走 McpAuth challenge，注入 `WWW-Authenticate: Bearer resource_metadata="..."` 发现指针。
+            // MCP export endpoint (Streamable HTTP). Reuse the host's existing OpenIddict Bearer:
+            // RequireAuthorization enforces authentication at the endpoint, with authenticate using the default policy and preserving dynamic-claims enrichment.
+            // Tool / resource method bodies still perform explicit permission assertions as fail-closed double insurance.
+            // #278: McpDiscoveryChallengeMarker lets 401 responses without token be routed by McpDiscoveryAuthorizationResultHandler
+            // to McpAuth challenge, injecting the `WWW-Authenticate: Bearer resource_metadata="..."` discovery pointer.
             endpoints.MapMcp("/mcp")
                 .RequireAuthorization()
                 .WithMetadata(McpDiscoveryChallengeMarker.Instance);

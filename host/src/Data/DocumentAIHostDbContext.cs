@@ -21,15 +21,17 @@ public class DocumentAIHostDbContext
     public const string DbSchema = null;
 
     /// <summary>
-    /// ABP transactional outbox 入队表（<see cref="IHasEventOutbox"/>）。
-    /// DocumentAI 出口事件由调用方在 UoW 内 <c>IDistributedEventBus.PublishAsync</c> 入队，
-    /// ABP 后台 worker 异步真正投递到消息中间件，保证 at-least-once 投递。
+    /// ABP transactional outbox enqueue table (<see cref="IHasEventOutbox"/>).
+    /// DocumentAI outbound events are enqueued by callers through
+    /// <c>IDistributedEventBus.PublishAsync</c> inside a UoW, then the ABP background worker delivers
+    /// them asynchronously to the message middleware, guaranteeing at-least-once delivery.
     /// </summary>
     public DbSet<OutgoingEventRecord> OutgoingEvents { get; set; } = default!;
 
     /// <summary>
-    /// ABP transactional inbox 投递表（<see cref="IHasEventInbox"/>）。
-    /// 用于 DocumentAI 自身订阅外部分布式事件时的 exactly-once 消费追踪。
+    /// ABP transactional inbox delivery table (<see cref="IHasEventInbox"/>).
+    /// Used for exactly-once consumption tracking when DocumentAI itself subscribes to external
+    /// distributed events.
     /// </summary>
     public DbSet<IncomingEventRecord> IncomingEvents { get; set; } = default!;
 
@@ -52,8 +54,9 @@ public class DocumentAIHostDbContext
         builder.ConfigureIdentity();
         builder.ConfigureOpenIddict();
 
-        // ABP transactional outbox / inbox 表（替代 issue #188 删除的自造 OutboxEvent）。
-        // 调用方在 UoW 内 publish 时，事件自动写入 AbpEventOutbox；后台 worker 扫表真正投递。
+        // ABP transactional outbox / inbox tables, replacing the custom OutboxEvent removed by issue
+        // #188. When callers publish inside a UoW, events are automatically written to AbpEventOutbox;
+        // the background worker scans the table and performs delivery.
         builder.ConfigureEventInbox();
         builder.ConfigureEventOutbox();
 

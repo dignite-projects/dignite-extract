@@ -6,7 +6,7 @@ namespace Dignite.DocumentAI.Documents.Fields;
 
 public class CreateFieldDefinitionDto
 {
-    /// <summary>父文档类型不可变 Id（#207：建立 FieldDefinition.DocumentTypeId FK，按 Id 而非可重命名的 TypeCode 绑定）。</summary>
+    /// <summary>Immutable parent document type id (#207: creates the FieldDefinition.DocumentTypeId FK and binds by id rather than renameable TypeCode).</summary>
     [Required]
     public Guid DocumentTypeId { get; set; }
 
@@ -18,7 +18,7 @@ public class CreateFieldDefinitionDto
     [DynamicStringLength(typeof(FieldDefinitionConsts), nameof(FieldDefinitionConsts.MaxDisplayNameLength))]
     public string DisplayName { get; set; } = default!;
 
-    /// <summary>抽取指令——<b>选填</b>。留空时 LLM 仅靠 <see cref="Name"/> + <see cref="DataType"/> 推断该抽什么。</summary>
+    /// <summary>Extraction instruction, <b>optional</b>. When blank, the LLM infers what to extract from <see cref="Name"/> and <see cref="DataType"/> only.</summary>
     [DynamicStringLength(typeof(FieldDefinitionConsts), nameof(FieldDefinitionConsts.MaxPromptLength))]
     public string? Prompt { get; set; }
 
@@ -28,6 +28,6 @@ public class CreateFieldDefinitionDto
 
     public bool IsRequired { get; set; }
 
-    /// <summary>是否允许多值（#212）——仅 <see cref="FieldDataType.Text"/> 字段可为 true，非文本强行开多值由实体层 loud fail。</summary>
+    /// <summary>Whether multiple values are allowed (#212). Only <see cref="FieldDataType.Text"/> fields may be true; enabling it for non-text fields fails loudly at the entity layer.</summary>
     public bool AllowMultiple { get; set; }
 }

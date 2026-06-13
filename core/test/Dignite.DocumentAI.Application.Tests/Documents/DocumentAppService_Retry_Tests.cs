@@ -31,15 +31,16 @@ public class DocumentAppServiceRetryTestModule : AbpModule
         context.Services.AddSingleton(Substitute.For<IBlobContainer<DocumentAIDocumentContainer>>());
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
-        // #216：Manager 依赖 IDocumentPipelineRunRepository——用 closure-state fake 让 QueueAsync/DeriveLifecycle 正确工作。
+        // #216: Manager depends on IDocumentPipelineRunRepository; use the closure-state fake so
+        // QueueAsync/DeriveLifecycle work correctly.
         context.Services.AddSingleton(PipelineRunRepositoryFake.Create());
     }
 }
 
 /// <summary>
-/// <see cref="DocumentAppService.RetryPipelineAsync"/> 必须按
-/// "仅 Failed 可重试 / Pending 与 Running 视为并发护栏 / Succeeded 与 Skipped 拒绝 /
-/// 未知 PipelineCode 拒绝"的规则放行，先创建 Pending Run，再把对应 BackgroundJob 入队。
+/// <see cref="DocumentAppService.RetryPipelineAsync"/> must follow these rules: only Failed is retryable;
+/// Pending and Running are concurrency guards; Succeeded and Skipped are rejected; unknown PipelineCode is
+/// rejected. It creates a Pending Run first, then enqueues the matching BackgroundJob.
 /// </summary>
 public class DocumentAppService_Retry_Tests
     : DocumentAIApplicationTestBase<DocumentAppServiceRetryTestModule>
@@ -186,8 +187,8 @@ public class DocumentAppService_Retry_Tests
                 new RetryPipelineInput { PipelineCode = "contracts.field-extraction" }));
 
         ex.Code.ShouldBe(DocumentAIErrorCodes.Pipeline.UnknownCode);
-        // 未知 PipelineCode 必须在读 Document 之前就被拒绝——
-        // 否则给业务模块一个旁路调度核心 Job 的口子。
+        // Unknown PipelineCode must be rejected before reading Document; otherwise business modules would
+        // get a bypass for scheduling core jobs.
         await _documentRepository.DidNotReceive().GetAsync(
             Arg.Any<Guid>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
@@ -195,9 +196,11 @@ public class DocumentAppService_Retry_Tests
     [Fact]
     public async Task RetryPipelineAsync_Throws_EntityNotFound_When_Cross_Tenant()
     {
-        // 租户隔离由仓储的 ambient IMultiTenant 过滤器施加（AppService 不再手写 TenantId 断言）：
-        // 调用方是别的租户时，真实仓储的 GetAsync 查不到该文档而抛 EntityNotFound。mock 仓储不带过滤器，
-        // 此处显式让 GetAsync 抛 EntityNotFound 模拟该框架行为，断言 AppService 如实传播、且不入队任何 Job。
+        // Tenant isolation is applied by the repository's ambient IMultiTenant filter. AppService no
+        // longer hand-writes TenantId assertions. When the caller is another tenant, the real repository's
+        // GetAsync cannot find the document and throws EntityNotFound. Mock repositories have no filter,
+        // so explicitly make GetAsync throw EntityNotFound here to simulate framework behavior and assert
+        // AppService propagates it without enqueueing any job.
         var docTenant = Guid.NewGuid();
         var callerTenant = Guid.NewGuid();
         var doc = CreateDocument(tenantId: docTenant);
@@ -267,7 +270,8 @@ public class DocumentAppService_Retry_Tests
 
     private void StubGet(Document doc)
     {
-        // #216：RetryPipelineAsync 改走 GetAsync(includeDetails:false) + runRepo.FindLatestByDocumentAndCodeAsync。
+        // #216: RetryPipelineAsync now uses GetAsync(includeDetails:false) plus
+        // runRepo.FindLatestByDocumentAndCodeAsync.
         _documentRepository.GetAsync(doc.Id, false, Arg.Any<CancellationToken>())
             .Returns(doc);
     }

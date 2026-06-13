@@ -14,9 +14,9 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 验证 Workflow 在每次 RunAsync 调用时都重新从 IPromptProvider 取得提示词，
-/// 而非在构造函数中固定 — 保证 IPromptProvider 的动态变更（语言切换、租户定制）
-/// 在下一次调用时立即生效，无需重启宿主。
+/// Verifies that workflows fetch prompts from IPromptProvider on every RunAsync call instead of freezing
+/// them in the constructor. This ensures dynamic IPromptProvider changes, such as language switches or
+/// tenant customization, take effect on the next call without restarting the host.
 /// </summary>
 public class DocumentWorkflowPromptLifetime_Tests
 {

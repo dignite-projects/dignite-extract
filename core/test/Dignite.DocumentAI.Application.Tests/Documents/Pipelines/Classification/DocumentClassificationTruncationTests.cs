@@ -5,11 +5,13 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 回归保护：<see cref="DocumentClassificationWorkflow.TruncateAtCharBoundary"/> 不切断代理对。
+/// Regression protection: <see cref="DocumentClassificationWorkflow.TruncateAtCharBoundary"/> must not split surrogate pairs.
 ///
-/// 背景：分类按 MaxTextLengthPerExtraction（UTF-16 码元）截断文档前部喂 LLM。朴素的
-/// <c>markdown[..N]</c> 会在 N 落在代理对中间时留下半个码点——UTF-8 编码送 LLM 时退化成 U+FFFD。
-/// 截断点位于被丢弃的尾部，故末位若是高位代理则一并丢弃即可（多退一个 char 无影响）。
+/// Background: classification truncates the document prefix by MaxTextLengthPerExtraction UTF-16 code units
+/// before sending it to the LLM. A naive <c>markdown[..N]</c> leaves half a code point when N lands inside a
+/// surrogate pair; UTF-8 encoding then degrades it to U+FFFD for the LLM.
+/// The cut point is at the discarded tail, so if the final kept code unit is a high surrogate, dropping it too
+/// is harmless.
 /// </summary>
 public class DocumentClassificationTruncationTests
 {
@@ -29,8 +31,9 @@ public class DocumentClassificationTruncationTests
     [Fact]
     public void Does_Not_Split_A_Surrogate_Pair_At_The_Cut()
     {
-        // "A" + 😀 (U+1F600，一个代理对 = 2 个 UTF-16 码元) + "B"。
-        // 在 maxChars=2 处截断会落在代理对中间——应丢弃整个高位代理，得到 "A"（长度 1），不留半个码点。
+        // "A" + U+1F600 (one surrogate pair = two UTF-16 code units) + "B".
+        // Cutting at maxChars=2 lands inside the surrogate pair; it should drop the high surrogate, return "A"
+        // with length 1, and leave no half code point.
         var text = "A\U0001F600B";
         var result = DocumentClassificationWorkflow.TruncateAtCharBoundary(text, 2);
 
@@ -42,7 +45,7 @@ public class DocumentClassificationTruncationTests
     [Fact]
     public void Keeps_A_Whole_Surrogate_Pair_When_It_Fits()
     {
-        // maxChars=3 容纳 "A" + 完整代理对 → 原样保留（长度 3）。
+        // maxChars=3 contains "A" + the whole surrogate pair, so it is kept as-is with length 3.
         var text = "A\U0001F600B";
         var result = DocumentClassificationWorkflow.TruncateAtCharBoundary(text, 3);
 

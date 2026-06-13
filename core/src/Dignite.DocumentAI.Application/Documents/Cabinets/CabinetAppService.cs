@@ -9,7 +9,8 @@ using Volo.Abp.Domain.Entities;
 namespace Dignite.DocumentAI.Documents.Cabinets;
 
 /// <summary>
-/// 文件柜管理（#194）。匹配当前层、不跨层 union。权限 fail-closed（方法级 Cabinets.* 断言）。
+/// Cabinet management (#194). Matches the current layer only and never unions across layers.
+/// Permissions fail closed through method-level Cabinets.* assertions.
 /// </summary>
 [Authorize(DocumentAIPermissions.Cabinets.Default)]
 public class CabinetAppService : DocumentAIAppService, ICabinetAppService
@@ -27,7 +28,8 @@ public class CabinetAppService : DocumentAIAppService, ICabinetAppService
 
     public virtual async Task<List<CabinetDto>> GetListAsync()
     {
-        // 当前层全部柜（ambient IMultiTenant filter 按 CurrentTenant.Id 隔离单层）。
+        // All cabinets in the current layer, isolated by the ambient IMultiTenant filter using
+        // CurrentTenant.Id.
         var list = await _repository.GetListAsync();
         return ObjectMapper.Map<List<Cabinet>, List<CabinetDto>>(list);
     }
@@ -47,13 +49,14 @@ public class CabinetAppService : DocumentAIAppService, ICabinetAppService
     {
         var entity = await _repository.GetAsync(id);
 
-        // 跨层防御：只能改自己所在层。
+        // Cross-layer defense: callers can update only their own layer.
         if (entity.TenantId != CurrentTenant.Id)
         {
             throw new EntityNotFoundException(typeof(Cabinet), id);
         }
 
-        // Name 是可改的唯一键——仅改名时判重（同名不变则跳过，避免误判自身冲突）。
+        // Name is an editable unique key. Check uniqueness only on rename; unchanged name skips the
+        // check to avoid falsely treating itself as a conflict.
         if (!string.Equals(entity.Name, input.Name, StringComparison.Ordinal))
         {
             await EnsureNameAvailableAsync(input.Name);
@@ -73,9 +76,12 @@ public class CabinetAppService : DocumentAIAppService, ICabinetAppService
             throw new EntityNotFoundException(typeof(Cabinet), id);
         }
 
-        // 删柜前原子清空该柜文档的 CabinetId（真正 unfile）——否则文档悬空指向已删柜（stale ID、重建同名柜无法归位）。
-        // 不阻止删除（区别于 DocumentType 的 InUse 保护）；只清活跃文档（软删文档的 stale CabinetId 无害，前端 map 不到即「未归类」）。
-        // 单柜文档极多时可换 ExecuteUpdateAsync。
+        // Atomically clear CabinetId on documents in this cabinet before deleting it, truly unfiling
+        // them. Otherwise documents would dangle to a deleted cabinet (stale ID, and recreating a
+        // cabinet with the same name cannot restore membership). Unlike DocumentType InUse protection,
+        // deletion is not blocked. Only active documents are cleared; stale CabinetId on soft-deleted
+        // documents is harmless because the frontend cannot map it and displays uncategorized. Switch
+        // to ExecuteUpdateAsync if one cabinet can contain very many documents.
         var orphans = await _documentRepository.GetListAsync(
             d => d.TenantId == CurrentTenant.Id && d.CabinetId == entity.Id);
         if (orphans.Count > 0)
@@ -91,8 +97,10 @@ public class CabinetAppService : DocumentAIAppService, ICabinetAppService
     }
 
     /// <summary>
-    /// 当前层柜名判重——只查活跃柜（不含软删除）。Cabinet 不做回收站，软删即遗忘，其名字可被新柜复用
-    /// （唯一索引 <c>(TenantId, Name)</c> 带 <c>IsDeleted = 0</c> 过滤，软删柜不参与活跃约束）。
+    /// Checks cabinet-name uniqueness in the current layer, considering only active cabinets and not
+    /// soft-deleted ones. Cabinets do not have a recycle bin; soft delete means forgotten, so the name
+    /// can be reused by a new cabinet. The unique index <c>(TenantId, Name)</c> is filtered by
+    /// <c>IsDeleted = 0</c>, so soft-deleted cabinets do not participate in the active constraint.
     /// </summary>
     protected virtual async Task EnsureNameAvailableAsync(string name)
     {

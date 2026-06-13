@@ -4,23 +4,27 @@ using Volo.Abp.Validation;
 namespace Dignite.DocumentAI.Documents.Fields;
 
 /// <summary>
-/// 「按提示词起草字段元数据」输入（issue #264）。admin 把抽取指令（提示词）作为主输入，
-/// 后端用 LLM 一次性**起草**字段其余元数据，admin 再逐项核对 / 修改后保存。
+/// Input for "draft field metadata from prompt" (issue #264). Admin provides extraction instructions
+/// (prompt) as the primary input; the backend uses the LLM to <b>draft</b> the remaining field
+/// metadata once, then the admin reviews / edits each value before saving.
 /// </summary>
 public class DraftFieldDefinitionInput
 {
     /// <summary>
-    /// 抽取指令——起草的唯一输入信号。长度上限复用 <see cref="FieldDefinitionConsts.MaxPromptLength"/>
-    /// （它最终也会落进 <c>FieldDefinition.Prompt</c>，同一护栏）。
+    /// Extraction instructions: the only input signal for drafting. Length limit reuses
+    /// <see cref="FieldDefinitionConsts.MaxPromptLength"/> because this value eventually lands in
+    /// <c>FieldDefinition.Prompt</c>, sharing the same guardrail.
     /// </summary>
     [Required]
     [DynamicStringLength(typeof(FieldDefinitionConsts), nameof(FieldDefinitionConsts.MaxPromptLength))]
     public string Prompt { get; set; } = default!;
 
     /// <summary>
-    /// true = 新建字段：草稿**额外建议**机器键 <see cref="FieldDefinitionDraftDto.Name"/>；
-    /// false = 编辑既有字段：<c>Name</c> 是契约级冻结身份键（#207 / 下游契约 ID / ExtractedFields 字典 key），
-    /// 草稿**不动它**——服务端恒回吐空 Name，避免静默 churn 下游契约键（issue #264 护栏 1）。
+    /// true = new field: the draft <b>also suggests</b> machine key
+    /// <see cref="FieldDefinitionDraftDto.Name"/>. false = editing an existing field:
+    /// <c>Name</c> is a contract-level frozen identity key (#207 / downstream contract ID /
+    /// ExtractedFields dictionary key), and the draft <b>does not touch it</b>. The server always
+    /// returns empty Name to avoid silently churning downstream contract keys (issue #264 guardrail 1).
     /// </summary>
     public bool ForNewField { get; set; }
 }

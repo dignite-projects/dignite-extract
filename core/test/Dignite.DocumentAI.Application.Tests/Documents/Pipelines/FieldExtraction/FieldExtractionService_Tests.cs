@@ -39,8 +39,10 @@ public class FieldExtractionServiceTestModule : AbpModule
 }
 
 /// <summary>
-/// <see cref="FieldExtractionService"/> 的批量入口（<c>expectedEventTypeCode = null</c>）契约测试（#289 步骤 1）。
-/// 事件路径行为由 <see cref="FieldExtractionEventHandler_Tests"/>（经委托）护住；本类聚焦批量 / 单篇重抽直接调引擎的语义。
+/// Contract tests for the bulk entry point of <see cref="FieldExtractionService"/>
+/// (<c>expectedEventTypeCode = null</c>) (#289 step 1).
+/// Event-path behavior is guarded by <see cref="FieldExtractionEventHandler_Tests"/> through delegation; this
+/// class focuses on bulk / single-document re-extraction semantics when calling the engine directly.
 /// </summary>
 public class FieldExtractionService_Tests
     : DocumentAIApplicationTestBase<FieldExtractionServiceTestModule>
@@ -113,7 +115,7 @@ public class FieldExtractionService_Tests
         var doc = new Document(
             Guid.NewGuid(), tenantId: null,
             new FileOrigin("blobs/x.pdf", "u", "application/pdf", $"{Guid.NewGuid():N}{Guid.NewGuid():N}", 1, "x.pdf"));
-        // 无 DocumentTypeId（未分类）。
+        // No DocumentTypeId (unclassified).
         _documentRepository.FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(doc);
 
         var result = await _service.ExtractAsync(doc.Id, tenantId: null, expectedEventTypeCode: null);
@@ -137,7 +139,8 @@ public class FieldExtractionService_Tests
         var doc = new Document(
             Guid.NewGuid(), tenantId: null,
             new FileOrigin($"blobs/{Guid.NewGuid():N}.pdf", "u", "application/pdf", $"{Guid.NewGuid():N}{Guid.NewGuid():N}", 1, "x.pdf"));
-        // Application.Tests 无 InternalsVisibleTo（与 FieldExtractionEventHandler_Tests 同例，经反射走 internal 通道）。
+        // Application.Tests has no InternalsVisibleTo; same as FieldExtractionEventHandler_Tests, use reflection
+        // through the internal channel.
         Invoke(doc, "ApplyAutomaticClassificationResult", TypeId(typeCode), 0.99);
         Invoke(doc, "SetMarkdown", "# Body");
         return doc;

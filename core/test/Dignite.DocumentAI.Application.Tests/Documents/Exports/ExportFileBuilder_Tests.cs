@@ -8,8 +8,8 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents.Exports;
 
 /// <summary>
-/// <see cref="ExportFileBuilder"/> 序列化测试（internal，经 InternalsVisibleTo 可见）。
-/// 纯函数，无需 DB / mock。
+/// Serialization tests for <see cref="ExportFileBuilder"/>. It is internal and visible through InternalsVisibleTo.
+/// Pure function; no DB or mocks required.
 /// </summary>
 public class ExportFileBuilder_Tests
 {
@@ -18,17 +18,17 @@ public class ExportFileBuilder_Tests
     {
         var bytes = ExportFileBuilder.Build(
             ExportFormat.Csv,
-            new[] { "标题", "金额" },
-            new List<string?[]> { new[] { "合同A", "1000" } });
+            new[] { "Title", "Amount" },
+            new List<string?[]> { new[] { "Contract A", "1000" } });
 
-        // UTF-8 BOM —— Excel 正确识别中日文
+        // UTF-8 BOM: Excel recognizes UTF-8 text correctly.
         bytes[0].ShouldBe((byte)0xEF);
         bytes[1].ShouldBe((byte)0xBB);
         bytes[2].ShouldBe((byte)0xBF);
 
         var text = Encoding.UTF8.GetString(bytes);
-        text.ShouldContain("标题,金额");
-        text.ShouldContain("合同A,1000");
+        text.ShouldContain("Title,Amount");
+        text.ShouldContain("Contract A,1000");
     }
 
     [Fact]
@@ -66,16 +66,16 @@ public class ExportFileBuilder_Tests
     {
         var bytes = ExportFileBuilder.Build(
             ExportFormat.Xlsx,
-            new[] { "标题", "金额" },
-            new List<string?[]> { new[] { "合同A", "1000" } });
+            new[] { "Title", "Amount" },
+            new List<string?[]> { new[] { "Contract A", "1000" } });
 
         using var ms = new MemoryStream(bytes);
         using var workbook = new XLWorkbook(ms);
         var ws = workbook.Worksheet(1);
 
-        ws.Cell(1, 1).GetString().ShouldBe("标题");
-        ws.Cell(1, 2).GetString().ShouldBe("金额");
-        ws.Cell(2, 1).GetString().ShouldBe("合同A");
+        ws.Cell(1, 1).GetString().ShouldBe("Title");
+        ws.Cell(1, 2).GetString().ShouldBe("Amount");
+        ws.Cell(2, 1).GetString().ShouldBe("Contract A");
         ws.Cell(2, 2).GetString().ShouldBe("1000");
     }
 
@@ -84,8 +84,8 @@ public class ExportFileBuilder_Tests
     [InlineData("+1")]
     [InlineData("-1+2")]
     [InlineData("@SUM(A1)")]
-    [InlineData("  =evil")] // 前导空格 + =
-    [InlineData("\t=evil")] // 前导制表符
+    [InlineData("  =evil")] // Leading spaces + =
+    [InlineData("\t=evil")] // Leading tab
     public void Csv_Should_Neutralize_Formula_Injection(string dangerous)
     {
         var bytes = ExportFileBuilder.Build(
@@ -93,7 +93,7 @@ public class ExportFileBuilder_Tests
             new[] { "col" },
             new List<string?[]> { new[] { dangerous } });
 
-        // 危险值被前缀单引号中和，Excel / Sheets 不再当公式执行。
+        // Dangerous values are neutralized with a leading apostrophe, so Excel / Sheets no longer execute them as formulas.
         Encoding.UTF8.GetString(bytes).ShouldContain("'" + dangerous);
     }
 
@@ -111,7 +111,7 @@ public class ExportFileBuilder_Tests
     [Theory]
     [InlineData("normal")]
     [InlineData("123")]
-    [InlineData("a=b")] // = 不在开头，不应被改动
+    [InlineData("a=b")] // = is not at the start, so the value should not be changed.
     public void Csv_Should_Not_Touch_Safe_Values(string safe)
     {
         var bytes = ExportFileBuilder.Build(

@@ -15,29 +15,31 @@ using Volo.Abp.Uow;
 namespace Dignite.DocumentAI.Documents.Pipelines.FieldExtraction;
 
 /// <summary>
-/// 统一字段抽取执行引擎（#289 步骤 1）。把原先内联在 <see cref="FieldExtractionEventHandler"/> 里的
-/// 「读字段定义 → <see cref="FieldExtractionWorkflow.ExtractAsync"/> → in-flight 守卫 → <c>Document.SetFields</c>
-/// → 发 <see cref="FieldsExtractedEto"/>」核心抽取动作提炼为可复用单元，供两类触发方共用：
+/// Unified field extraction execution engine (#289 step 1). Extracts the core action that used to be inline in
+/// <see cref="FieldExtractionEventHandler"/> into a reusable unit:
+/// "read field definitions -> <see cref="FieldExtractionWorkflow.ExtractAsync"/> -> in-flight guard -> <c>Document.SetFields</c>
+/// -> publish <see cref="FieldsExtractedEto"/>", shared by two trigger types:
 /// <list type="bullet">
-///   <item>分类完成事件级联（<see cref="FieldExtractionEventHandler"/>，保留事件层 stale / 跨租户守卫后委托此引擎）；</item>
-///   <item>批量 / 单篇「字段重抽」重处理（<c>field-extraction</c> pipeline 后台作业，#289 步骤 2-4）。</item>
+///   <item>classification-completed event cascade (<see cref="FieldExtractionEventHandler"/>, which keeps event-layer stale / cross-tenant guards before delegating to this engine);</item>
+///   <item>bulk / single-document "field re-extraction" reprocessing (<c>field-extraction</c> pipeline background job, #289 steps 2-4).</item>
 /// </list>
 /// <para>
-/// 引擎按 <b>Document 当前 <see cref="Document.DocumentTypeId"/></b> 抽取（#207）——调用方只需给
-/// <paramref name="documentId"/> + <paramref name="tenantId"/>，无需知道类型。<paramref name="expectedEventTypeCode"/>
-/// 仅事件路径传入：用于 stale reclassify 事件的早退优化（事件携带的旧 TypeCode 解析到与当前 Document 不同的类型
-/// → 跳过，等新事件触发新一轮）。批量路径传 <c>null</c>，永远按当前类型抽取。
+/// The engine extracts against the <b>Document's current <see cref="Document.DocumentTypeId"/></b> (#207). Callers only provide
+/// <paramref name="documentId"/> + <paramref name="tenantId"/> and do not need to know the type. <paramref name="expectedEventTypeCode"/>
+/// is supplied only by the event path for stale reclassify event early-exit optimization: if the old TypeCode carried by the event resolves
+/// to a type different from the current Document type, skip it and wait for the new event to trigger the next run. Bulk paths pass <c>null</c>
+/// and always extract against the current type.
 /// </para>
 /// <para>
-/// 安全约束（CLAUDE.md "## 安全约定"）：显式 <see cref="ICurrentTenant.Change"/> 恢复目标 TenantId 上下文，
-/// 让 ABP <c>IMultiTenant</c> filter 自动按层隔离仓储查询；跨租户断言（防 ambient filter 被 disable）；
-/// in-flight reclassify race 断言（LLM 飞行期间类型被改 → 丢弃，防旧 schema 污染 ExtractedFields）。
+/// Security constraints (CLAUDE.md "Security covenant"): explicitly restore target TenantId context with <see cref="ICurrentTenant.Change"/>,
+/// letting ABP <c>IMultiTenant</c> filters isolate repository queries by layer; assert cross-tenant safety to defend against disabled ambient filters;
+/// assert the in-flight reclassify race (type changed while LLM was in flight -> discard, preventing old schema from polluting ExtractedFields).
 /// </para>
 /// <para>
-/// UoW 三段式（<c>.claude/rules/background-jobs.md</c>）：读 FieldDefinition / 回查 Document.Markdown /
-/// LLM 调用 / 写 Document + publish 各阶段 <c>requiresNew</c> 短 UoW——LLM 外部调用永不被任何长事务包住。
-/// 调用方（事件 handler / 后台作业）须在 ambient UoW 关闭（<c>[UnitOfWork(IsDisabled = true)]</c>）或独立短 UoW
-/// 上下文中调用本方法。
+/// Three-phase UoW pattern (<c>.claude/rules/background-jobs.md</c>): read FieldDefinition / reload Document.Markdown /
+/// LLM call / write Document + publish, with short <c>requiresNew</c> UoWs around each persistence phase. External LLM calls are never wrapped in a long transaction.
+/// Callers (event handler / background job) must call this method with ambient UoW disabled (<c>[UnitOfWork(IsDisabled = true)]</c>)
+/// or from an independent short-UoW context.
 /// </para>
 /// </summary>
 public class FieldExtractionService : ITransientDependency
@@ -51,9 +53,9 @@ public class FieldExtractionService : ITransientDependency
     private readonly IClock _clock;
     private readonly ICurrentTenant _currentTenant;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
-    // 后台作业路径上 ABP 的 BackgroundJobExecuter 会用 ICancellationTokenProvider.Use(...) 压入
-    // 作业执行上下文的取消令牌（与 DocumentTextExtractionBackgroundJob 同例）；事件路径无 ambient
-    // 令牌时回退 CancellationToken.None，行为不变。
+    // On background-job paths, ABP's BackgroundJobExecuter pushes the job execution cancellation token through
+    // ICancellationTokenProvider.Use(...), same as DocumentTextExtractionBackgroundJob. Event paths fall back to
+    // CancellationToken.None when no ambient token exists, preserving behavior.
     private readonly ICancellationTokenProvider _cancellationTokenProvider;
     private readonly ILogger<FieldExtractionService> _logger;
 
@@ -84,24 +86,25 @@ public class FieldExtractionService : ITransientDependency
     }
 
     /// <summary>
-    /// 对单个文档按其当前类型执行一次完整字段抽取（整组替换 + 发 <see cref="FieldsExtractedEto"/>）。幂等：
-    /// 重复调用对同一终态产出一致结果，重投无害（#289「幂等是基石」）。任一前置守卫不满足（文档缺失 /
-    /// 跨租户 / 未分类 / stale 事件 / 飞行期间被 reclassify）→ 返回 <see cref="FieldExtractionOutcome.Skipped"/>，不写不发。
+    /// Runs one complete field extraction for a single document using its current type (whole-set replacement + publish <see cref="FieldsExtractedEto"/>).
+    /// Idempotent: repeated calls produce the same result for the same final state, and redelivery is harmless (#289 "idempotency is the foundation").
+    /// If any precondition guard fails (missing document / cross-tenant / unclassified / stale event / reclassified while in flight),
+    /// returns <see cref="FieldExtractionOutcome.Skipped"/> without writing or publishing.
     /// </summary>
-    /// <param name="documentId">目标文档 Id。</param>
-    /// <param name="tenantId">目标文档所属租户（决定字段定义层）；引擎据此 <see cref="ICurrentTenant.Change"/>。</param>
-    /// <param name="expectedEventTypeCode">事件路径传入的旧 TypeCode（stale 事件早退优化）；批量路径传 <c>null</c>。</param>
+    /// <param name="documentId">Target document Id.</param>
+    /// <param name="tenantId">Tenant owning the target document, which decides the field-definition layer; the engine calls <see cref="ICurrentTenant.Change"/> with it.</param>
+    /// <param name="expectedEventTypeCode">Old TypeCode supplied by the event path for stale event early exit; bulk paths pass <c>null</c>.</param>
     public virtual async Task<FieldExtractionResult> ExtractAsync(
         Guid documentId,
         Guid? tenantId,
         string? expectedEventTypeCode = null)
     {
-        // 显式恢复目标租户上下文 —— 后台 / 事件 handler 在 Hangfire / worker 上下文中
-        // ICurrentTenant 不一定自动还原。
+        // Explicitly restore target tenant context. In Hangfire / worker contexts, background jobs and event handlers
+        // do not necessarily restore ICurrentTenant automatically.
         using (_currentTenant.Change(tenantId))
         {
-            // 阶段 1：短 UoW —— 以 Document 当前内部 DocumentTypeId 为准读类型 / 字段定义（#207）。
-            // 显式 dispose 让该 UoW 完全退出，再进入阶段 2 的外部 LLM 调用。
+            // Phase 1: short UoW. Read type / field definitions using the Document's current internal DocumentTypeId (#207).
+            // Explicit disposal fully exits this UoW before entering the phase 2 external LLM call.
             Guid documentTypeId;
             string documentTypeCode;
             List<FieldDefinition> definitions;
@@ -117,7 +120,7 @@ public class FieldExtractionService : ITransientDependency
                     return FieldExtractionResult.Skipped;
                 }
 
-                // 跨租户断言（防 ambient DataFilter 被 disable 的路径）。
+                // Cross-tenant assertion, defending paths where the ambient DataFilter was disabled.
                 if (readDocument.TenantId != tenantId)
                 {
                     _logger.LogWarning(
@@ -147,9 +150,9 @@ public class FieldExtractionService : ITransientDependency
 
                 documentTypeCode = currentType.TypeCode;
 
-                // 事件路径专属：stale reclassify 事件早退优化。事件携带的旧 TypeCode 若解析到与当前
-                // Document 不同的类型，说明本事件已 stale（飞行期间被 reclassify），跳过等新事件。
-                // 批量路径传 expectedEventTypeCode=null，恒按当前类型抽取，不做此早退。
+                // Event path only: stale reclassify event early-exit optimization. If the old TypeCode carried by the event resolves
+                // to a type different from the current Document type, this event is stale (reclassified while in flight); skip it and wait for the new event.
+                // Bulk paths pass expectedEventTypeCode=null and always extract against the current type without this early exit.
                 if (expectedEventTypeCode != null)
                 {
                     var eventType = await _documentTypeRepository.FindByTypeCodeAsync(expectedEventTypeCode);
@@ -176,9 +179,10 @@ public class FieldExtractionService : ITransientDependency
                 await readUow.CompleteAsync();
             }
 
-            // 空字段路径：目标类型无字段定义。仍需把该文档可能残留的旧 schema 字段行清空——
-            // reclassify 从「有字段类型」换到「无字段类型」时，旧字段行不清会以新 TypeCode 被结构化检索 /
-            // DTO 误带（违反「reclassify 整组替换、不残留旧 schema」语义）。短 UoW 内清空 + publish。
+            // Empty-field path: target type has no field definitions. Still clear any old schema field rows that may remain on this document.
+            // When reclassifying from a type with fields to a type without fields, keeping old rows would make structured search / DTOs
+            // incorrectly carry them under the new TypeCode, violating the "reclassify replaces the whole set and leaves no old schema residue" semantics.
+            // Clear and publish inside a short UoW.
             if (definitions.Count == 0)
             {
                 using var clearUow = _unitOfWorkManager.Begin(requiresNew: true);
@@ -200,8 +204,8 @@ public class FieldExtractionService : ITransientDependency
                     return FieldExtractionResult.Skipped;
                 }
 
-                // 仅当当前类型仍是阶段 1 捕获的类型（非 reclassify race 的 stale 事件）才清空，
-                // 避免用 stale 事件误删后续分类写入的字段。按内部 DocumentTypeId 比较（#207）。
+                // Clear only when the current type is still the one captured in phase 1, meaning this is not a stale event from a reclassify race.
+                // This avoids using a stale event to accidentally delete fields written by a later classification. Compare by internal DocumentTypeId (#207).
                 if (blankDocument.DocumentTypeId != documentTypeId)
                 {
                     _logger.LogInformation(
@@ -210,7 +214,7 @@ public class FieldExtractionService : ITransientDependency
                     return FieldExtractionResult.Skipped;
                 }
 
-                // #284：无字段定义 ⟹ 无必填可言，清 MissingRequiredFields（reclassify 到无字段类型时退出必填队列）。
+                // #284: no field definitions implies no required fields, so clear MissingRequiredFields when reclassifying to a type without fields.
                 var hadFields = blankDocument.ExtractedFieldValues.Count > 0;
                 var hadMissingRequired =
                     (blankDocument.ReviewReasons & DocumentReviewReasons.MissingRequiredFields) != DocumentReviewReasons.None;
@@ -229,8 +233,8 @@ public class FieldExtractionService : ITransientDependency
             var descriptors = definitions.Select(d => new FieldExtractionDescriptor(
                 d.Id, d.Name, d.Prompt, d.DataType, d.IsRequired, d.AllowMultiple)).ToList();
 
-            // 阶段 2：外部 LLM 调用，**不在任何 UoW 内**（background-jobs.md 硬约束）。
-            // 到这里阶段 1 的短 UoW 已 dispose，_unitOfWorkManager.Current 应为 null。
+            // Phase 2: external LLM call, **outside any UoW** (hard constraint from background-jobs.md).
+            // At this point the short phase 1 UoW has been disposed, so _unitOfWorkManager.Current should be null.
             if (_unitOfWorkManager.Current != null)
             {
                 _logger.LogWarning(
@@ -242,8 +246,8 @@ public class FieldExtractionService : ITransientDependency
 
             var extracted = await _workflow.ExtractAsync(descriptors, markdown, _cancellationTokenProvider.Token);
 
-            // 阶段 3：短 UoW 写 Document + publish FieldsExtractedEto——两件事在同一 UoW 内由 ABP outbox
-            // 原子持久化，避免"字段写入成功但事件丢失"。
+            // Phase 3: short UoW writes Document + publishes FieldsExtractedEto. ABP outbox persists both atomically in the same UoW,
+            // avoiding "field write succeeded but event was lost".
             using var writeUow = _unitOfWorkManager.Begin(requiresNew: true);
 
             var document = await _documentRepository.FindWithFieldValuesAsync(documentId);
@@ -263,8 +267,8 @@ public class FieldExtractionService : ITransientDependency
                 return FieldExtractionResult.Skipped;
             }
 
-            // In-flight reclassify race 断言：若 Document 当前的 DocumentTypeId 已与阶段 1 捕获的类型 Id 不一致，
-            // 说明 LLM 飞行期间被 reclassify。继续抽取会用旧 schema 污染 ExtractedFields——丢弃本次。
+            // In-flight reclassify race assertion: if the Document's current DocumentTypeId no longer matches the type Id captured in phase 1,
+            // the document was reclassified while the LLM was in flight. Continuing would pollute ExtractedFields with the old schema, so discard this run.
             if (document.DocumentTypeId != documentTypeId)
             {
                 _logger.LogInformation(
@@ -274,7 +278,7 @@ public class FieldExtractionService : ITransientDependency
                 return FieldExtractionResult.Skipped;
             }
 
-            // LLM 调用期间字段定义可能被 admin 改名 / 改类型 / 删除。写入前按稳定 Id 重读一次。
+            // During the LLM call, admins may rename, change type, or delete field definitions. Reread once by stable Id before writing.
             var currentDefinitions = await _fieldDefinitionRepository.GetListAsync(documentTypeId);
             var currentDefinitionsById = currentDefinitions.ToDictionary(d => d.Id);
 
@@ -324,16 +328,18 @@ public class FieldExtractionService : ITransientDependency
 
             document.SetFields(fieldValues);
 
-            // #284：抽取完成那一刻评估必填缺失并物化 MissingRequiredFields（读路径无法判断「是否已抽取」，故必须写时定）。
-            // 复用写入前重读的 currentDefinitions（筛 IsRequired）+ 写入后的 ExtractedFieldValues；本处在 stale 守卫之后，
-            // stale 事件到不了此处，零新增 race。non-blocking——置 MRF 不会把已 Ready 文档打回（DeriveLifecycle 只看 blocking）。
+            // #284: evaluate required-field missingness at the moment extraction completes and materialize MissingRequiredFields.
+            // Read paths cannot know whether extraction already ran, so this must be decided at write time.
+            // Reuse currentDefinitions reread before writing, filtered by IsRequired, plus the written ExtractedFieldValues.
+            // This is after the stale guard, so stale events cannot reach here and no new race is introduced.
+            // Non-blocking: setting MRF does not move an already Ready document back, because DeriveLifecycle checks only blocking reasons.
             var requiredIds = currentDefinitions.Where(cd => cd.IsRequired).Select(cd => cd.Id).ToList();
             var extractedIds = document.ExtractedFieldValues.Select(v => v.FieldDefinitionId).Distinct().ToList();
             document.SetReviewReason(
                 DocumentReviewReasons.MissingRequiredFields,
                 _reviewEvaluator.MissingRequiredFieldsPresent(requiredIds, extractedIds));
 
-            // FieldsExtractedEto.FieldCount 是逻辑字段数（拿到值的不同字段个数），非展开后的行数。
+            // FieldsExtractedEto.FieldCount is the logical field count (distinct fields with values), not the expanded row count.
             var fieldCount = fieldValues.Select(v => v.FieldDefinitionId).Distinct().Count();
 
             await _documentRepository.UpdateAsync(document, autoSave: true);

@@ -20,16 +20,19 @@ public class DocumentReferenceResolutionTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        // 走真实 EF 仓储 + 真实 AppService（DTO 组装）；DocumentAppService 构造依赖 IBlobContainer，
-        // 本测试不触发上传 / 下载，substitute 仅满足构造（避免未配置 blob provider 的解析失败）。
+        // Use real EF repositories + real AppService DTO assembly. DocumentAppService constructor depends on
+        // IBlobContainer; this test does not trigger upload / download, so the substitute only satisfies
+        // construction and avoids resolution failure from an unconfigured blob provider.
         context.Services.AddSingleton(Substitute.For<IBlobContainer<DocumentAIDocumentContainer>>());
     }
 }
 
 /// <summary>
-/// #207 验收：TypeCode / Name 重命名解锁 + soft-delete 穿透 join + DataType 变更守卫，端到端走真实 EF（SQLite）
-/// + AppService（DTO 组装）。核心证明：内部用不可变 Id 关联，重命名不级联数据行而出口 DTO 透明反映当前 code/name；
-/// 已归档（软删）字段仍可被历史文档读路径解析；已有抽取值的字段禁止改 DataType。
+/// #207 acceptance: TypeCode / Name rename unlock, soft-delete-penetrating join, and DataType change guard,
+/// end to end through real EF (SQLite) + AppService DTO assembly. Core proof: internal relations use immutable
+/// Ids, so renames do not cascade data rows while exit DTOs transparently reflect current code / name. Archived
+/// (soft-deleted) fields can still be resolved by historical document read paths, and fields with extracted
+/// values cannot change DataType.
 /// </summary>
 public class DocumentReferenceResolution_Tests : DocumentAITestBase<DocumentReferenceResolutionTestModule>
 {
@@ -59,7 +62,7 @@ public class DocumentReferenceResolution_Tests : DocumentAITestBase<DocumentRefe
                 "contract.general", "amount", FieldDataType.Number, docId, 100m);
         });
 
-        // 重命名前：DTO 输出原 code / name。
+        // Before rename: DTO outputs original code / name.
         await WithUnitOfWorkAsync(async () =>
         {
             var dto = await GetDtoAsync("contract.general", docId);
@@ -68,7 +71,8 @@ public class DocumentReferenceResolution_Tests : DocumentAITestBase<DocumentRefe
             dto.ExtractedFields!.ShouldContainKey("amount");
         });
 
-        // 重命名 TypeCode + Name（DataType 不变 → 不触发守卫）。内部 Id 不变，不级联 Document / 字段值行。
+        // Rename TypeCode + Name while DataType stays unchanged, so the guard is not triggered. Internal Ids stay
+        // unchanged and Document / field-value rows are not cascaded.
         await WithUnitOfWorkAsync(async () =>
         {
             await _documentTypeAppService.UpdateAsync(typeId, new UpdateDocumentTypeDto
@@ -89,7 +93,8 @@ public class DocumentReferenceResolution_Tests : DocumentAITestBase<DocumentRefe
             });
         });
 
-        // 重命名后：同一历史文档的 DTO 透明反映新 code / name（join 当前 DocumentType / FieldDefinition）。
+        // After rename: DTO for the same historical document transparently reflects new code / name by joining the
+        // current DocumentType / FieldDefinition.
         await WithUnitOfWorkAsync(async () =>
         {
             var dto = await GetDtoAsync("contract.renamed", docId);
@@ -112,10 +117,12 @@ public class DocumentReferenceResolution_Tests : DocumentAITestBase<DocumentRefe
                 "host.invoice", "partner", FieldDataType.Text, docId, "Acme");
         });
 
-        // 软删字段（FieldDefinition 删除走软删，无 in-use 守卫；字段值行仍在）。
+        // Soft-delete the field. FieldDefinition deletion uses soft delete and has no in-use guard; field-value
+        // rows remain.
         await WithUnitOfWorkAsync(() => _fieldDefinitionAppService.DeleteAsync(fieldId));
 
-        // 历史文档读路径穿透 soft-delete join → 仍解析出（已归档）字段名，不丢 key。
+        // Historical document read path penetrates the soft-delete join, still resolves the archived field name,
+        // and does not drop the key.
         await WithUnitOfWorkAsync(async () =>
         {
             var dto = await GetDtoAsync("host.invoice", docId);
@@ -136,7 +143,8 @@ public class DocumentReferenceResolution_Tests : DocumentAITestBase<DocumentRefe
                 "contract.general", "amount", FieldDataType.Number, docId, 100m);
         });
 
-        // 已有抽取值的字段禁止改 DataType（否则历史值落在旧 typed 列、按新类型查会静默漏掉）。
+        // Fields with extracted values cannot change DataType; otherwise historical values remain in old typed
+        // columns and silently disappear under new-type queries.
         await WithUnitOfWorkAsync(async () =>
         {
             var ex = await Should.ThrowAsync<BusinessException>(() =>
@@ -145,7 +153,7 @@ public class DocumentReferenceResolution_Tests : DocumentAITestBase<DocumentRefe
                     Name = "amount",
                     DisplayName = "Amount",
                     Prompt = "Extract the amount.",
-                    DataType = FieldDataType.Text,   // ← 从 Number 改 Text
+                    DataType = FieldDataType.Text,   // Changed from Number to Text.
                     DisplayOrder = 0,
                     IsRequired = false
                 }));

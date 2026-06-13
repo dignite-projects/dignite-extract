@@ -25,8 +25,9 @@ public class DocumentToolsTestModule : AbpModule
 }
 
 /// <summary>
-/// <see cref="DocumentTools.GetAsync"/> 薄壳行为：委托 <see cref="IDocumentAppService.GetAsync"/>
-/// 并映射为 <see cref="DocumentDetailResult"/>（title / markdown 经 <c>PromptBoundary</c> 包裹）。
+/// Thin-shell behavior of <see cref="DocumentTools.GetAsync"/>: delegates to
+/// <see cref="IDocumentAppService.GetAsync"/> and maps to <see cref="DocumentDetailResult"/>, with title
+/// / markdown wrapped by <c>PromptBoundary</c>.
 /// </summary>
 public class DocumentTools_Tests : DocumentAITestBase<DocumentToolsTestModule>
 {
@@ -62,16 +63,16 @@ public class DocumentTools_Tests : DocumentAITestBase<DocumentToolsTestModule>
         var result = await DocumentTools.GetAsync(docId.ToString(), _documentAppService);
 
         result.Id.ShouldBe(docId);
-        // Title 必须经 PromptBoundary.WrapField 包裹。
+        // Title must be wrapped by PromptBoundary.WrapField.
         result.Title.ShouldBe(PromptBoundary.WrapField("Acme MSA 2025"));
         result.DocumentTypeCode.ShouldBe("contract.general");
         result.LifecycleStatus.ShouldBe("Ready");
         result.Language.ShouldBe("zh");
-        // Markdown 必须经 PromptBoundary.WrapDocument 包裹。
+        // Markdown must be wrapped by PromptBoundary.WrapDocument.
         result.Markdown.ShouldBe(PromptBoundary.WrapDocument("## Acme MSA\n\nContract text here."));
         result.ExtractionIsComplete.ShouldBeTrue();
         result.ExtractedFields.ShouldNotBeNull();
-        // 数字字段值原样透传（非 String，不包裹）。
+        // Numeric field values pass through unchanged; non-String values are not wrapped.
         result.ExtractedFields!["amount"].GetInt32().ShouldBe(100000);
     }
 
@@ -96,7 +97,7 @@ public class DocumentTools_Tests : DocumentAITestBase<DocumentToolsTestModule>
 
         var result = await DocumentTools.GetAsync(docId.ToString(), _documentAppService);
 
-        // 文本字段值（用户派生自由文本）必须经 PromptBoundary.WrapField 包裹。
+        // Text field values, user-derived free text, must be wrapped by PromptBoundary.WrapField.
         result.ExtractedFields!["party_name"].GetString()
             .ShouldBe(PromptBoundary.WrapField("Acme Corp"));
     }

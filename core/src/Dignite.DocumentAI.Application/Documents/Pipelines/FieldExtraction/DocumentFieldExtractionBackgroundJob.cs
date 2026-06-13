@@ -8,18 +8,22 @@ using Volo.Abp.Uow;
 namespace Dignite.DocumentAI.Documents.Pipelines.FieldExtraction;
 
 /// <summary>
-/// <c>field-extraction</c> 流水线后台作业（#289 步骤 2）——「按需 / 批量字段重抽」的执行单元。
-/// 复用 <see cref="DocumentPipelineBackgroundJobBase{TArgs}"/> 拿三段式短 UoW + <see cref="DocumentPipelineRun"/>
-/// 可观测 / 失败重试，外部 LLM 抽取委托 #289 步骤 1 的共享引擎 <see cref="FieldExtractionService"/>。
+/// <c>field-extraction</c> pipeline background job (#289 step 2): execution unit for on-demand / bulk
+/// field re-extraction. Reuses <see cref="DocumentPipelineBackgroundJobBase{TArgs}"/> for the
+/// three-stage short UoW pattern plus <see cref="DocumentPipelineRun"/> observability / failure retry,
+/// while external LLM extraction delegates to the shared #289 step 1 engine
+/// <see cref="FieldExtractionService"/>.
 /// <para>
-/// <b>生命周期中性</b>：<see cref="DocumentAIPipelines.FieldExtraction"/> 不在 <see cref="DocumentAIPipelines.KeyPipelines"/>，
-/// 故 BeginRun / CompleteRun 触发的 <c>DeriveLifecycleAsync</c> 不改 <c>Document.LifecycleStatus</c>——已 Ready 文档
-/// 重抽字段后仍 Ready，不被打回 Processing。
+/// <b>Lifecycle-neutral</b>: <see cref="DocumentAIPipelines.FieldExtraction"/> is not in
+/// <see cref="DocumentAIPipelines.KeyPipelines"/>, so <c>DeriveLifecycleAsync</c> triggered by
+/// BeginRun / CompleteRun does not change <c>Document.LifecycleStatus</c>. Ready documents remain
+/// Ready after field re-extraction and are not moved back to Processing.
 /// </para>
 /// <para>
-/// 与分类作业一致的三阶段：BeginRun（短 UoW 建 / 续 run 并标记 Running）→ 外部 LLM 抽取（无 UoW）→
-/// CompleteRun（短 UoW 标记 Succeeded）。任一异常 → <see cref="DocumentPipelineBackgroundJobBase{TArgs}.FailRunAsync"/>
-/// 标记 Failed 后 re-throw 触发 ABP 后台作业重试。
+/// Same three stages as the classification job: BeginRun (short UoW creates / resumes run and marks
+/// Running), external LLM extraction (no UoW), then CompleteRun (short UoW marks Succeeded). Any
+/// exception calls <see cref="DocumentPipelineBackgroundJobBase{TArgs}.FailRunAsync"/> to mark Failed,
+/// then rethrows to trigger ABP background job retry.
 /// </para>
 /// </summary>
 [BackgroundJobName("DocumentAI.DocumentFieldExtraction")]
@@ -46,7 +50,8 @@ public class DocumentFieldExtractionBackgroundJob
 
         try
         {
-            // 外部 LLM 抽取——引擎内部自行 ICurrentTenant.Change(tenantId) + 三段式短 UoW，绝不在任何 UoW 内调用。
+            // External LLM extraction. The engine internally performs ICurrentTenant.Change(tenantId)
+            // + its own three-stage short UoW flow and is never called inside any existing UoW.
             await _fieldExtractionService.ExtractAsync(documentId, tenantId);
             await CompleteRunAsync(documentId, runId);
         }

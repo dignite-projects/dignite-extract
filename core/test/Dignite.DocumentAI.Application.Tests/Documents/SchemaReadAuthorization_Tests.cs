@@ -19,19 +19,20 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 控制权限授予的测试用授权服务：按 policy 名（= permission 名）逐一放行。实现 <see cref="IAbpAuthorizationService"/>，
-/// 因为 ABP 的 <c>IsGrantedAsync</c> / <c>CheckAsync</c> 扩展会把 <see cref="IAuthorizationService"/> cast 成它。
-/// 所有 string / requirements 重载都路由到同一授予集合，不依赖框架内部路由细节。
+/// Test authorization service that grants policies one by one by policy name, which is also the permission name.
+/// It implements <see cref="IAbpAuthorizationService"/> because ABP's <c>IsGrantedAsync</c> / <c>CheckAsync</c>
+/// extensions cast <see cref="IAuthorizationService"/> to that interface.
+/// All string / requirements overloads route to the same grant set and do not rely on framework-internal routing details.
 /// </summary>
 public sealed class GrantSetAuthorizationService : IAbpAuthorizationService
 {
     public HashSet<string> Granted { get; set; } = new();
 
-    // 测试桩：扩展方法（IsGrantedAsync / CheckAsync）只走 AuthorizeAsync，不读这两个成员。
+    // Test stub: the IsGrantedAsync / CheckAsync extensions only call AuthorizeAsync and do not read these members.
     public ClaimsPrincipal CurrentPrincipal => null!;
     public IServiceProvider ServiceProvider => null!;
 
-    // IAbpAuthorizationService（扩展方法实际走这两个 2-arg 重载）
+    // IAbpAuthorizationService: the extension methods actually use these two 2-argument overloads.
     public Task<AuthorizationResult> AuthorizeAsync(object? resource, IEnumerable<IAuthorizationRequirement> requirements)
         => Task.FromResult(Evaluate(requirements));
 
@@ -68,8 +69,9 @@ public class SchemaReadAuthorizationTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        // 用可控的授予集合替换 always-allow 的 IAuthorizationService——这是 GetVisibleAsync /
-        // 活跃字段 GetListAsync 的 programmatic OR 门、以及回收站 CheckPolicyAsync 的唯一判定来源。
+        // Replace the always-allow IAuthorizationService with a controllable grant set. This is the only
+        // decision source for GetVisibleAsync, the active-field GetListAsync programmatic OR gate, and the
+        // trash-view CheckPolicyAsync call.
         var authorizationService = new GrantSetAuthorizationService();
         context.Services.AddSingleton(authorizationService);
         context.Services.RemoveAll<IAuthorizationService>();
@@ -84,8 +86,9 @@ public class SchemaReadAuthorizationTestModule : AbpModule
 }
 
 /// <summary>
-/// #223：读 schema 与管理 schema 解耦。读路径（GetVisibleAsync / 活跃字段 GetListAsync）放宽为
-/// <c>Documents.Default</c> 或对应 schema-admin 权限任一即可；回收站读路径仍仅 schema-admin 可达。
+/// #223: schema reads are decoupled from schema administration. Read paths
+/// (<c>GetVisibleAsync</c> / active-field <c>GetListAsync</c>) accept either <c>Documents.Default</c>
+/// or the corresponding schema-admin permission; trash reads remain schema-admin only.
 /// </summary>
 public class SchemaReadAuthorization_Tests : DocumentAIApplicationTestBase<SchemaReadAuthorizationTestModule>
 {
@@ -106,7 +109,7 @@ public class SchemaReadAuthorization_Tests : DocumentAIApplicationTestBase<Schem
 
     private void Grant(params string[] permissions) => _authorization.Granted = new HashSet<string>(permissions);
 
-    // ---- DocumentType 读：GetVisibleAsync ----
+    // ---- DocumentType reads: GetVisibleAsync ----
 
     [Fact]
     public async Task GetVisibleAsync_Throws_When_Neither_Documents_Nor_DocumentTypes_Granted()
@@ -119,7 +122,8 @@ public class SchemaReadAuthorization_Tests : DocumentAIApplicationTestBase<Schem
     [Fact]
     public async Task GetVisibleAsync_Succeeds_For_Documents_Default_Only()
     {
-        // #223 修复点：文档操作者（无 DocumentTypes.Default）也能读类型 schema 驱动筛选 / 字段列 / 分类指派。
+        // #223 fix point: document operators without DocumentTypes.Default can still read type schema
+        // for filters, field columns, and classification assignment.
         Grant(DocumentAIPermissions.Documents.Default);
         _documentTypeRepository.GetListAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new List<DocumentType> { new(Guid.NewGuid(), null, "host.general", "General") });
@@ -132,7 +136,7 @@ public class SchemaReadAuthorization_Tests : DocumentAIApplicationTestBase<Schem
     [Fact]
     public async Task GetVisibleAsync_Succeeds_For_DocumentTypes_Default_Only()
     {
-        // schema 管理员（无 Documents.Default）读自己的管理列表不受影响。
+        // Schema administrators without Documents.Default can still read their management list.
         Grant(DocumentAIPermissions.DocumentTypes.Default);
         _documentTypeRepository.GetListAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new List<DocumentType> { new(Guid.NewGuid(), null, "host.general", "General") });
@@ -142,7 +146,7 @@ public class SchemaReadAuthorization_Tests : DocumentAIApplicationTestBase<Schem
         result.Count.ShouldBe(1);
     }
 
-    // ---- FieldDefinition 读：活跃 GetListAsync ----
+    // ---- FieldDefinition reads: active GetListAsync ----
 
     [Fact]
     public async Task FieldDefinition_GetListAsync_Active_Throws_When_Neither_Granted()
@@ -160,7 +164,8 @@ public class SchemaReadAuthorization_Tests : DocumentAIApplicationTestBase<Schem
     [Fact]
     public async Task FieldDefinition_GetListAsync_Active_Succeeds_For_Documents_Default_Only()
     {
-        // #223 修复点：文档操作者读字段 schema 驱动动态字段列 / 详情字段编辑 / 导出列选择。
+        // #223 fix point: document operators read field schema for dynamic field columns,
+        // detail-field editing, and export-column selection.
         Grant(DocumentAIPermissions.Documents.Default);
         _fieldDefinitionRepository.GetListAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new List<FieldDefinition>());
@@ -190,12 +195,13 @@ public class SchemaReadAuthorization_Tests : DocumentAIApplicationTestBase<Schem
         result.ShouldNotBeNull();
     }
 
-    // ---- FieldDefinition 回收站：OnlyDeleted 仍仅 schema-admin 可达 ----
+    // ---- FieldDefinition trash: OnlyDeleted remains schema-admin only ----
 
     [Fact]
     public async Task FieldDefinition_GetListAsync_Deleted_Throws_For_Documents_Default_Only()
     {
-        // 回收站视图保持 admin 门——Documents.Default 不能透过 OR 打开它（CheckPolicyAsync 先于查询）。
+        // The trash view keeps the admin gate. Documents.Default cannot open it through the OR rule because
+        // CheckPolicyAsync runs before the query.
         Grant(DocumentAIPermissions.Documents.Default);
 
         await Should.ThrowAsync<AbpAuthorizationException>(() =>

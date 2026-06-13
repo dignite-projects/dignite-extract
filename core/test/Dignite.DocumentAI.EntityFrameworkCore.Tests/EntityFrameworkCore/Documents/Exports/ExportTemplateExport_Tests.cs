@@ -16,14 +16,15 @@ using Xunit;
 namespace Dignite.DocumentAI.EntityFrameworkCore.Documents;
 
 /// <summary>
-/// ExportTemplateAppService.ExportAsync 集成测试（SQLite 真实 EF，#207）：
+/// Integration tests for ExportTemplateAppService.ExportAsync using real EF on SQLite (#207):
 /// <list type="bullet">
-///   <item>固定系统字段（LifecycleStatus / ReviewStatus / ReviewReasons / Title）始终在前，模板抽取列（按 FieldDefinitionId 匹配）在后</item>
-///   <item>typed child 行（#206）经投影 + FieldValueToString 正确渲染（含 Number / Date）</item>
-///   <item>over-cap fail-fast（fetch Max+1，超限抛错而非静默截断）</item>
+///   <item>fixed system fields (LifecycleStatus / ReviewStatus / ReviewReasons / Title) always come first, with template extracted columns matched by FieldDefinitionId after them.</item>
+///   <item>typed child rows (#206) render correctly through projection + FieldValueToString, including Number / Date.</item>
+///   <item>over-cap fail-fast behavior fetches Max+1 and throws on limit overflow instead of silently truncating.</item>
 /// </list>
-/// 注：导出按 FieldDefinitionId 匹配列，列标题取 FieldDefinition.DisplayName；字段类型由 FieldDefinition.DataType 决定（#208，
-/// 不在字段值行持久化），故导出会按模板列 join FieldDefinition 取 DataType——本测试经 SeedSchemaAsync seed 这些字段定义行。
+/// Note: export matches columns by FieldDefinitionId, and column titles come from FieldDefinition.DisplayName.
+/// Field type is decided by FieldDefinition.DataType (#208) and is not persisted in field-value rows, so export
+/// joins FieldDefinition for each template column to get DataType. SeedSchemaAsync seeds those field definition rows.
 /// </summary>
 public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
 {
@@ -44,16 +45,18 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
         _guidGenerator = GetRequiredService<IGuidGenerator>();
     }
 
-    // FK RESTRICT 真实生效（#207）：Document.DocumentTypeId / ExportTemplate.DocumentTypeId → DocumentType，
-    // DocumentExtractedField.FieldDefinitionId → FieldDefinition。插入前先 seed 父行（ExportColumn 内的 FieldDefinitionId
-    // 在序列化 JSON 内无 FK，但文档字段值有，故按文档字段值 seed）。
+    // FK RESTRICT is truly enforced (#207): Document.DocumentTypeId / ExportTemplate.DocumentTypeId -> DocumentType,
+    // and DocumentExtractedField.FieldDefinitionId -> FieldDefinition. Seed parent rows before insertion.
+    // FieldDefinitionId inside ExportColumn is serialized JSON without an FK, but document field values do have
+    // one, so seed according to document field values.
     private async Task SeedSchemaAsync(Guid typeId, params (DocumentFieldValue Field, string DisplayName)[] columns)
     {
         await _documentTypeRepository.InsertAsync(
             new DocumentType(typeId, null, "t" + typeId.ToString("N"), "Type"), autoSave: true);
         foreach (var (f, displayName) in columns)
         {
-            // #207：导出列标题取 FieldDefinition.DisplayName（不在 ExportColumn 上配置）——seed 真实 DisplayName 以验证表头映射。
+            // #207: export column titles come from FieldDefinition.DisplayName, not ExportColumn. Seed real
+            // DisplayName values to verify header mapping.
             await _fieldDefinitionRepository.InsertAsync(
                 new FieldDefinition(
                     f.FieldDefinitionId, null, typeId,
@@ -75,7 +78,7 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
         {
             var amount = new DocumentFieldValue(amountFieldId, FieldDataType.Text, Json("1000"));
             var partner = new DocumentFieldValue(partnerFieldId, FieldDataType.Text, Json("Acme"));
-            await SeedSchemaAsync(typeId, (amount, "金额"), (partner, "对方"));
+            await SeedSchemaAsync(typeId, (amount, "Amount"), (partner, "Counterparty"));
             await _documentRepository.InsertAsync(
                 CreateDocument(_guidGenerator.Create(), typeId, "Invoice A", new[] { amount, partner }),
                 autoSave: true);
@@ -103,19 +106,22 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
             csv = await reader.ReadToEndAsync();
         });
 
-        // 固定系统字段列在前（LifecycleStatus / ReviewStatus / ReviewReasons / Title），模板抽取列在后。
-        csv.ShouldContain("LifecycleStatus,ReviewStatus,ReviewReasons,Title,金额,对方");
-        // #284：ReviewStatus 列值取 ReviewDisposition（DB 列名保持 "ReviewStatus" 不变以稳定导出 schema），默认 NotReviewed。
-        // #287：ReviewReasons 列 None → 空单元格（此处即 NotReviewed 与 Invoice A 之间的 ",,"）。
-        // UC（分类未定）文档 DocumentTypeId=null，被类型绑定导出过滤掉、不会出现在此处。
+        // Fixed system fields come first (LifecycleStatus / ReviewStatus / ReviewReasons / Title), followed by
+        // template extracted columns.
+        csv.ShouldContain("LifecycleStatus,ReviewStatus,ReviewReasons,Title,Amount,Counterparty");
+        // #284: ReviewStatus column value comes from ReviewDisposition. DB column name remains "ReviewStatus" to
+        // keep export schema stable; default is NotReviewed.
+        // #287: ReviewReasons None -> empty cell, shown here as ",," between NotReviewed and Invoice A.
+        // UC (unclassified) documents with DocumentTypeId=null are filtered out by type-bound export.
         csv.ShouldContain("Uploaded,NotReviewed,,Invoice A,1000,Acme");
     }
 
     [Fact]
     public async Task Export_Exposes_MissingRequiredFields_In_ReviewReasons_Column()
     {
-        // #287：non-blocking 的 MissingRequiredFields 文档照常进类型绑定导出（DocumentTypeId 非空、Ready）。
-        // ReviewReasons 系统列透出 "MissingRequiredFields" 质量信号，区别于处置轴 ReviewStatus（仍是 NotReviewed）。
+        // #287: non-blocking MissingRequiredFields documents still enter type-bound export when DocumentTypeId is
+        // non-null and Ready. The ReviewReasons system column exposes the "MissingRequiredFields" quality signal,
+        // distinct from the disposition axis ReviewStatus, which is still NotReviewed.
         var templateId = _guidGenerator.Create();
         var typeId = _guidGenerator.Create();
         var amountFieldId = _guidGenerator.Create();
@@ -123,7 +129,7 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
         await WithUnitOfWorkAsync(async () =>
         {
             var amount = new DocumentFieldValue(amountFieldId, FieldDataType.Text, Json("1000"));
-            await SeedSchemaAsync(typeId, (amount, "金额"));
+            await SeedSchemaAsync(typeId, (amount, "Amount"));
             await _documentRepository.InsertAsync(
                 CreateDocument(_guidGenerator.Create(), typeId, "Invoice MRF", new[] { amount },
                     reviewReasons: DocumentReviewReasons.MissingRequiredFields),
@@ -145,15 +151,15 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
             csv = await reader.ReadToEndAsync();
         });
 
-        csv.ShouldContain("LifecycleStatus,ReviewStatus,ReviewReasons,Title,金额");
-        // ReviewReasons 列 = "MissingRequiredFields"（处置轴 ReviewStatus 仍是 NotReviewed）。
+        csv.ShouldContain("LifecycleStatus,ReviewStatus,ReviewReasons,Title,Amount");
+        // ReviewReasons column = "MissingRequiredFields"; disposition-axis ReviewStatus is still NotReviewed.
         csv.ShouldContain("Uploaded,NotReviewed,MissingRequiredFields,Invoice MRF,1000");
     }
 
     [Fact]
     public async Task Export_Should_Render_Typed_Number_And_Date_Fields()
     {
-        // 覆盖非文本字段经 typed child 投影 + FieldValueToString 的导出渲染。
+        // Covers export rendering for non-text fields through typed child projection + FieldValueToString.
         var templateId = _guidGenerator.Create();
         var typeId = _guidGenerator.Create();
         var amountFieldId = _guidGenerator.Create();
@@ -163,7 +169,7 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
         {
             var amount = new DocumentFieldValue(amountFieldId, FieldDataType.Number, JsonSerializer.SerializeToElement(1234.5m));
             var issued = new DocumentFieldValue(issuedFieldId, FieldDataType.Date, JsonSerializer.SerializeToElement("2024-03-09"));
-            await SeedSchemaAsync(typeId, (amount, "金额"), (issued, "日期"));
+            await SeedSchemaAsync(typeId, (amount, "Amount"), (issued, "Date"));
             await _documentRepository.InsertAsync(
                 CreateDocument(_guidGenerator.Create(), typeId, "Invoice T", new[] { amount, issued }),
                 autoSave: true);
@@ -191,16 +197,18 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
             csv = await reader.ReadToEndAsync();
         });
 
-        csv.ShouldContain("金额,日期");
-        csv.ShouldContain("1234.5");      // Number 渲染（0.###### 最小形：1234.5m → "1234.5"，无尾随零）
-        csv.ShouldContain("2024-03-09");  // Date 渲染
+        csv.ShouldContain("Amount,Date");
+        csv.ShouldContain("1234.5");      // Number rendering uses minimal 0.###### form: 1234.5m -> "1234.5", no trailing zero.
+        csv.ShouldContain("2024-03-09");  // Date rendering.
     }
 
     [Fact]
     public async Task Export_Renders_MultiValue_Field_As_Ordered_Join()
     {
-        // #212：多值字段作为导出列 → 按 Order 升序 join 全部值（不丢值、确定，不依赖 DB 对 child 子查询未指定的
-        // 行返回顺序）。本测试故意把行按 Order 2,0,1 的乱序插入——验证导出仍按 Order 0,1,2 = "urgent; legal; 2026"。
+        // #212: multi-value fields as export columns join all values by ascending Order. This is complete,
+        // deterministic, and does not rely on DB return order for child subqueries without explicit ordering.
+        // This test intentionally inserts rows in Order 2,0,1 and verifies export still uses
+        // Order 0,1,2 = "urgent; legal; 2026".
         var templateId = _guidGenerator.Create();
         var typeId = _guidGenerator.Create();
         var tagsFieldId = _guidGenerator.Create();
@@ -215,7 +223,7 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
                     FieldDataType.Text, allowMultiple: true),
                 autoSave: true);
 
-            // 乱序插入：物理首行是 Order 2（"2026"），Order 0（"urgent"）在中间。
+            // Out-of-order insert: the physical first row is Order 2 ("2026"), with Order 0 ("urgent") in the middle.
             var fields = new[]
             {
                 new DocumentFieldValue(tagsFieldId, FieldDataType.Text, Json("2026"), 2),
@@ -242,7 +250,7 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
             csv = await reader.ReadToEndAsync();
         });
 
-        // 按 Order 0,1,2 join（"urgent; legal; 2026"），不是乱序物理顺序 "2026; urgent; legal"。
+        // Join by Order 0,1,2 ("urgent; legal; 2026"), not physical out-of-order order "2026; urgent; legal".
         csv.ShouldContain("Doc M,urgent; legal; 2026");
     }
 
@@ -258,7 +266,7 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
 
             await WithUnitOfWorkAsync(async () =>
             {
-                await SeedSchemaAsync(typeId);   // 文档无字段值，仅需 seed 父类型供 Document/Template FK。
+                await SeedSchemaAsync(typeId);   // Document has no field values; only seed parent type for Document / Template FK.
                 for (var i = 0; i < 3; i++)
                 {
                     await _documentRepository.InsertAsync(
@@ -293,8 +301,9 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
     [Fact]
     public async Task Template_Crud_Roundtrips_DocumentTypeId_And_FieldDefinitionId()
     {
-        // #207：模板以不可变 DocumentTypeId / 列 FieldDefinitionId 提交 → AppService 校验字段属于该类型后持久化；
-        // 读回由 Mapperly 直接映射回 Id。覆盖 EnsureDocumentTypeExistsAsync + MapColumnsAsync。
+        // #207: templates are submitted with immutable DocumentTypeId / column FieldDefinitionId. AppService
+        // validates fields belong to that type before persistence; readback maps Ids directly through Mapperly.
+        // Covers EnsureDocumentTypeExistsAsync + MapColumnsAsync.
         var typeId = _guidGenerator.Create();
         var fieldId = _guidGenerator.Create();
 
@@ -344,7 +353,7 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
 
         await WithUnitOfWorkAsync(async () =>
         {
-            // 该类型下无此 FieldDefinitionId → loud fail（EntityNotFoundException）。
+            // This type does not contain that FieldDefinitionId -> loud fail (EntityNotFoundException).
             await Should.ThrowAsync<EntityNotFoundException>(() => _appService.CreateAsync(new CreateExportTemplateDto
             {
                 Name = "Bad",
@@ -376,13 +385,14 @@ public class ExportTemplateExport_Tests : DocumentAIEntityFrameworkCoreTestBase
                 fileSize: 1024,
                 originalFileName: "f.pdf"));
 
-        // DocumentTypeId / Title 为 private setter——测试用反射模拟"已分类 + 已提取标题"。
+        // DocumentTypeId / Title have private setters; tests use reflection to simulate "classified + title extracted".
         typeof(Document).GetProperty(nameof(Document.DocumentTypeId))!.SetValue(document, documentTypeId);
         typeof(Document).GetProperty(nameof(Document.Title))!.SetValue(document, title);
 
         if (reviewReasons != DocumentReviewReasons.None)
         {
-            // #287：模拟字段抽取阶段在已分类文档上物化的 non-blocking 原因（如 MissingRequiredFields）。
+            // #287: simulate non-blocking reasons materialized by field extraction on a classified document,
+            // such as MissingRequiredFields.
             document.SetReviewReason(reviewReasons, present: true);
         }
 

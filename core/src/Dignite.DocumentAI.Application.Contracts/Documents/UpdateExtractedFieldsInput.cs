@@ -6,9 +6,12 @@ namespace Dignite.DocumentAI.Documents;
 public class UpdateExtractedFieldsInput
 {
     /// <summary>
-    /// 字段值（key = <see cref="FieldDefinition.Name"/>）。整体替换该文档的类型绑定字段值集合——
-    /// 调用方提交该文档当前全部字段值；每个 key 必须是该文档所属层、该 DocumentType 下已定义的字段名。
-    /// 值保留为原始 JSON（不做 DataType 强制转换，消费侧按 <see cref="FieldDefinition.DataType"/> 反序列化）。
+    /// Field values keyed by <see cref="FieldDefinition.Name"/>. Replaces the complete set of
+    /// type-bound field values for this document.
+    /// The caller submits all current field values for the document; every key must be a field name
+    /// defined under the document's own layer and DocumentType.
+    /// Values stay as raw JSON with no forced DataType conversion. Consumers deserialize according to
+    /// <see cref="FieldDefinition.DataType"/>.
     /// </summary>
     public Dictionary<string, JsonElement> Fields { get; set; } = new();
 }

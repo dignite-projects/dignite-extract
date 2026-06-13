@@ -20,19 +20,23 @@ public class DocumentTypeResourcesTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        // 出口是薄壳，委托 AppService（权限断言 / 租户隔离在 AppService 内、此处以 mock 替身）；
-        // 以 mock 注入断言 code 过滤、schema 投影、PromptBoundary 包裹、not-found 行为。
+        // Output is a thin shell delegating to AppService. Permission assertions / tenant isolation live
+        // in AppService and are represented here by a mock substitute. The injected mock asserts code
+        // filtering, schema projection, PromptBoundary wrapping, and not-found behavior.
         context.Services.AddSingleton(Substitute.For<IDocumentTypeAppService>());
         context.Services.AddSingleton(Substitute.For<IFieldDefinitionAppService>());
     }
 }
 
 /// <summary>
-/// <see cref="DocumentTypeResources"/> read 行为：按 type code 返回字段 schema——DisplayName（类型 + 字段）
-/// 经 <c>PromptBoundary</c> 包裹、字段按 DisplayOrder 排序、找不到类型抛 <see cref="McpException"/>。
-/// 权限断言、参数校验、租户隔离都在 AppService 内（此处以 mock 替身），故那些行为由 AppService 测试覆盖、不在此重复。
-/// resources/list 的投影逻辑（<see cref="DocumentTypeResources.ListVisibleAsync"/>，由 module handler 委托）
-/// 也在此覆盖：按 TypeCode 稳定排序 + 硬上限截断（<see cref="DocumentAIMcpConsts.MaxDocumentTypeResults"/>）。
+/// Read behavior of <see cref="DocumentTypeResources"/>: returns field schema by type code. DisplayName
+/// values for type and fields are wrapped by <c>PromptBoundary</c>, fields are sorted by DisplayOrder,
+/// and missing types throw <see cref="McpException"/>.
+/// Permission assertions, parameter validation, and tenant isolation live in AppService, represented here
+/// by a mock substitute, so those behaviors are covered by AppService tests and not repeated here.
+/// resources/list projection logic (<see cref="DocumentTypeResources.ListVisibleAsync"/>, delegated by
+/// the module handler) is also covered here: stable TypeCode sorting plus hard-limit truncation
+/// (<see cref="DocumentAIMcpConsts.MaxDocumentTypeResults"/>).
 /// </summary>
 public class DocumentTypeResources_Tests : DocumentAITestBase<DocumentTypeResourcesTestModule>
 {
@@ -48,7 +52,8 @@ public class DocumentTypeResources_Tests : DocumentAITestBase<DocumentTypeResour
     [Fact]
     public async Task Returns_schema_with_wrapped_display_names_ordered_by_display_order()
     {
-        // #222：ReadAsync 委托 GetVisibleAsync 按 code 过滤拿类型，再 GetListAsync(DocumentTypeId) 取字段（#207）。
+        // #222: ReadAsync delegates to GetVisibleAsync to filter type by code, then GetListAsync
+        // (DocumentTypeId) to load fields (#207).
         var typeId = Guid.NewGuid();
         _documentTypeAppService
             .GetVisibleAsync()
@@ -79,9 +84,10 @@ public class DocumentTypeResources_Tests : DocumentAITestBase<DocumentTypeResour
         var schema = JsonSerializer.Deserialize<DocumentTypeSchema>(((TextResourceContents)result).Text)!;
 
         schema.TypeCode.ShouldBe("contract.general");
-        // 类型 / 字段 DisplayName 是 admin 配置文本，经 PromptBoundary 包裹防 indirect prompt injection。
+        // Type / field DisplayName values are admin-configured text and are wrapped by PromptBoundary to
+        // defend against indirect prompt injection.
         schema.DisplayName.ShouldBe(PromptBoundary.WrapField("合同"));
-        // 字段按 DisplayOrder 升序：partyName(0) 先于 amount(1)。
+        // Fields sort by DisplayOrder ascending: partyName(0) before amount(1).
         schema.Fields.Count.ShouldBe(2);
         schema.Fields[0].Name.ShouldBe("partyName");
         schema.Fields[0].DataType.ShouldBe("Text");
@@ -94,8 +100,8 @@ public class DocumentTypeResources_Tests : DocumentAITestBase<DocumentTypeResour
     [Fact]
     public async Task Exposes_AllowMultiple_so_clients_know_a_field_returns_an_array()
     {
-        // #212：多值字段在检索结果 extractedFields 里是 string[]——schema 必须透出 AllowMultiple，
-        // 否则 MCP 客户端按"文本标量"解析数组会出错。
+        // #212: multi-value fields are string[] in search result extractedFields. Schema must expose
+        // AllowMultiple, otherwise MCP clients would parse arrays as "text scalar" and fail.
         var typeId = Guid.NewGuid();
         _documentTypeAppService
             .GetVisibleAsync()
@@ -134,7 +140,8 @@ public class DocumentTypeResources_Tests : DocumentAITestBase<DocumentTypeResour
     [Fact]
     public async Task Throws_when_type_not_found()
     {
-        // 跨租户 / 不存在的 code → 不在 GetVisibleAsync 返回的当前层类型集中（租户隔离由 ambient 过滤器施加）。
+        // Cross-tenant / nonexistent code is absent from the current-layer type set returned by
+        // GetVisibleAsync; tenant isolation is enforced by ambient filters.
         _documentTypeAppService
             .GetVisibleAsync()
             .Returns(new List<DocumentTypeDto>());
@@ -147,7 +154,8 @@ public class DocumentTypeResources_Tests : DocumentAITestBase<DocumentTypeResour
     [Fact]
     public async Task Resources_list_projects_visible_types_ordered_by_type_code()
     {
-        // 上限内行为：每个可见类型一条 Resource（URI / Name 按 TypeCode），按 TypeCode 稳定排序。
+        // Within-limit behavior: one Resource per visible type, URI / Name by TypeCode, sorted stably by
+        // TypeCode.
         _documentTypeAppService
             .GetVisibleAsync()
             .Returns(new List<DocumentTypeDto>
@@ -169,8 +177,10 @@ public class DocumentTypeResources_Tests : DocumentAITestBase<DocumentTypeResour
     [Fact]
     public async Task Resources_list_truncates_beyond_cap()
     {
-        // 结果集硬上限（llm-call-anti-patterns 反例 B 要点 3）：租户 admin 可自建任意多类型——
-        // resources/list 协议条目无处携带截断信号，直接截断（完整发现走 list_document_types tool）。
+        // Hard result-set limit (llm-call-anti-patterns counterexample B point 3): tenant admins can
+        // create arbitrarily many types. resources/list protocol entries have no place to carry a
+        // truncation signal, so truncate directly; full discovery goes through the list_document_types
+        // tool.
         var total = DocumentAIMcpConsts.MaxDocumentTypeResults + 3;
         var types = Enumerable.Range(0, total)
             .Select(i => new DocumentTypeDto
@@ -179,7 +189,8 @@ public class DocumentTypeResources_Tests : DocumentAITestBase<DocumentTypeResour
                 TypeCode = $"type.{i:D4}",
                 DisplayName = $"Type {i}"
             })
-            // 乱序交给投影——截断必须建立在投影自己的 TypeCode 稳定排序之上。
+            // Feed unordered input into projection; truncation must be based on the projection's own
+            // stable TypeCode sorting.
             .OrderByDescending(t => t.TypeCode, StringComparer.Ordinal)
             .ToList();
         _documentTypeAppService.GetVisibleAsync().Returns(types);
@@ -187,7 +198,7 @@ public class DocumentTypeResources_Tests : DocumentAITestBase<DocumentTypeResour
         var result = await DocumentTypeResources.ListVisibleAsync(_documentTypeAppService);
 
         result.Resources.Count.ShouldBe(DocumentAIMcpConsts.MaxDocumentTypeResults);
-        // 保留 TypeCode 字典序最前的一段、丢弃尾部。
+        // Keep the lexicographically first TypeCode segment and discard the tail.
         result.Resources[0].Name.ShouldBe("type.0000");
         result.Resources[^1].Name.ShouldBe($"type.{DocumentAIMcpConsts.MaxDocumentTypeResults - 1:D4}");
     }

@@ -38,11 +38,13 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
 
         var result = await _extractor.ExtractAsync(stream, ctx);
 
-        // OCR Provider 直接负责输出 Markdown（即便是扁平段落），DefaultTextExtractor 透传字段。
+        // OCR Provider directly owns Markdown output, even when it is a flat paragraph; DefaultTextExtractor
+        // passes fields through.
         result.Markdown.ShouldBe("fake ocr markdown");
         result.UsedOcr.ShouldBeTrue();
 
-        // OCR 编排只调用 provider 一次；具体模型由 provider/host 配置决定。
+        // OCR orchestration calls the provider only once; the concrete model is selected by provider/host
+        // configuration.
         await _ocrProvider.Received(1).RecognizeAsync(
             Arg.Any<Stream>(),
             Arg.Is<OcrOptions>(o =>
@@ -91,7 +93,7 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
     [Fact]
     public async Task Should_Fallback_To_Ocr_For_Scanned_Pdf()
     {
-        // 非真实 PDF 字节 → ElBruno 转换失败 → 回退 OCR
+        // Non-real PDF bytes make ElBruno conversion fail, so it falls back to OCR.
         var stream = new MemoryStream(Encoding.UTF8.GetBytes("not a real pdf"));
         var ctx = new TextExtractionContext
         {
@@ -125,14 +127,14 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
 
         result.Markdown.ShouldContain("kept");
 
-        // orchestrator 不做 OCR 重试——provider 只调用一次。
+        // Orchestrator does not retry OCR; provider is called only once.
         await _ocrProvider.Received(1).RecognizeAsync(
             Arg.Any<Stream>(),
             Arg.Any<OcrOptions>(),
             Arg.Any<CancellationToken>());
     }
 
-    // === #210 provenance：ProviderName 传播 + NativePayload 扁平字段映射 ===
+    // === #210 provenance: ProviderName propagation + NativePayload flat-field mapping ===
 
     [Fact]
     public async Task Image_Path_Propagates_ProviderName_And_Maps_Native_Payload()
@@ -144,7 +146,8 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
 
         result.ProviderName.ShouldBe("FakeOcr");
 
-        // OCR provider 的原生 payload 扁平字段经编排层映射到 TextExtractionResult.NativePayload（Abstractions 类型）。
+        // OCR provider native-payload flat fields are mapped by the orchestration layer to
+        // TextExtractionResult.NativePayload, the Abstractions type.
         result.NativePayload.ShouldNotBeNull();
         result.NativePayload!.SchemaName.ShouldBe("FakeOcr/schema");
         result.NativePayload.ContentType.ShouldBe("application/json");
@@ -161,14 +164,14 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
 
         result.ProviderName.ShouldBe(ElBrunoMarkdownProvider.ProviderIdentifier);
 
-        // 纯 text→Markdown 无空间模型 → 无原生 payload。
+        // Pure text-to-Markdown has no spatial model, so there is no native payload.
         result.NativePayload.ShouldBeNull();
     }
 
     [Fact]
     public async Task Scanned_Pdf_Fallback_Uses_Ocr_ProviderName_And_Native_Payload()
     {
-        // 非真实 PDF 字节 → ElBruno 转换失败（无文本层）→ 回退 OCR。
+        // Non-real PDF bytes make ElBruno conversion fail with no text layer, so it falls back to OCR.
         var stream = new MemoryStream(Encoding.UTF8.GetBytes("not a real pdf"));
         var ctx = new TextExtractionContext { ContentType = "application/pdf", FileExtension = ".pdf" };
 
@@ -187,8 +190,10 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
     {
         public override void ConfigureServices(ServiceConfigurationContext context)
         {
-            // OCR provider 负责选择部署配置中的模型并输出 Markdown；orchestrator 不做 profile 重试。
-            // 带扁平 NativePayload 字段 + provider 身份，覆盖 #210 provenance 组装（编排层透传 + 映射 NativePayload）。
+            // OCR provider owns selecting the configured deployment model and outputting Markdown;
+            // orchestrator does not retry profiles.
+            // Includes flat NativePayload fields plus provider identity, covering #210 provenance assembly:
+            // orchestration pass-through plus NativePayload mapping.
             var fakeOcr = Substitute.For<IOcrProvider>();
             fakeOcr.RecognizeAsync(Arg.Any<Stream>(), Arg.Any<OcrOptions>(), Arg.Any<CancellationToken>())
                 .Returns(new OcrResult

@@ -16,12 +16,15 @@ using Xunit;
 namespace Dignite.DocumentAI.EntityFrameworkCore.Documents;
 
 /// <summary>
-/// <see cref="EfCoreDocumentRepository.GetFieldMatchedIdsAsync"/> 的真实 EF 集成测试（SQLite）——字段架构 v2
-/// / Issue #206 + #207。字段值改为 <see cref="DocumentExtractedField"/> 一等 child 的普通类型化列后，匹配查询是纯
-/// EF Core LINQ（Documents-anchored + child EXISTS + 普通列比较），可在 SQLite 上端到端执行。
-/// #207：内部按 <see cref="DocumentFieldQuery.FieldDefinitionId"/> / <see cref="Document.DocumentTypeId"/> 匹配
-/// （不再按字段名 / TypeCode 字符串）；测试用 name → 稳定 Guid 派生保证文档字段值与查询一致。
-/// 覆盖：各 DataType 等值 / 范围、多字段 AND、租户隔离、软删除、reclassify 整组替换、loud fail-closed。
+/// Real EF integration tests (SQLite) for <see cref="EfCoreDocumentRepository.GetFieldMatchedIdsAsync"/>, covering
+/// field schema v2 / Issues #206 and #207. After field values moved to first-class
+/// <see cref="DocumentExtractedField"/> child rows with normal typed columns, matched queries are pure EF Core
+/// LINQ (Documents-anchored + child EXISTS + normal column comparison), executable end to end on SQLite.
+/// #207: internal matching uses <see cref="DocumentFieldQuery.FieldDefinitionId"/> /
+/// <see cref="Document.DocumentTypeId"/>, no longer field-name / TypeCode strings. Tests derive stable Guids
+/// from name to keep document field values and queries consistent.
+/// Coverage: equality / range for each DataType, multi-field AND, tenant isolation, soft delete,
+/// reclassification whole-set replacement, and loud fail-closed behavior.
 /// </summary>
 public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCoreTestBase
 {
@@ -44,9 +47,10 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         _dataFilter = GetRequiredService<IDataFilter>();
     }
 
-    // FK RESTRICT 在 SQLite 测试中真实生效（#207）：Document.DocumentTypeId → DocumentType，
-    // DocumentExtractedField.FieldDefinitionId → FieldDefinition。插入文档 / 字段值前必须先 seed 父行。
-    // 幂等（HashSet 去重）；字段定义名仅占位（搜索按 FieldDefinitionId 匹配，不按名）。
+    // FK RESTRICT is truly enforced in SQLite tests (#207): Document.DocumentTypeId -> DocumentType and
+    // DocumentExtractedField.FieldDefinitionId -> FieldDefinition. Parent rows must be seeded before inserting
+    // documents / field values. Idempotent through HashSet de-duplication; field definition names are placeholders
+    // because search matches by FieldDefinitionId, not by name.
     private async Task EnsureSchemaAsync(string typeCode, IEnumerable<DocumentFieldValue> fields)
     {
         var typeId = TypeId(typeCode);
@@ -70,7 +74,7 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         }
     }
 
-    // ─── loud fail-closed（触达普通列比较前短路 / 拒绝） ─────────────────────────
+    // --- loud fail-closed: short-circuit / reject before normal column comparison ---
 
     [Fact]
     public async Task Empty_field_queries_returns_empty()
@@ -115,7 +119,7 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
     {
         await WithUnitOfWorkAsync(async () =>
         {
-            // Number 字段传 "abc" → 值无法解析为声明类型 → loud fail（不静默空）。
+            // Passing "abc" to a Number field cannot be parsed as the declared type -> loud fail, not silent empty.
             var ex = await Should.ThrowAsync<BusinessException>(() => _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode),
                 new[] { Query("count", FieldDataType.Number, value: "abc") }));
@@ -129,7 +133,8 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
     {
         await WithUnitOfWorkAsync(async () =>
         {
-            // 等值 / 区间全空是残缺查询——必须 loud fail，绝不退化成「该类型全捞」（纵深防御，非 DTO 校验路径）。
+            // Empty equality / range query is incomplete and must loud fail. It must never degrade to "fetch all
+            // documents of this type"; this is defense in depth, not the DTO validation path.
             var ex = await Should.ThrowAsync<BusinessException>(() => _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode),
                 new[] { Query("count", FieldDataType.Number) }));
@@ -139,13 +144,14 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
     }
 
     [Theory]
-    [InlineData("2024-01-01T10:00:00+08:00")]   // 显式偏移
+    [InlineData("2024-01-01T10:00:00+08:00")]   // Explicit offset.
     [InlineData("2024-01-01T10:00:00Z")]        // UTC 'Z'
     public async Task DateTime_offset_bearing_value_throws(string offsetInput)
     {
         await WithUnitOfWorkAsync(async () =>
         {
-            // 带时区的 DateTime 入参与存储侧 wall-clock 语义不一致 → 判脏入参 loud fail（不静默空）。
+            // DateTime input with a time zone conflicts with storage-side wall-clock semantics -> treat as dirty
+            // input and loud fail, not silent empty.
             var ex = await Should.ThrowAsync<BusinessException>(() => _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode),
                 new[] { Query("created", FieldDataType.DateTime, value: offsetInput) }));
@@ -154,7 +160,7 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         });
     }
 
-    // ─── 各 DataType 等值 ───────────────────────────────────────────────────────
+    // --- equality for each DataType ---
 
     [Fact]
     public async Task String_equality_matches()
@@ -186,7 +192,8 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         });
     }
 
-    // Number 统一了整数与小数（同落 NumberValue）：以下两组分别验证整数形与小数形 JSON 值都能往返 + 匹配。
+    // Number unifies integers and decimals in NumberValue. The next two groups separately verify that integer
+    // and decimal JSON values both round-trip and match.
     [Fact]
     public async Task Number_equality_matches_integer_value()
     {
@@ -247,16 +254,16 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         });
     }
 
-    // ─── 范围（含界）───────────────────────────────────────────────────────────
+    // --- inclusive ranges ---
 
     [Fact]
     public async Task Number_range_matches_inclusive_integer_values()
     {
         await WithUnitOfWorkAsync(async () =>
         {
-            await InsertDocumentAsync(Field("count", FieldDataType.Number, 100L));   // 下界（含）
+            await InsertDocumentAsync(Field("count", FieldDataType.Number, 100L));   // Lower bound, inclusive.
             var mid = await InsertDocumentAsync(Field("count", FieldDataType.Number, 150L));
-            await InsertDocumentAsync(Field("count", FieldDataType.Number, 250L));   // 越上界
+            await InsertDocumentAsync(Field("count", FieldDataType.Number, 250L));   // Above upper bound.
 
             var ids = await _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode), new[] { Query("count", FieldDataType.Number, min: "100", max: "200") });
@@ -271,8 +278,9 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
     {
         await WithUnitOfWorkAsync(async () =>
         {
-            // 同位数（3 整数位）取值——既验证数值区间逻辑，又规避 SQLite 把 decimal 存为 TEXT、按字典序比较的怪异
-            // （生产 SQL Server 是真 decimal 列、数值比较）。代码路径与整数值 Number / Date / DateTime 区间完全一致。
+            // Use same-width values (3 integer digits) to verify numeric range logic while avoiding SQLite's odd
+            // decimal-as-TEXT lexicographic comparison. Production SQL Server uses a real decimal column and
+            // numeric comparison. This code path is identical to integer Number / Date / DateTime ranges.
             await InsertDocumentAsync(Field("amount", FieldDataType.Number, 200m));
             var mid = await InsertDocumentAsync(Field("amount", FieldDataType.Number, 300m));
             await InsertDocumentAsync(Field("amount", FieldDataType.Number, 400m));
@@ -319,7 +327,7 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         });
     }
 
-    // ─── 多字段 AND ─────────────────────────────────────────────────────────────
+    // --- multi-field AND ---
 
     [Fact]
     public async Task Multiple_field_filters_are_ANDed()
@@ -329,7 +337,7 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
             var both = await InsertDocumentAsync(
                 Field("party", FieldDataType.Text, "Acme"),
                 Field("amount", FieldDataType.Number, 300m));
-            // 只满足一个条件 → 不应命中（AND，不同字段互相收窄）。
+            // Satisfies only one condition -> should not match. AND narrows across different fields.
             await InsertDocumentAsync(
                 Field("party", FieldDataType.Text, "Acme"),
                 Field("amount", FieldDataType.Number, 999m));
@@ -348,7 +356,7 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         });
     }
 
-    // ─── 锚定文档类型 ───────────────────────────────────────────────────────────
+    // --- anchored document type ---
 
     [Fact]
     public async Task Field_match_anchors_to_document_type()
@@ -356,7 +364,7 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         await WithUnitOfWorkAsync(async () =>
         {
             var contract = await InsertDocumentAsync(TypeCode, Field("party", FieldDataType.Text, "Acme"));
-            // 同字段值但不同类型——不应命中（查询锚定单一 documentTypeId）。
+            // Same field value but different type should not match because the query is anchored to one documentTypeId.
             await InsertDocumentAsync("invoice.general", Field("party", FieldDataType.Text, "Acme"));
 
             var ids = await _documentRepository.GetFieldMatchedIdsAsync(
@@ -366,7 +374,7 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         });
     }
 
-    // ─── 软删除隔离（沿用 Document 聚合根的 ISoftDelete 全局过滤器） ──────────────
+    // --- soft-delete isolation using the Document aggregate root ISoftDelete global filter ---
 
     [Fact]
     public async Task Soft_deleted_documents_are_excluded_by_default()
@@ -374,14 +382,14 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         await WithUnitOfWorkAsync(async () =>
         {
             var id = await InsertDocumentAsync(Field("party", FieldDataType.Text, "Acme"));
-            await _documentRepository.DeleteAsync(id, autoSave: true); // 软删
+            await _documentRepository.DeleteAsync(id, autoSave: true); // Soft delete.
 
             var ids = await _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode), new[] { Query("party", FieldDataType.Text, value: "Acme") });
 
             ids.ShouldBeEmpty();
 
-            // 回收站语义：在 Disable<ISoftDelete> 作用域内（GetListAsync 的 IsDeleted 路径）应能命中。
+            // Trash semantics: inside a Disable<ISoftDelete> scope, the GetListAsync IsDeleted path should match.
             using (_dataFilter.Disable<ISoftDelete>())
             {
                 var deletedIds = await _documentRepository.GetFieldMatchedIdsAsync(
@@ -391,7 +399,7 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         });
     }
 
-    // ─── 租户隔离（沿用 Document 聚合根的 IMultiTenant 全局过滤器，不手写 TenantId 谓词） ──
+    // --- tenant isolation using the Document aggregate root IMultiTenant global filter, not handwritten TenantId predicates ---
 
     [Fact]
     public async Task Tenant_isolation_is_enforced_by_document_filter()
@@ -406,12 +414,12 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
                 tenantDocId = await InsertDocumentAsync(Field("party", FieldDataType.Text, "Acme"));
             }
 
-            // Host 上下文（CurrentTenant.Id == null）查不到租户文档。
+            // Host context (CurrentTenant.Id == null) cannot see tenant documents.
             var hostIds = await _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode), new[] { Query("party", FieldDataType.Text, value: "Acme") });
             hostIds.ShouldBeEmpty();
 
-            // 切到该租户上下文即可查到。
+            // Switching to that tenant context makes it visible.
             using (_currentTenant.Change(tenantId))
             {
                 var tenantIds = await _documentRepository.GetFieldMatchedIdsAsync(
@@ -421,15 +429,16 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         });
     }
 
-    // ─── 多值文本字段（#212） ───────────────────────────────────────────────
+    // --- multi-value text fields (#212) ---
 
     [Fact]
     public async Task Multi_value_string_field_persists_ordered_rows_and_matches_any_value()
     {
         await WithUnitOfWorkAsync(async () =>
         {
-            // 多值字段一字段多行（复合键含 Order）。AllowMultiple 是 App 层展开闸门——EF 存储 / 查询层只看行，
-            // 故此处直接构造 3 个同 FieldDefinitionId、不同 Order 的值行验证存储 + 查询机制。
+            // Multi-value fields use multiple rows for one field, with Order in the composite key. AllowMultiple
+            // is the App-layer expansion gate; the EF storage / query layer only sees rows. Construct three value
+            // rows with the same FieldDefinitionId and different Order directly to verify storage + query mechanics.
             var tagsId = FieldId("tags");
             var values = new[]
             {
@@ -439,13 +448,13 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
             };
             var id = await InsertDocumentAsync(values);
 
-            // 3 行持久化，按 Order 还原。
+            // Three rows persist and are restored by Order.
             var doc = await _documentRepository.GetAsync(id, includeDetails: true);
             doc.ExtractedFieldValues.Count.ShouldBe(3);
             doc.ExtractedFieldValues.OrderBy(f => f.Order).Select(f => f.TextValue)
                 .ShouldBe(new[] { "urgent", "legal", "2026" });
 
-            // 按任一值命中（.Any 跨多行；查询路径对多值天然兼容，无需改动）。
+            // Match by any value. .Any spans rows, so the query path is naturally compatible with multi-values.
             var byMiddle = await _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode), new[] { Query("tags", FieldDataType.Text, value: "legal") });
             byMiddle.ShouldHaveSingleItem().ShouldBe(id);
@@ -454,7 +463,7 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
                 TypeId(TypeCode), new[] { Query("tags", FieldDataType.Text, value: "2026") });
             byLast.ShouldHaveSingleItem().ShouldBe(id);
 
-            // 未抽到的值不命中。
+            // Values that were not extracted do not match.
             var miss = await _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode), new[] { Query("tags", FieldDataType.Text, value: "archived") });
             miss.ShouldBeEmpty();
@@ -480,7 +489,8 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
                 CreateDocument(id, _currentTenant.Id, TypeCode, values), autoSave: true);
         });
 
-        // ["a","b","c"] → ["x","y"]：Order 0/1 原地改、Order 2 删除（reconcile，无键碰撞 / 孤儿行）。
+        // ["a","b","c"] -> ["x","y"]: Order 0/1 are updated in place and Order 2 is deleted, reconciling without
+        // key collisions or orphan rows.
         await WithUnitOfWorkAsync(async () =>
         {
             var doc = await _documentRepository.GetAsync(id, includeDetails: true);
@@ -498,14 +508,14 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
             reloaded.ExtractedFieldValues.OrderBy(f => f.Order).Select(f => f.TextValue)
                 .ShouldBe(new[] { "x", "y" });
 
-            // 被删除的 Order 2 旧值（"c"）查不到。
+            // The deleted old Order 2 value ("c") cannot be found.
             var oldHits = await _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode), new[] { Query("tags", FieldDataType.Text, value: "c") });
             oldHits.ShouldBeEmpty();
         });
     }
 
-    // ─── 整组替换 / 原地更新（reconcile） ───────────────────────────────────────
+    // --- whole-set replacement / in-place update (reconcile) ---
 
     [Fact]
     public async Task Reclassify_replaces_whole_field_set()
@@ -521,7 +531,7 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
                 autoSave: true);
         });
 
-        // reclassify 到新类型 + 新字段集（含 details 加载现有字段行供 reconcile diff）。
+        // Reclassify to a new type + new field set, including details to load existing field rows for reconcile diff.
         await WithUnitOfWorkAsync(async () =>
         {
             var total = Field("total", FieldDataType.Number, 200m);
@@ -536,10 +546,11 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         {
             var reloaded = await _documentRepository.GetAsync(id, includeDetails: true);
 
-            // 旧 schema 字段（amount）不残留；只剩新 schema 字段（total，按 FieldDefinitionId 匹配）。
+            // Old-schema field (amount) does not remain; only the new-schema field (total) remains, matched by
+            // FieldDefinitionId.
             reloaded.ExtractedFieldValues.Select(f => f.FieldDefinitionId).ShouldBe(new[] { FieldId("total") });
 
-            // 旧字段已查不到（锚定旧类型也查不到旧字段值）。
+            // Old field can no longer be found; even anchoring to the old type cannot find the old field value.
             var oldHits = await _documentRepository.GetFieldMatchedIdsAsync(
                 TypeId(TypeCode), new[] { Query("amount", FieldDataType.Number, value: "100") });
             oldHits.ShouldBeEmpty();
@@ -560,7 +571,9 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
                 autoSave: true);
         });
 
-        // 操作员手改：同字段值改 100 → 200（复合键 (DocumentId, FieldDefinitionId, Order) 下单值字段 Order 0 reconcile 原地更新，不产生重复行 / PK 冲突）。
+        // Operator manual edit: same field changes 100 -> 200. Under composite key
+        // (DocumentId, FieldDefinitionId, Order), single-value field Order 0 reconciles in place without duplicate
+        // rows or PK conflicts.
         await WithUnitOfWorkAsync(async () =>
         {
             var doc = await _documentRepository.GetAsync(id, includeDetails: true);
@@ -606,7 +619,8 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
                 fileSize: 1024,
                 originalFileName: "f.pdf"));
 
-        // DocumentTypeId 为 Domain private setter——测试用反射模拟"已分类"（#207 内部按 Id 关联）。
+        // DocumentTypeId has a Domain private setter; tests use reflection to simulate the classified state
+        // (#207 internal relation by Id).
         typeof(Document).GetProperty(nameof(Document.DocumentTypeId))!.SetValue(doc, TypeId(typeCode));
 
         if (fields.Length > 0)
@@ -624,7 +638,8 @@ public class EfCoreDocumentRepositorySearch_Tests : DocumentAIEntityFrameworkCor
         string name, FieldDataType dataType, string? value = null, string? min = null, string? max = null)
         => new(FieldId(name), name, dataType, value, min, max);
 
-    // name / typeCode → 稳定 Guid 派生（#207：内部按 Id 匹配；同名在文档字段值与查询间一致）。
+    // name / typeCode -> stable Guid derivation (#207: internal matching by Id; same name is consistent between
+    // document field values and queries).
     private static Guid FieldId(string name) => DeterministicGuid("field:" + name);
     private static Guid TypeId(string typeCode) => DeterministicGuid("type:" + typeCode);
 

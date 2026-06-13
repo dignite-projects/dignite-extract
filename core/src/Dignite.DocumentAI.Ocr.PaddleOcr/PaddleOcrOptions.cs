@@ -4,25 +4,29 @@ namespace Dignite.DocumentAI.Ocr.PaddleOcr;
 
 public class PaddleOcrOptions
 {
-    /// <summary>PaddleOCR REST 服务地址，默认本地 Docker sidecar。</summary>
+    /// <summary>PaddleOCR REST service address, defaulting to the local Docker sidecar.</summary>
     public string Endpoint { get; set; } = "http://localhost:8866";
 
     /// <summary>
-    /// 使用的模型。三种取舍：
+    /// Model to use. Three tradeoffs:
     /// <list type="bullet">
-    ///   <item><c>PP-StructureV3</c>（默认）—— CPU 可用，输出 Markdown（标题/表格/印章），中文场景最佳。</item>
-    ///   <item><c>PP-OCRv4</c> —— 最轻量、纯线级 OCR，无结构化 Markdown 输出；Provider 会把 sidecar 的 raw_text 包成扁平 Markdown 段落以符合 Markdown-first 契约。</item>
-    ///   <item><c>PaddleOCR-VL-1.5</c> —— VLM 高精度，输出 Markdown，需 GPU。</item>
+    ///   <item><c>PP-StructureV3</c> (default): CPU-capable, outputs Markdown with headings / tables /
+    ///   stamps, and is best for Chinese scenarios.</item>
+    ///   <item><c>PP-OCRv4</c>: lightest, line-level OCR only, no structured Markdown output. The
+    ///   Provider wraps sidecar raw_text into flat Markdown paragraphs to satisfy the Markdown-first
+    ///   contract.</item>
+    ///   <item><c>PaddleOCR-VL-1.5</c>: high-accuracy VLM, outputs Markdown, requires GPU.</item>
     /// </list>
     /// </summary>
     public string ModelName { get; set; } = "PP-StructureV3";
 
-    /// <summary>默认识别语言列表（BCP 47），可被 OcrOptions.LanguageHints 覆盖。</summary>
+    /// <summary>Default recognition language list (BCP 47), overridden by OcrOptions.LanguageHints.</summary>
     public IList<string> Languages { get; set; } = new List<string> { "ja", "en" };
 
     /// <summary>
-    /// OCR 请求超时（秒）。PP-StructureV3 在 CPU 上处理多页图片 PDF 可能需要数分钟，
-    /// 默认 600 秒（10 分钟）。可在 appsettings.json 的 PaddleOcr 节覆盖。
+    /// OCR request timeout in seconds. PP-StructureV3 can take several minutes on CPU for multi-page
+    /// image PDFs. Default is 600 seconds (10 minutes). Override in the PaddleOcr section of
+    /// appsettings.json.
     /// </summary>
     public int TimeoutSeconds { get; set; } = 600;
 }

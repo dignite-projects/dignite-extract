@@ -5,8 +5,9 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// #210 review：REST <see cref="DocumentDto"/> 完全不透出 native payload 及 extraction provenance 内部信息——
-/// 无下载端点时 payload 摘要不可行动、BlobName 是存储 key 泄漏、step 链是实现细节。纯反射断言，无需 ABP 宿主。
+/// #210 review: REST <see cref="DocumentDto"/> must not expose native payload or internal extraction
+/// provenance information. Without a download endpoint, payload summaries are not actionable; BlobName is
+/// a storage-key leak; and step chains are implementation details. Pure reflection assertion; no ABP host required.
 /// </summary>
 public class DocumentDtoExposure_Tests
 {
@@ -16,24 +17,26 @@ public class DocumentDtoExposure_Tests
     [Fact]
     public void Does_Not_Expose_Native_Payload_Or_Extraction_Provenance()
     {
-        // 归档 blob 的内部存储 key 绝不出口。
+        // Internal storage keys for archived blobs must never be exported.
         PropertyNames.ShouldNotContain("NativePayloadBlobName");
 
-        // ExtractionMetadata / step 链 / ExtractionPath / provider 名都是内部 provenance，不进 DTO。
+        // ExtractionMetadata / step chain / ExtractionPath / provider name are internal provenance and do not enter DTOs.
         PropertyNames.ShouldNotContain("ExtractionMetadata");
         PropertyNames.ShouldNotContain("ExtractionProviderName");
         PropertyNames.ShouldNotContain("ProviderSteps");
         PropertyNames.ShouldNotContain("ExtractionPath");
 
-        // DTO 上不应含任何 "NativePayload" 属性（包括之前的 HasNativePayload / SchemaName / SizeBytes / Sha256 摘要）。
+        // DTO should not contain any "NativePayload" property, including prior HasNativePayload / SchemaName /
+        // SizeBytes / Sha256 summaries.
         PropertyNames.ShouldAllBe(n => !n.Contains("NativePayload"));
     }
 
     [Fact]
     public void Exposes_Extraction_Completeness_Quality_Signal()
     {
-        // #268：提取完整性是下游可操作的<b>质量信号</b>（与上面隐藏的内部 provenance 不同）——刻意出口，
-        // 让消费方据此决定接收 / 降级 / 进人工复核。正向锁定，防止日后被误删。
+        // #268: extraction completeness is an actionable downstream quality signal, unlike the hidden internal
+        // provenance above. It is intentionally exported so consumers can decide whether to accept, degrade,
+        // or enter manual review. Positive lock to prevent accidental future removal.
         PropertyNames.ShouldContain(nameof(DocumentDto.ExtractionIsComplete));
         PropertyNames.ShouldContain(nameof(DocumentDto.ExtractionIncompleteReason));
     }

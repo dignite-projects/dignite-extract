@@ -19,16 +19,19 @@ public class DocumentSearchToolTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        // 工具是薄壳，委托 IDocumentAppService.GetListAsync；以 mock 注入断言入参组装与结果映射。
+        // Tool is a thin shell delegating to IDocumentAppService.GetListAsync; injected mock asserts input
+        // assembly and result mapping.
         context.Services.AddSingleton(Substitute.For<IDocumentAppService>());
     }
 }
 
 /// <summary>
-/// <see cref="DocumentSearchTool"/> 薄壳行为：把 LLM 入参组装成 <see cref="GetDocumentListInput"/> 委托
-/// <see cref="IDocumentAppService.GetListAsync"/>，并把 <see cref="DocumentListItemDto"/> 映射成
-/// <see cref="DocumentSearchResultItem"/>（title 经 <c>PromptBoundary</c> 包裹）。权限断言、参数校验、
-/// 字段定义解析都在 AppService 内（此处以 mock 替身），故那些行为由 AppService 测试覆盖、不在此重复。
+/// Thin-shell behavior of <see cref="DocumentSearchTool"/>: assemble LLM input into
+/// <see cref="GetDocumentListInput"/>, delegate to <see cref="IDocumentAppService.GetListAsync"/>, and map
+/// <see cref="DocumentListItemDto"/> to <see cref="DocumentSearchResultItem"/> with title wrapped by
+/// <c>PromptBoundary</c>. Permission assertions, parameter validation, and field-definition resolution
+/// live in AppService, represented here by a mock substitute, so those behaviors are covered by
+/// AppService tests and not repeated here.
 /// </summary>
 public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTestModule>
 {
@@ -42,25 +45,30 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
     [Fact]
     public void Mcp_input_schema_exposes_fieldFilters_and_all_llm_parameters()
     {
-        // 必须真正经过 MCP SDK 的 schema 生成（McpServerTool.Create），而不是像其它用例那样直接调
-        // DocumentSearchTool.SearchAsync——直接调方法会绕过 ConfigureParameterBinding，永远抓不到本 bug。
-        // ABP 的 Autofac 容器把集合关系类型（IReadOnlyList<T> / ICollection<T> / 数组 等）当作可解析的 DI 服务，
-        // MCP SDK 会据此把这类参数从 inputSchema 剔除；fieldFilters 必须是具体 List<T> 才会出现在 schema 里。
-        // Services 取测试的 Autofac ServiceProvider（基类已 UseAutofac）——MS DI 下复现不出该行为。
+        // Must pass through real MCP SDK schema generation (McpServerTool.Create), rather than directly
+        // calling DocumentSearchTool.SearchAsync as in other cases. Direct method calls bypass
+        // ConfigureParameterBinding and would never catch this bug.
+        // ABP's Autofac container treats collection relation types (IReadOnlyList<T> / ICollection<T> /
+        // arrays, etc.) as resolvable DI services. The MCP SDK then removes such parameters from
+        // inputSchema. fieldFilters must be a concrete List<T> to appear in the schema.
+        // Services use the test Autofac ServiceProvider (base class already uses UseAutofac); this cannot
+        // be reproduced under MS DI.
         var method = typeof(DocumentSearchTool).GetMethod(nameof(DocumentSearchTool.SearchAsync))!;
         var tool = McpServerTool.Create(
             method, target: null, new McpServerToolCreateOptions { Services = ServiceProvider });
 
         var properties = tool.ProtocolTool.InputSchema.GetProperty("properties");
 
-        // fieldFilters 是回归守护重点：曾因声明为 IReadOnlyList<T> 被 Autofac + MCP SDK 静默剔除出 schema。
+        // fieldFilters is the regression guard focus: it was once silently removed from schema because it
+        // was declared as IReadOnlyList<T> under Autofac + MCP SDK.
         properties.TryGetProperty("fieldFilters", out _).ShouldBeTrue();
-        // 其余 LLM-facing 参数对照——它们是标量（IsService=false），本就正常暴露。
+        // Other LLM-facing parameters are controls: they are scalars (IsService=false) and already expose
+        // normally.
         properties.TryGetProperty("documentTypeCode", out _).ShouldBeTrue();
         properties.TryGetProperty("lifecycleStatus", out _).ShouldBeTrue();
         properties.TryGetProperty("maxResultCount", out _).ShouldBeTrue();
 
-        // DI 注入的服务参数必须不出现在 LLM schema 中。
+        // DI-injected service parameters must not appear in the LLM schema.
         properties.TryGetProperty("documentAppService", out _).ShouldBeFalse();
     }
 
@@ -88,7 +96,8 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
             lifecycleStatus: "Ready",
             fieldFilters: new List<DocumentFieldFilter> { new() { Name = "amount", Min = "100", Max = "200" } });
 
-        // 入参按原意组装传给 AppService（lifecycle 字符串解析 + fieldFilters 透传 + 结果上限）。
+        // Input is assembled as intended and passed to AppService: lifecycle string parsing,
+        // fieldFilters pass-through, and result limit.
         await _documentAppService.Received(1).GetListAsync(Arg.Is<GetDocumentListInput>(i =>
             i.DocumentTypeCode == "contract.general"
             && i.LifecycleStatus == DocumentLifecycleStatus.Ready
@@ -101,7 +110,8 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
         result[0].DocumentTypeCode.ShouldBe("contract.general");
         result[0].LifecycleStatus.ShouldBe("Ready");
         result[0].Uri.ShouldBe(DocumentResourceUri.Format(docId));
-        // 用户派生自由文本经 PromptBoundary 包裹防 indirect prompt injection。
+        // User-derived free text is wrapped with PromptBoundary to defend against indirect prompt
+        // injection.
         result[0].Title.ShouldBe(PromptBoundary.WrapField("Acme MSA"));
     }
 
@@ -112,7 +122,8 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
             .GetListAsync(Arg.Any<GetDocumentListInput>())
             .Returns(new PagedResultDto<DocumentListItemDto>(0, new List<DocumentListItemDto>()));
 
-        // LLM 传超大 maxResultCount → clamp 到 MaxSearchResultCount（MCP transport 关注点，保护 LLM context）。
+        // Oversized maxResultCount from the LLM is clamped to MaxSearchResultCount, an MCP transport
+        // concern that protects LLM context.
         await DocumentSearchTool.SearchAsync(
             _documentAppService,
             documentTypeCode: "contract.general",
@@ -129,7 +140,7 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
             .GetListAsync(Arg.Any<GetDocumentListInput>())
             .Returns(new PagedResultDto<DocumentListItemDto>(0, new List<DocumentListItemDto>()));
 
-        // 无法解析的 lifecycle 字符串 → 当作"不过滤"（不抛错）。
+        // Unparseable lifecycle string is treated as no filter, without throwing.
         await DocumentSearchTool.SearchAsync(
             _documentAppService,
             documentTypeCode: "contract.general",
@@ -154,7 +165,8 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
                     DocumentTypeCode = "contract.general",
                     LifecycleStatus = DocumentLifecycleStatus.Ready,
                     CreationTime = new DateTime(2024, 1, 1),
-                    // 用例层无条件带回的该文档全部抽取字段（原样 JsonElement，保留声明类型）。
+                    // Test fixture returns all extracted fields for this document unconditionally, as raw
+                    // JsonElement values that preserve declared types.
                     ExtractedFields = new Dictionary<string, JsonElement>
                     {
                         ["partyName"] = JsonSerializer.SerializeToElement("Acme Corp"),
@@ -167,8 +179,10 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
             _documentAppService,
             documentTypeCode: "contract.general");
 
-        // 文本字段值（用户派生自由文本）经 PromptBoundary 包裹后仍是 JSON 字符串（防 indirect prompt injection）；
-        // 数字等结构化值原样透传保留 JSON 类型（Number），下游 LLM 从值本身推断类型，无需字符串转换。
+        // Text field values, user-derived free text, remain JSON strings after PromptBoundary wrapping to
+        // defend against indirect prompt injection. Structured values such as numbers pass through
+        // unchanged and preserve their JSON type (Number), so downstream LLMs can infer type from the
+        // value without string conversion.
         result[0].ExtractedFields.ShouldNotBeNull();
         var partyName = result[0].ExtractedFields!["partyName"];
         partyName.ValueKind.ShouldBe(JsonValueKind.String);
@@ -191,7 +205,7 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
                     Id = docId,
                     LifecycleStatus = DocumentLifecycleStatus.Ready,
                     CreationTime = new DateTime(2024, 1, 1),
-                    // 多值文本字段（#212）出口是 JSON 数组。
+                    // Multi-value text field (#212) output is a JSON array.
                     ExtractedFields = new Dictionary<string, JsonElement>
                     {
                         ["tags"] = JsonSerializer.SerializeToElement(new[] { "urgent", "legal" })
@@ -202,7 +216,8 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
         var result = await DocumentSearchTool.SearchAsync(
             _documentAppService, documentTypeCode: "contract.general");
 
-        // 数组逐元素经 PromptBoundary 包裹——每个元素都是用户派生自由文本，防 indirect prompt injection。
+        // Array elements are individually wrapped by PromptBoundary because each element is
+        // user-derived free text and needs indirect prompt-injection defense.
         var tags = result[0].ExtractedFields!["tags"];
         tags.ValueKind.ShouldBe(JsonValueKind.Array);
         tags.GetArrayLength().ShouldBe(2);
@@ -226,7 +241,8 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
                     ExtractedFields = new Dictionary<string, JsonElement>
                     {
                         ["amount"] = JsonSerializer.SerializeToElement(125000),
-                        // LLM 抽取不符声明类型时兜底存 JSON null（见 ExtractedFieldValueValidator）。
+                        // When LLM extraction does not match the declared type, fallback storage is JSON
+                        // null. See ExtractedFieldValueValidator.
                         ["expiryDate"] = JsonSerializer.SerializeToElement<string?>(null)
                     }
                 }
@@ -236,7 +252,8 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
             _documentAppService,
             documentTypeCode: "contract.general");
 
-        // JSON null（抽取兜底）跳过不投影，避免投出误导性的字面 null；只剩有效值字段。
+        // JSON null from extraction fallback is skipped from projection, avoiding misleading literal null
+        // output; only valid value fields remain.
         result[0].ExtractedFields.ShouldNotBeNull();
         result[0].ExtractedFields!.Count.ShouldBe(1);
         var amount = result[0].ExtractedFields!["amount"];

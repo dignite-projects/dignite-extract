@@ -10,13 +10,15 @@ using Volo.Abp;
 namespace Dignite.DocumentAI.Documents.Pipelines;
 
 /// <summary>
-/// Application.Tests 共享：<see cref="IDocumentPipelineRunRepository"/> 的 NSubstitute fake
-/// 工厂，配 closure-state 列表。Manager.QueueAsync/Begin/Complete 等路径需要回查"已有 run"
-/// 来算 AttemptNumber + 派生 LifecycleStatus——简单的 <c>Substitute.For&lt;...&gt;()</c> 默认返回
-/// null 会让 DeriveLifecycle 永远进 Processing 分支，掩盖状态流转 bug。
+/// Shared by Application.Tests: an NSubstitute fake factory for
+/// <see cref="IDocumentPipelineRunRepository"/> with a closure-state list. Manager.QueueAsync/Begin/
+/// Complete paths need to query existing runs to calculate AttemptNumber and derive LifecycleStatus.
+/// A simple <c>Substitute.For&lt;...&gt;()</c> returns null by default, making DeriveLifecycle always take
+/// the Processing branch and hiding status-transition bugs.
 /// <para>
-/// 每个 test class 调一次 <see cref="Create"/> 拿独立的 fake 实例（singleton 注册在该 class 的 test module）。
-/// 同一 class 内所有 [Fact] 共享同一 list——靠"每 Fact 用新 doc.Id"保证查询隔离。
+/// Each test class calls <see cref="Create"/> once to get an independent fake instance, registered as a
+/// singleton in that class's test module. All [Fact]s in the same class share one list; query isolation is
+/// provided by using a fresh doc.Id per Fact.
 /// </para>
 /// </summary>
 public static class PipelineRunRepositoryFake
@@ -34,9 +36,10 @@ public static class PipelineRunRepositoryFake
                 return Task.FromResult(run);
             });
 
-        // InsertNewAttemptAsync：模拟 (DocumentId, PipelineCode, AttemptNumber) 唯一索引——撞键时
-        // 抛 RetryInProgress（与 EfCoreDocumentPipelineRunRepository 翻译 DbUpdateException 后的行为对齐），
-        // 否则等价于普通 InsertAsync 入列。happy-path 测试每个 Fact 用新 doc.Id，正常态不会撞。
+        // InsertNewAttemptAsync simulates the (DocumentId, PipelineCode, AttemptNumber) unique index:
+        // colliding keys throw RetryInProgress, matching EfCoreDocumentPipelineRunRepository after it
+        // translates DbUpdateException; otherwise this is equivalent to ordinary InsertAsync into the
+        // list. Happy-path tests use a fresh doc.Id per Fact, so normal state does not collide.
         mock.InsertNewAttemptAsync(Arg.Any<DocumentPipelineRun>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {

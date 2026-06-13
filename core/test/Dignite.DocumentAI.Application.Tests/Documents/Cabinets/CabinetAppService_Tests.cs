@@ -23,8 +23,10 @@ public class CabinetAppServiceTestModule : AbpModule
 }
 
 /// <summary>
-/// <see cref="CabinetAppService.DeleteAsync"/> 行为测试——核心是 Codex adversarial review (#194) 指出的
-/// 删柜归属处理：删柜必须原子清空该柜文档的 CabinetId（真正 unfile），否则文档悬空指向已删柜。
+/// Behavior tests for <see cref="CabinetAppService.DeleteAsync"/>. The core is cabinet deletion ownership
+/// handling identified by Codex adversarial review (#194): deleting a cabinet must atomically clear
+/// CabinetId on documents in that cabinet, truly unfiling them; otherwise documents point to a deleted
+/// cabinet.
 /// </summary>
 public class CabinetAppService_Tests : DocumentAIApplicationTestBase<CabinetAppServiceTestModule>
 {
@@ -56,7 +58,8 @@ public class CabinetAppService_Tests : DocumentAIApplicationTestBase<CabinetAppS
 
         await _appService.DeleteAsync(cabinet.Id);
 
-        // 归属被清空（回退未归类）——无悬空指向已删柜，重建同名柜不会误纳老文档。
+        // Assignment is cleared, falling back to unclassified: no dangling pointer to a deleted cabinet,
+        // and recreating a same-name cabinet will not accidentally absorb old documents.
         doc1.CabinetId.ShouldBeNull();
         doc2.CabinetId.ShouldBeNull();
         await _documentRepository.Received(1).UpdateManyAsync(
@@ -86,7 +89,8 @@ public class CabinetAppService_Tests : DocumentAIApplicationTestBase<CabinetAppS
     [Fact]
     public async Task DeleteAsync_Throws_EntityNotFound_For_Cross_Layer_Cabinet()
     {
-        // 跨层防御：当前层（Host，CurrentTenant.Id IS NULL）尝试删一个租户柜 → EntityNotFound，且不删任何东西。
+        // Cross-layer defense: current layer (Host, CurrentTenant.Id IS NULL) tries to delete a tenant
+        // cabinet -> EntityNotFound, and nothing is deleted.
         var tenantCabinet = new Cabinet(Guid.NewGuid(), Guid.NewGuid(), "TenantOwned");
         _cabinetRepository.GetAsync(tenantCabinet.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(tenantCabinet);

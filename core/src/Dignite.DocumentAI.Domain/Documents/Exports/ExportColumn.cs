@@ -4,27 +4,34 @@ using Volo.Abp;
 namespace Dignite.DocumentAI.Documents.Exports;
 
 /// <summary>
-/// 导出模板的一列定义（值对象，#207 收敛为 ExtractedField-only）。每列引用一个类型绑定字段值
-/// （按不可变 <see cref="FieldDefinitionId"/>）。输出文件中的列标题在导出时取 <c>FieldDefinition.DisplayName</c>，
-/// 无需在模板列上单独配置——字段改名后导出结果自动跟随。
+/// One column definition in an export template (value object, #207 narrowed to ExtractedField-only).
+/// Each column references one type-bound field value by immutable <see cref="FieldDefinitionId"/>.
+/// The output file column header is taken from <c>FieldDefinition.DisplayName</c> during export, so it
+/// does not need to be configured separately on template columns and automatically follows field
+/// renames.
 /// <para>
-/// 系统通用字段（<c>LifecycleStatus</c> / <c>ReviewStatus</c> / <c>Title</c>）由导出引擎
-/// <b>固定输出</b>，不走模板列配置——它们是 DocumentAI 稳定元数据契约，无需像业务字段一样配置（#207）。
+/// Generic system fields (<c>LifecycleStatus</c> / <c>ReviewStatus</c> / <c>Title</c>) are
+/// <b>always emitted</b> by the export engine and do not go through template-column configuration.
+/// They are stable DocumentAI metadata contracts and do not need configuration like business fields
+/// (#207).
 /// </para>
 /// <para>
-/// 作为 <see cref="ExportTemplate.Columns"/> 整体序列化进大文本列——get-only 属性 + 唯一带参构造函数让
-/// System.Text.Json 反序列化时复用同一构造（参数名匹配属性名），构造期校验在 DB round-trip 时复跑（DB 内数据本应合法）。
+/// Serialized as part of <see cref="ExportTemplate.Columns"/> into a large text column. Get-only
+/// properties plus a single parameterized constructor let System.Text.Json reuse the same constructor
+/// during deserialization, with parameter names matching property names. Constructor validation reruns
+/// on DB round-trip, where stored data should already be valid.
 /// </para>
 /// </summary>
 public class ExportColumn
 {
     /// <summary>
-    /// 引用的类型绑定字段值（<c>FieldDefinition.Id</c>，#207）。AppService 保存时按 <c>(DocumentTypeId, fieldName)</c>
-    /// 解析得到；输出 / 管理 UI 再 join 当前 <c>FieldDefinition.Name</c>。<c>FieldDefinition.Name</c> rename 不影响本引用。
+    /// Referenced type-bound field value (<c>FieldDefinition.Id</c>, #207). Resolved by AppService on
+    /// save from <c>(DocumentTypeId, fieldName)</c>; output / admin UI later joins the current
+    /// <c>FieldDefinition.Name</c>. <c>FieldDefinition.Name</c> rename does not affect this reference.
     /// </summary>
     public Guid FieldDefinitionId { get; }
 
-    /// <summary>列在输出中的排序（升序）。</summary>
+    /// <summary>Column order in the output, ascending.</summary>
     public int Order { get; }
 
     public ExportColumn(Guid fieldDefinitionId, int order)

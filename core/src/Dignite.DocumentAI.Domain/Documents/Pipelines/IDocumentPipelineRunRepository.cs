@@ -7,18 +7,18 @@ using Volo.Abp.Domain.Repositories;
 namespace Dignite.DocumentAI.Documents.Pipelines;
 
 /// <summary>
-/// <see cref="DocumentPipelineRun"/> 的自定义仓储（拆于 #216：从 Document child entity 升为独立聚合根）。
-/// 通用 CRUD 由继承的 <see cref="IRepository{TEntity, TKey}"/> 提供；这里只声明 <see cref="DocumentPipelineRunManager"/>
-/// / <see cref="Document"/> 编排路径所需的自定义查询。
+/// Custom repository for <see cref="DocumentPipelineRun"/>. Split in #216 from a Document child entity into an independent aggregate root.
+/// Generic CRUD is provided by inherited <see cref="IRepository{TEntity, TKey}"/>; this interface declares only custom queries required by
+/// <see cref="DocumentPipelineRunManager"/> / <see cref="Document"/> orchestration paths.
 /// </summary>
 public interface IDocumentPipelineRunRepository : IRepository<DocumentPipelineRun, Guid>
 {
     /// <summary>
-    /// 取 (<paramref name="documentId"/>, <paramref name="pipelineCode"/>) 下 <see cref="DocumentPipelineRun.AttemptNumber"/>
-    /// 最大的 run；找不到返回 <c>null</c>。
-    /// 用于：<see cref="DocumentPipelineRunManager.QueueAsync"/> 计算下一个 AttemptNumber；
-    /// <c>DocumentAppService.RetryPipelineAsync</c> 判可重试；<c>DocumentPipelineRunAccessor.BeginOrStartAsync</c>
-    /// 找最新 Pending fallback。
+    /// Gets the run with the largest <see cref="DocumentPipelineRun.AttemptNumber"/> under
+    /// (<paramref name="documentId"/>, <paramref name="pipelineCode"/>); returns <c>null</c> when none exists.
+    /// Used by <see cref="DocumentPipelineRunManager.QueueAsync"/> to compute next AttemptNumber;
+    /// by <c>DocumentAppService.RetryPipelineAsync</c> to determine retryability; and by <c>DocumentPipelineRunAccessor.BeginOrStartAsync</c>
+    /// to find the latest Pending fallback.
     /// </summary>
     Task<DocumentPipelineRun?> FindLatestByDocumentAndCodeAsync(
         Guid documentId,
@@ -26,14 +26,14 @@ public interface IDocumentPipelineRunRepository : IRepository<DocumentPipelineRu
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 一次性查 <paramref name="documentId"/> 下、<paramref name="pipelineCodes"/> 中每个 PipelineCode 的最新 run，
-    /// 字典 key = PipelineCode（仅返回有数据的 code）。
-    /// 用于：<see cref="DocumentPipelineRunManager.DeriveLifecycleAsync"/> 算 <see cref="Document.LifecycleStatus"/>
-    /// （避免 N 次 round-trip）。
+    /// Queries the latest run for each PipelineCode in <paramref name="pipelineCodes"/> under <paramref name="documentId"/> in one call.
+    /// Dictionary key = PipelineCode, returning only codes with data.
+    /// Used by <see cref="DocumentPipelineRunManager.DeriveLifecycleAsync"/> to compute <see cref="Document.LifecycleStatus"/>,
+    /// avoiding N round-trips.
     /// <para>
-    /// <b>契约语义</b>：结果必须反映本 UoW 内尚未 flush 的修改（DeriveLifecycle 紧跟 Manager 的
-    /// <c>UpdateAsync(run, autoSave:false)</c> / Insert 调用）。EFCore 实现合并 change-tracker 的 Local entries；
-    /// in-memory fake 因直接持有 run 引用天然满足。实现方不得只返回"已落库"的陈旧视图。
+    /// <b>Contract semantics</b>: results must reflect unflushed changes in the current UoW because DeriveLifecycle immediately follows
+    /// Manager calls such as <c>UpdateAsync(run, autoSave:false)</c> / Insert. The EF Core implementation merges change-tracker Local entries;
+    /// the in-memory fake naturally satisfies this because it holds run references directly. Implementations must not return only stale "already committed" views.
     /// </para>
     /// </summary>
     Task<Dictionary<string, DocumentPipelineRun>> GetLatestRunsByCodesAsync(
@@ -42,23 +42,24 @@ public interface IDocumentPipelineRunRepository : IRepository<DocumentPipelineRu
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 按 <paramref name="documentId"/> 查所有 run（按 (PipelineCode, AttemptNumber) 排序）。
-    /// 用于：独立 <c>IDocumentPipelineRunAppService.GetListByDocumentAsync</c> 暴露给前端文档详情页。
+    /// Queries all runs by <paramref name="documentId"/>, ordered by (PipelineCode, AttemptNumber).
+    /// Used by independent <c>IDocumentPipelineRunAppService.GetListByDocumentAsync</c> for the frontend document detail page.
     /// </summary>
     Task<List<DocumentPipelineRun>> GetListByDocumentAsync(
         Guid documentId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 插入一条全新的 pipeline 尝试（attempt），并立即落库（autoSave）。
-    /// 若撞 <c>(DocumentId, PipelineCode, AttemptNumber)</c> 唯一索引（唯一现实成因：同一 Failed pipeline
-    /// 被并发重试——见 <see cref="DocumentPipelineRunManager.QueueAsync"/>），抛
-    /// <c>BusinessException(DocumentAIErrorCodes.Pipeline.RetryInProgress)</c>——此刻赢家的新 run 正是 Pending，
-    /// "已有进行中的尝试"语义精确命中。
+    /// Inserts a brand-new pipeline attempt and persists it immediately (autoSave).
+    /// If it collides with the <c>(DocumentId, PipelineCode, AttemptNumber)</c> unique index, whose only realistic cause is concurrent retry
+    /// of the same Failed pipeline (see <see cref="DocumentPipelineRunManager.QueueAsync"/>), throws
+    /// <c>BusinessException(DocumentAIErrorCodes.Pipeline.RetryInProgress)</c>. At that moment, the winner's new run is Pending,
+    /// precisely matching the "attempt already in progress" semantics.
     /// <para>
-    /// <b>跨库纪律（#239）</b>：唯一约束冲突的识别收敛在持久化层，抓的是 EF Core <b>provider 无关</b>的
-    /// <c>DbUpdateException</c> 类型（所有 provider 都把唯一约束冲突包成它），<b>不</b>嗅探异常 message /
-    /// SQL Server 错误码。Domain 层因此不再引用任何 EF Core / SqlClient 类型，也不做字符串侦测。
+    /// <b>Cross-DB discipline (#239)</b>: unique-constraint collision detection is centralized in the persistence layer by catching
+    /// EF Core's <b>provider-agnostic</b> <c>DbUpdateException</c> type, which all providers use to wrap unique-constraint collisions.
+    /// Do <b>not</b> sniff exception messages / SQL Server error codes. The Domain layer therefore references no EF Core / SqlClient types
+    /// and performs no string detection.
     /// </para>
     /// </summary>
     Task InsertNewAttemptAsync(DocumentPipelineRun run, CancellationToken cancellationToken = default);

@@ -87,13 +87,15 @@ public class DocumentPipelineRunManagerTests : DocumentAIDomainTestBase<Document
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Ready);
     }
 
-    // #284：必填缺失(MissingRequiredFields)是 non-blocking——有它也不挡 Ready
-    // （必填缺失只进操作员队列，绝不阻断下游 DocumentReadyEto）。这是本次重构的核心正确性。
+    // #284: MissingRequiredFields is non-blocking and does not prevent Ready. Missing required fields
+    // only enter the operator queue and never block downstream DocumentReadyEto. This is the core
+    // correctness point of the refactor.
     [Fact]
     public async Task NonBlocking_MissingRequiredFields_Does_Not_Block_Ready()
     {
         var doc = CreateDocument();
-        // 预置 MissingRequiredFields（模拟字段抽取已判定必填缺失）。
+        // Pre-set MissingRequiredFields, simulating field extraction already detecting missing required
+        // fields.
         doc.SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: true);
 
         var textRun = await _manager.StartAsync(doc, DocumentAIPipelines.TextExtraction);
@@ -101,7 +103,8 @@ public class DocumentPipelineRunManagerTests : DocumentAIDomainTestBase<Document
         var classRun = await _manager.StartAsync(doc, DocumentAIPipelines.Classification);
         await _manager.CompleteClassificationAsync(doc, classRun, CreateContractType(), 0.92);
 
-        // 关键流水线成功 + 类型确认 + 无 blocking 原因 → Ready；MRF（non-blocking）仍保留。
+        // Critical pipelines succeeded, type is confirmed, and no blocking reason exists, so Ready. MRF
+        // is non-blocking and remains present.
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Ready);
         doc.ReviewReasons.ShouldBe(DocumentReviewReasons.MissingRequiredFields);
     }
@@ -149,7 +152,8 @@ public class DocumentPipelineRunManagerTests : DocumentAIDomainTestBase<Document
         // Latest run for TextExtraction is now Succeeded; Classification still missing → Processing
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Processing);
 
-        // Verify latest run for TextExtraction is attempt 2 (via runRepo, #216 拆分后从聚合根读取)
+        // Verify latest run for TextExtraction is attempt 2 via runRepo, reading through the aggregate
+        // root after the #216 split.
         var latestRun = await _runRepo.FindLatestByDocumentAndCodeAsync(doc.Id, DocumentAIPipelines.TextExtraction);
         latestRun.ShouldNotBeNull();
         latestRun.AttemptNumber.ShouldBe(2);
@@ -177,13 +181,15 @@ public class DocumentPipelineRunManagerTests : DocumentAIDomainTestBase<Document
         latestRun!.Status.ShouldBe(PipelineRunStatus.Succeeded);
     }
 
-    // 不变量「无已确认类型 ⟹ 无类型绑定字段值」(#267)：低置信度收回类型时一并清空旧字段值，
-    // 否则出口读模型会出现「无类型却带字段」。重新识别一个已抽过字段的文档落到低置信度时暴露。
+    // Invariant "no confirmed type implies no type-bound field values" (#267): when low confidence
+    // withdraws the type, old field values must be cleared too. Otherwise the output read model would
+    // show fields without a type. This is exposed when rerecognizing a document that already has
+    // extracted fields and falls into low confidence.
     [Fact]
     public async Task CompleteClassificationWithLowConfidence_Clears_ExtractedFieldValues()
     {
         var doc = CreateDocument();
-        // 模拟已分类 + 已抽字段的既有态。
+        // Simulate an existing state with classification and extracted fields.
         doc.SetFields(new[]
         {
             new DocumentFieldValue(Guid.NewGuid(), FieldDataType.Text, JsonSerializer.SerializeToElement("Acme")),
@@ -224,12 +230,12 @@ public class DocumentPipelineRunManagerTests : DocumentAIDomainTestBase<Document
     {
         var doc = CreateDocument();
 
-        // 先模拟低置信度进入待审核
+        // First simulate low confidence entering pending review.
         var run1 = await _manager.StartAsync(doc, DocumentAIPipelines.Classification);
         await _manager.CompleteClassificationWithLowConfidenceAsync(doc, run1);
         doc.ReviewReasons.ShouldBe(DocumentReviewReasons.UnresolvedClassification);
 
-        // 人工确认
+        // Manual confirmation.
         var run2 = await _manager.StartAsync(doc, DocumentAIPipelines.Classification);
         var contractType = CreateContractType();
         await _manager.CompleteManualClassificationAsync(doc, run2, contractType);
@@ -251,13 +257,15 @@ public class DocumentPipelineRunManagerTests : DocumentAIDomainTestBase<Document
     {
         var doc = CreateDocument();
 
-        // 第一次低置信度 → 置 UnresolvedClassification 待审原因（#284：不再持久化分类理由）
+        // First low confidence: set UnresolvedClassification review reason (#284: classification reason
+        // is no longer persisted).
         var run1 = await _manager.StartAsync(doc, DocumentAIPipelines.Classification);
         await _manager.CompleteClassificationWithLowConfidenceAsync(doc, run1, "AI confidence too low");
         doc.ReviewReasons.ShouldBe(DocumentReviewReasons.UnresolvedClassification);
         doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.NotReviewed);
 
-        // 重试自动分类成功 → 高置信度路径必须清除 UnresolvedClassification 待审原因
+        // Automatic classification succeeds on retry; the high-confidence path must clear the
+        // UnresolvedClassification review reason.
         var run2 = await _manager.StartAsync(doc, DocumentAIPipelines.Classification);
         var contractType = CreateContractType();
         await _manager.CompleteClassificationAsync(doc, run2, contractType, 0.95);
@@ -265,15 +273,16 @@ public class DocumentPipelineRunManagerTests : DocumentAIDomainTestBase<Document
         doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.NotReviewed);
         doc.DocumentTypeId.ShouldBe(contractType.Id);
         doc.ClassificationConfidence.ShouldBe(0.95);
-        doc.ReviewReasons.ShouldBe(DocumentReviewReasons.None); // 高置信度路径清除待审原因
+        doc.ReviewReasons.ShouldBe(DocumentReviewReasons.None); // High-confidence path clears the review reason.
     }
 
     [Fact]
     public async Task AutoClassification_After_Reject_Clears_Stale_RejectionReason()
     {
-        // #284 review-fix：拒绝可恢复——被拒文档（RejectionReason 有值）经高置信度自动重分类
-        // （ApplyAutomaticClassificationResult）后，陈旧 RejectionReason 必须清空、处置回 NotReviewed
-        //（RejectionReason 仅在 ReviewDisposition=Rejected 时该有值）。
+        // #284 review-fix: rejection is recoverable. After a rejected document with RejectionReason is
+        // automatically reclassified with high confidence (ApplyAutomaticClassificationResult), the stale
+        // RejectionReason must be cleared and disposition must return to NotReviewed. RejectionReason is
+        // present only when ReviewDisposition=Rejected.
         var doc = CreateDocument();
 
         var run1 = await _manager.StartAsync(doc, DocumentAIPipelines.Classification);
@@ -290,7 +299,7 @@ public class DocumentPipelineRunManagerTests : DocumentAIDomainTestBase<Document
     }
 
     // ────────────────────────────────────────────────────────────────────────────
-    // Scenario 9: 先成功分类再 LowConfidence —— 历史 TypeCode 与 Confidence 被清空
+    // Scenario 9: successful classification followed by LowConfidence clears historical TypeCode and Confidence
     // ────────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -298,7 +307,7 @@ public class DocumentPipelineRunManagerTests : DocumentAIDomainTestBase<Document
     {
         var doc = CreateDocument();
 
-        // 第一次：高置信度分类成功
+        // First: high-confidence classification succeeds.
         var run1 = await _manager.StartAsync(doc, DocumentAIPipelines.Classification);
         var contractType = CreateContractType();
         await _manager.CompleteClassificationAsync(doc, run1, contractType, 0.92);
@@ -307,11 +316,12 @@ public class DocumentPipelineRunManagerTests : DocumentAIDomainTestBase<Document
         doc.ClassificationConfidence.ShouldBe(0.92);
         doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.NotReviewed);
 
-        // 第二次：重跑分类落入 LowConfidence
+        // Second: rerunning classification falls into LowConfidence.
         var run2 = await _manager.StartAsync(doc, DocumentAIPipelines.Classification);
         await _manager.CompleteClassificationWithLowConfidenceAsync(doc, run2, "AI confidence too low");
 
-        // 历史 TypeId/Confidence 必须清空，避免外部读到「类型已确定 + 待审核」自相矛盾
+        // Historical TypeId/Confidence must be cleared to avoid external readers seeing the contradictory
+        // state "type is determined + pending review".
         doc.DocumentTypeId.ShouldBeNull();
         doc.ClassificationConfidence.ShouldBe(0);
         doc.ReviewReasons.ShouldBe(DocumentReviewReasons.UnresolvedClassification);
@@ -319,8 +329,9 @@ public class DocumentPipelineRunManagerTests : DocumentAIDomainTestBase<Document
     }
 
     // ────────────────────────────────────────────────────────────────────────────
-    // Scenario 10：typeCode 合法性校验已移到 AppService（先 load DocumentType 不存在则 throw），
-    //              manager 不再做 DB 查询。原 Scenario 10 两个测试相关性已转移到 Application.Tests。
+    // Scenario 10: typeCode validation has moved to AppService, which first loads DocumentType and throws
+    //              when missing. The manager no longer performs DB queries. The two original Scenario 10
+    //              test concerns have moved to Application.Tests.
     // ────────────────────────────────────────────────────────────────────────────
 
     // ────────────────────────────────────────────────────────────────────────────

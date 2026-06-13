@@ -13,16 +13,23 @@ using ModelContextProtocol.Server;
 namespace Dignite.DocumentAI.Mcp.Documents;
 
 /// <summary>
-/// 把 DocumentAI 文档类型暴露为 MCP 资源（read 路径）。资源模板 <c>docai://document-types/{code}</c>，
-/// 返回该类型的字段 schema（每字段 name / dataType / allowMultiple / displayName / required + 类型 displayName）。
-/// 让下游 AI 发现某类型有哪些字段、什么数据类型，据此给检索 tool 的 <c>fieldFilters</c> / <c>includeFields</c>
-/// 填对字段名。"有哪些类型"由 resources/list 动态枚举（handler 在 <c>DocumentAIMcpModule</c> 注册、
-/// 投影逻辑在本类 <see cref="ListVisibleAsync"/>）——与文档相反（文档数量无限、不枚举、按 id 走 search tool
-/// 发现）。list 与 read 职责分离：list 靠 handler 枚举，read 靠本类的 UriTemplate 自动路由。
+/// Exposes DocumentAI document types as MCP resources on the read path. The resource template
+/// <c>docai://document-types/{code}</c> returns that type's field schema: per-field name / dataType /
+/// allowMultiple / displayName / required, plus the type displayName. This lets downstream AI
+/// discover which fields exist for a type and what data types they use, so it can populate the search
+/// tool's <c>fieldFilters</c> / <c>includeFields</c> with correct field names. "Which types exist" is
+/// dynamically enumerated by resources/list: the handler is registered in <c>DocumentAIMcpModule</c>,
+/// while projection logic lives in <see cref="ListVisibleAsync"/>. This differs from documents, whose
+/// count is unbounded, so they are not enumerated and are discovered by id through the search tool.
+/// list and read responsibilities stay separate: list enumerates through the handler, while read is
+/// automatically routed through this class's UriTemplate.
 /// <para>
-/// 出口适配器是薄壳——委托 <see cref="IDocumentTypeAppService.GetVisibleAsync"/>（按 code 过滤当前层）+
-/// <see cref="IFieldDefinitionAppService.GetListAsync"/>（该类型字段定义）：权限断言、租户隔离都在 AppService
-/// 内统一执行。本类只承担 MCP 传输层关注点：JSON 投影 + 用户派生文本 <c>PromptBoundary</c> 包裹。
+/// The outbound adapter is a thin shell. It delegates to
+/// <see cref="IDocumentTypeAppService.GetVisibleAsync"/> (current-layer type visibility, filtered by
+/// code here) and <see cref="IFieldDefinitionAppService.GetListAsync"/> (field definitions for that
+/// type). Authorization assertions and tenant isolation are both centralized inside the AppServices.
+/// This class only owns MCP transport concerns: JSON projection and <c>PromptBoundary</c> wrapping for
+/// user-derived text.
 /// </para>
 /// </summary>
 [McpServerResourceType]
@@ -44,8 +51,10 @@ public sealed class DocumentTypeResources
         IFieldDefinitionAppService fieldDefinitionAppService,
         CancellationToken cancellationToken = default)
     {
-        // 委托 GetVisibleAsync（fail-closed 权限断言 + ambient 租户隔离在内部执行）取当前层活跃类型，
-        // 按 code 精确匹配。跨租户 / 不存在 code → 不在集合内 → 按"未找到"处理。
+        // Delegate to GetVisibleAsync, which enforces fail-closed authorization and ambient tenant
+        // isolation internally, to obtain active types in the current layer. Match by exact code.
+        // Cross-tenant or nonexistent codes are absent from the collection and are treated as not
+        // found.
         var documentTypes = await documentTypeAppService.GetVisibleAsync();
         var documentType = documentTypes.FirstOrDefault(t => t.TypeCode == code);
         if (documentType is null)
@@ -53,15 +62,17 @@ public sealed class DocumentTypeResources
             throw new McpException($"Document type not found: {code}");
         }
 
-        // GetListAsync 按当前层 + 不可变 DocumentTypeId 取该类型活跃字段定义（同一隔离边界，#207）。
+        // GetListAsync fetches active field definitions for this type by current layer + immutable
+        // DocumentTypeId, using the same isolation boundary (#207).
         var fields = await fieldDefinitionAppService.GetListAsync(
             new GetFieldDefinitionListInput { DocumentTypeId = documentType.Id });
 
         var schema = new DocumentTypeSchema
         {
             TypeCode = documentType.TypeCode,
-            // DisplayName 是 admin 配置的用户派生文本，PromptBoundary 包裹防 indirect prompt injection；
-            // TypeCode / 字段 Name / DataType 是系统受控值（白名单 / 枚举），裸值。
+            // DisplayName is admin-configured user-derived text, so PromptBoundary wrapping prevents
+            // indirect prompt injection. TypeCode / field Name / DataType are system-controlled
+            // values (whitelist / enum), so they are emitted raw.
             DisplayName = PromptBoundary.WrapField(documentType.DisplayName),
             Fields = fields
                 .OrderBy(f => f.DisplayOrder)
@@ -85,13 +96,16 @@ public sealed class DocumentTypeResources
     }
 
     /// <summary>
-    /// <c>resources/list</c> 的动态枚举投影（由 <c>DocumentAIMcpModule</c> 的 list handler 委托调用；
-    /// 无 <c>[McpServerResource]</c> 注解，不参与 read 模板扫描）。委托
-    /// <see cref="IDocumentTypeAppService.GetVisibleAsync"/>：fail-closed 权限断言 + ambient 租户隔离
-    /// 在 AppService 内统一执行。按 TypeCode 稳定排序后截断到
-    /// <see cref="DocumentAIMcpConsts.MaxDocumentTypeResults"/>（结果集硬上限，llm-call-anti-patterns
-    /// 反例 B 要点 3——租户 admin 可自建任意多类型）；resources/list 协议条目无处携带截断信号，直接截断即可，
-    /// 完整发现（含 truncated / totalCount 信号）走 <c>list_document_types</c> tool。
+    /// Dynamic enumeration projection for <c>resources/list</c>, called by the list handler in
+    /// <c>DocumentAIMcpModule</c>. It has no <c>[McpServerResource]</c> attribute and does not
+    /// participate in read-template scanning. It delegates to
+    /// <see cref="IDocumentTypeAppService.GetVisibleAsync"/>: fail-closed authorization and ambient
+    /// tenant isolation are both centralized inside the AppService. Results are stably ordered by
+    /// TypeCode and truncated to <see cref="DocumentAIMcpConsts.MaxDocumentTypeResults"/>, a hard
+    /// result cap from llm-call-anti-patterns counterexample B point 3 because tenant admins can
+    /// create any number of types. resources/list protocol entries cannot carry a truncation signal,
+    /// so direct truncation is acceptable; full discovery with truncated / totalCount signals is
+    /// provided by the <c>list_document_types</c> tool.
     /// </summary>
     public static async Task<ListResourcesResult> ListVisibleAsync(IDocumentTypeAppService documentTypeAppService)
     {

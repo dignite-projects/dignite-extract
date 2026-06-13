@@ -12,8 +12,10 @@ using Xunit;
 namespace Dignite.DocumentAI.EntityFrameworkCore.Documents;
 
 /// <summary>
-/// 批量重处理（#289）仓储范围查询（<see cref="IDocumentRepository.CountForReprocessingAsync"/> /
-/// <see cref="IDocumentRepository.GetIdsForReprocessingAsync"/>）+ <c>field-extraction</c> pipeline 生命周期中性的集成测试。
+/// Integration tests for bulk reprocessing (#289) repository scope queries
+/// (<see cref="IDocumentRepository.CountForReprocessingAsync"/> /
+/// <see cref="IDocumentRepository.GetIdsForReprocessingAsync"/>) plus <c>field-extraction</c> pipeline
+/// lifecycle neutrality.
 /// </summary>
 public class DocumentReprocessing_Tests : DocumentAIEntityFrameworkCoreTestBase
 {
@@ -22,7 +24,8 @@ public class DocumentReprocessing_Tests : DocumentAIEntityFrameworkCoreTestBase
     private readonly DocumentPipelineRunManager _pipelineRunManager;
     private readonly IGuidGenerator _guidGenerator;
 
-    // 稳定 Id 让断言可读（GetIds 按 Id 升序，断言用集合比较不依赖具体顺序）。
+    // Stable Ids keep assertions readable. GetIds orders by Id; assertions compare sets and do not depend on
+    // concrete order.
     private static readonly Guid TypeAId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
     private static readonly Guid TypeBId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
 
@@ -41,7 +44,7 @@ public class DocumentReprocessing_Tests : DocumentAIEntityFrameworkCoreTestBase
 
         var count = await WithUnitOfWorkAsync(() =>
             _documentRepository.CountForReprocessingAsync(TypeAId, withReason: null, excludeManuallyConfirmed: false));
-        // typeA 有文本: d1(auto) + d2(reviewed)；d4 无 markdown、d6 软删 —— 均排除。
+        // typeA with text: d1(auto) + d2(reviewed). d4 has no markdown and d6 is soft-deleted, so both are excluded.
         count.ShouldBe(2);
 
         var pageIds = await WithUnitOfWorkAsync(() =>
@@ -56,7 +59,7 @@ public class DocumentReprocessing_Tests : DocumentAIEntityFrameworkCoreTestBase
 
         var count = await WithUnitOfWorkAsync(() =>
             _documentRepository.CountForReprocessingAsync(TypeAId, withReason: null, excludeManuallyConfirmed: true));
-        // 保护人工确认：d2(Reviewed) 被排除，只剩 d1。
+        // Protect manual confirmation: d2(Reviewed) is excluded, leaving only d1.
         count.ShouldBe(1);
 
         var pageIds = await WithUnitOfWorkAsync(() =>
@@ -86,7 +89,7 @@ public class DocumentReprocessing_Tests : DocumentAIEntityFrameworkCoreTestBase
 
         var count = await WithUnitOfWorkAsync(() =>
             _documentRepository.CountForReprocessingAsync(null, null, false));
-        // d1,d2,d3,d5 有文本且活跃；d4 无 markdown、d6 软删除排除。
+        // d1, d2, d3, d5 have text and are active. d4 has no markdown and d6 is soft-deleted, so both are excluded.
         count.ShouldBe(4);
     }
 
@@ -97,7 +100,7 @@ public class DocumentReprocessing_Tests : DocumentAIEntityFrameworkCoreTestBase
 
         var collected = new List<Guid>();
         Guid? cursor = null;
-        // batchSize=1 强制多批，验证链式游标不重不漏。
+        // batchSize=1 forces multiple batches and verifies the chained cursor has no duplicates or gaps.
         for (var guard = 0; guard < 50; guard++)
         {
             var batch = await WithUnitOfWorkAsync(() =>
@@ -112,7 +115,7 @@ public class DocumentReprocessing_Tests : DocumentAIEntityFrameworkCoreTestBase
         }
 
         collected.Count.ShouldBe(4);
-        collected.Distinct().Count().ShouldBe(4); // 无重复
+        collected.Distinct().Count().ShouldBe(4); // No duplicates.
     }
 
     [Fact]
@@ -120,7 +123,7 @@ public class DocumentReprocessing_Tests : DocumentAIEntityFrameworkCoreTestBase
     {
         var documentId = _guidGenerator.Create();
 
-        // 构造 Ready 文档：text-extraction + classification 两条 key pipeline 均 Succeeded + 有类型。
+        // Build a Ready document: text-extraction + classification key pipelines both Succeeded, with a type.
         await WithUnitOfWorkAsync(async () =>
         {
             await EnsureTypeAsync(TypeAId, "type.a");
@@ -138,12 +141,13 @@ public class DocumentReprocessing_Tests : DocumentAIEntityFrameworkCoreTestBase
 
         (await ReloadLifecycleAsync(documentId)).ShouldBe(DocumentLifecycleStatus.Ready);
 
-        // 跑一个完整的 field-extraction run：Pending → Running → Succeeded，断言生命周期全程保持 Ready。
+        // Run a complete field-extraction run: Pending -> Running -> Succeeded, asserting lifecycle remains Ready
+        // throughout.
         await WithUnitOfWorkAsync(async () =>
         {
             var doc = await _documentRepository.GetAsync(documentId);
             var fe = await _pipelineRunManager.StartAsync(doc, DocumentAIPipelines.FieldExtraction);
-            // StartAsync 内已 Queue(Pending)→Begin(Running) 并各派生一次 lifecycle。
+            // StartAsync has already Queue(Pending) -> Begin(Running), deriving lifecycle at each step.
             doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Ready);
             await _pipelineRunManager.CompleteAsync(doc, fe);
             doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Ready);
@@ -168,17 +172,17 @@ public class DocumentReprocessing_Tests : DocumentAIEntityFrameworkCoreTestBase
             await EnsureTypeAsync(TypeAId, "type.a");
             await EnsureTypeAsync(TypeBId, "type.b");
 
-            // d1: typeA, 有文本, 自动分类(None)
+            // d1: typeA, has text, automatic classification (None)
             await InsertAsync(ids.D1, markdown: "# d1", d => d.ApplyAutomaticClassificationResult(TypeAId, 0.9));
-            // d2: typeA, 有文本, 人工确认(Reviewed)
+            // d2: typeA, has text, manually confirmed (Reviewed)
             await InsertAsync(ids.D2, markdown: "# d2", d => d.ConfirmClassification(TypeAId));
-            // d3: typeB, 有文本, 自动分类(None)
+            // d3: typeB, has text, automatic classification (None)
             await InsertAsync(ids.D3, markdown: "# d3", d => d.ApplyAutomaticClassificationResult(TypeBId, 0.8));
-            // d4: typeA, 无 markdown（never-extracted）—— 应被排除
+            // d4: typeA, no markdown (never extracted), should be excluded
             await InsertAsync(ids.D4, markdown: null, d => d.ApplyAutomaticClassificationResult(TypeAId, 0.9));
-            // d5: 无类型, 有文本, 待审核(PendingReview)
+            // d5: no type, has text, pending review (PendingReview)
             await InsertAsync(ids.D5, markdown: "# d5", d => d.RequestClassificationReview());
-            // d6: typeA, 有文本, 自动分类, 软删除 —— 应被排除
+            // d6: typeA, has text, automatic classification, soft-deleted, should be excluded
             await InsertAsync(ids.D6, markdown: "# d6", d => d.ApplyAutomaticClassificationResult(TypeAId, 0.9));
             await _documentRepository.DeleteAsync(ids.D6); // soft delete
         });

@@ -5,12 +5,16 @@ using Volo.Abp.Application.Services;
 namespace Dignite.DocumentAI.Documents.Fields;
 
 /// <summary>
-/// 「按提示词起草字段元数据」服务（issue #264）。admin 把抽取指令作为主输入，本服务用一次 LLM 调用
-/// **起草** DisplayName / DataType / IsRequired / AllowMultiple（新建字段时额外建议 Name），admin 再核对 / 修改后保存。
+/// Service for "draft field metadata from prompt" (issue #264). Admin provides extraction
+/// instructions as the primary input; this service uses one LLM call to <b>draft</b> DisplayName /
+/// DataType / IsRequired / AllowMultiple, plus Name for new fields, then the admin reviews / edits
+/// before saving.
 /// <para>
-/// 与 <see cref="Dignite.DocumentAI.Slugging.ISlugSuggestionAppService"/> 同属交互式 request/response 形态的 LLM 起草助手，
-/// 复用同一套安全约定（CLAUDE.md "## 安全约定" / .claude/rules/llm-call-anti-patterns.md）：
-/// 编译期常量 instructions、用户提示词经 <c>PromptBoundary</c> 包裹、不挂 AIContextProviders、不信任 LLM 输出（服务端 sanitize）。
+/// Like <see cref="Dignite.DocumentAI.Slugging.ISlugSuggestionAppService"/>, this is an interactive
+/// request/response LLM drafting helper and reuses the same safety rules (CLAUDE.md "Security
+/// Covenant" / .claude/rules/llm-call-anti-patterns.md): compile-time constant instructions, user
+/// prompt wrapped with <c>PromptBoundary</c>, no AIContextProviders, and no trust in LLM output
+/// (server-side sanitize).
 /// </para>
 /// </summary>
 public interface IFieldDraftSuggestionAppService : IApplicationService

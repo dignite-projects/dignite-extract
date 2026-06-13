@@ -10,8 +10,9 @@ public class UploadDocumentInput
     public IRemoteStreamContent File { get; set; } = default!;
 
     /// <summary>
-    /// 可选文件柜归属（人工组织维度，#194）。null = 未归类。
-    /// 上传时校验必须是当前层（CurrentTenant.Id）已存在的柜。正交于 pipeline。
+    /// Optional cabinet assignment, the manual organization dimension (#194). null means unclassified.
+    /// On upload, this must validate against an existing cabinet in the current layer
+    /// (<c>CurrentTenant.Id</c>). It is orthogonal to the pipeline.
     /// </summary>
     public Guid? CabinetId { get; set; }
 }

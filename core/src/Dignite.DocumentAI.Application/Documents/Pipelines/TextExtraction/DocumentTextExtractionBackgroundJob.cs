@@ -41,8 +41,9 @@ public class DocumentTextExtractionBackgroundJob
     private readonly IChatClient _titleGeneratorChatClient;
     private readonly IPromptProvider _promptProvider;
     private readonly DocumentAIBehaviorOptions _behaviorOptions;
-    // ABP 后台作业执行器（BackgroundJobExecuter）在调用 ExecuteAsync 前用 ICancellationTokenProvider.Use(...)
-    // 把作业执行上下文的取消令牌（默认 worker 来源是 host 停机令牌）压入 ambient，外部慢工作据此可取消。
+    // ABP BackgroundJobExecuter pushes the job execution cancellation token into ambient state through
+    // ICancellationTokenProvider.Use(...) before calling ExecuteAsync. By default the worker source is the host shutdown token,
+    // allowing slow external work to be cancelled.
     private readonly ICancellationTokenProvider _cancellationTokenProvider;
 
     public DocumentTextExtractionBackgroundJob(
@@ -81,9 +82,9 @@ public class DocumentTextExtractionBackgroundJob
 
         try
         {
-            // blob 流由调用方拥有：FileSystem provider 下是持有 OS 文件句柄的 FileStream，
-            // 必须 dispose（与 DocumentAppService.GetBlobAsync 的 disposeStream:true 一致）。
-            // 用 await using——本 try 块（External 段）结束即释放，CompleteRunAsync 不再需要它。
+            // The caller owns the blob stream. With the FileSystem provider this is a FileStream holding an OS file handle,
+            // so it must be disposed, consistent with DocumentAppService.GetBlobAsync disposeStream:true.
+            // Use await using so it is released when this try block (External phase) ends; CompleteRunAsync no longer needs it.
             await using var blobStream = await _blobContainer.GetAsync(workItem.BlobName);
             var ctx = new TextExtractionContext
             {
@@ -98,8 +99,8 @@ public class DocumentTextExtractionBackgroundJob
                 ?? MarkdownTitleExtractor.ExtractTitle(result.Markdown)
                 ?? FallbackTitleFromFileName(workItem.OriginalFileName);
 
-            // External 段（无 UoW）：归档原生 payload 进 blob + 组装 Domain provenance 元数据。
-            // 归档 fail-open——超限 / 写失败 / 关闭只影响 manifest，不影响下面的文本提取完成。
+            // External phase (no UoW): archive native payload into blob storage + assemble Domain provenance metadata.
+            // Archiving fails open: over limit / write failure / disabled archive affects only the manifest, not text extraction completion below.
             var extractionMetadata = await ArchiveNativePayloadAndBuildMetadataAsync(args.DocumentId, result);
 
             await CompleteRunAsync(
@@ -147,7 +148,7 @@ public class DocumentTextExtractionBackgroundJob
             language: result.DetectedLanguage,
             extractionMetadata: extractionMetadata);
 
-        // 发布 OCRCompletedEto——薄载荷，下游通过 REST 回拉 Markdown。
+        // Publish OCRCompletedEto with a thin payload; downstream consumers pull Markdown back through REST.
         await _distributedEventBus.PublishAsync(
             new OCRCompletedEto
             {
@@ -157,17 +158,22 @@ public class DocumentTextExtractionBackgroundJob
                 UsedOcr = result.UsedOcr
             });
 
-        // 文本提取完成即推进分类——OCR 不设质量门控
-        // （#196：OCR 平均置信度预测不了真实质量；质量问题由分类审核 + 操作员重跑/重传事后处理）。
+        // Advance classification as soon as text extraction completes. OCR has no quality gate:
+        // #196 found average OCR confidence does not predict real quality. Quality issues are handled later through classification review
+        // plus operator rerun / re-upload.
         await _pipelineJobScheduler.QueueAsync(document, DocumentAIPipelines.Classification);
 
-        // #265：文本提取成功、Markdown 就绪后 fan-out「留空 AI 兜底选柜」作业。
-        // 它是正交于内容 pipeline 的独立 sibling（非 PipelineRun 阶段）——这里<b>不</b>读 document.CabinetId
-        // （文本提取 job 不触碰 cabinet，守 #194 护栏），人工/竞态门控全在 DocumentCabinetSuggestionBackgroundJob 内自做。
-        // 「一次性」（#265 护栏 3）由 Markdown write-once 不变式天然保证：CompleteTextExtractionAsync → SetMarkdown
-        // 在 Markdown 已存在时抛 MarkdownIsImmutable → FailRun，故本成功路径每个文档<b>至多命中一次</b>，
-        // retry 只对 Failed run 放行（首次成功即在此）、rerecognize 只重排 classification 不重跑文本提取——均不会重复 fan-out。
-        // 不用 AttemptNumber==1 门控：那会漏掉「首次尝试失败、retry 才成功」（成功 run 的 AttemptNumber>1）这一首次成功场景。
+        // #265: after text extraction succeeds and Markdown is ready, fan out the "AI fallback cabinet selection when empty" job.
+        // It is an independent sibling orthogonal to the content pipeline, not a PipelineRun phase. Do <b>not</b> read document.CabinetId here:
+        // the text extraction job must not touch cabinet state (#194 guardrail). Manual / race gating is handled entirely inside
+        // DocumentCabinetSuggestionBackgroundJob.
+        // "One-shot" behavior (#265 guardrail 3) is naturally guaranteed by the Markdown write-once invariant:
+        // CompleteTextExtractionAsync -> SetMarkdown throws MarkdownIsImmutable when Markdown already exists -> FailRun.
+        // Therefore this success path can be hit <b>at most once</b> per document.
+        // Retry is allowed only for Failed runs, with the first success happening here, and rerecognize re-enqueues only classification
+        // without rerunning text extraction, so neither duplicates the fan-out.
+        // Do not gate by AttemptNumber==1: that would miss the first-success case where the first attempt failed and retry succeeded
+        // with successful run AttemptNumber > 1.
         await _backgroundJobManager.EnqueueAsync(
             new DocumentCabinetSuggestionJobArgs { DocumentId = document.Id });
 
@@ -175,12 +181,12 @@ public class DocumentTextExtractionBackgroundJob
     }
 
     /// <summary>
-    /// External 段（无 UoW）：把胜出 provider 的原生 payload 归档进 blob（稳定 per-document key，重提取覆盖），
-    /// 并组装 Domain typed 元数据值对象（#210）。
+    /// External phase (no UoW): archives the winning provider's native payload into blob storage using a stable per-document key
+    /// that is overwritten by re-extraction, and assembles the Domain typed metadata value object (#210).
     /// <para>
-    /// <b>归档 fail-open</b>：无 payload / 超限 / blob 写失败 → 记 warning、manifest 置 null，
-    /// <see cref="DocumentTextExtractionMetadata"/>（provider 名）<b>照常返回</b>，文本提取继续成功。
-    /// 原始 bbox 等空间信号留 blob，DB 只存 manifest。
+    /// <b>Archiving fails open</b>: no payload / over limit / blob write failure -> log warning and set manifest null.
+    /// <see cref="DocumentTextExtractionMetadata"/> with provider name <b>still returns normally</b>, and text extraction continues successfully.
+    /// Raw spatial signals such as bbox stay in blob storage; the DB stores only the manifest.
     /// </para>
     /// </summary>
     protected virtual async Task<DocumentTextExtractionMetadata> ArchiveNativePayloadAndBuildMetadataAsync(
@@ -199,9 +205,9 @@ public class DocumentTextExtractionBackgroundJob
             return null;
         }
 
-        // ContentType / SchemaName 缺失 → manifest 构造器（Check.NotNullOrWhiteSpace）会抛，但 NativePayload 契约本身不强制非空
-        // （未来 rich Markdown / 第三方 provider 可能半填）。在写 blob 之前 fail-open 退出：辅助审计 blob 绝不打挂主 Markdown
-        // pipeline，也不留下登记不上的孤儿 blob。
+        // Missing ContentType / SchemaName would make the manifest constructor throw (Check.NotNullOrWhiteSpace), but the NativePayload contract
+        // itself does not require non-empty values because future rich Markdown / third-party providers may partially fill it.
+        // Fail open before writing the blob: auxiliary audit blobs must never break the main Markdown pipeline or leave unregistered orphan blobs.
         if (string.IsNullOrWhiteSpace(payload.ContentType) || string.IsNullOrWhiteSpace(payload.SchemaName))
         {
             Logger.LogWarning(
@@ -220,7 +226,7 @@ public class DocumentTextExtractionBackgroundJob
             return null;
         }
 
-        // 稳定 per-document key：重提取覆盖（一个文档一个归档 blob，避免孤儿）。
+        // Stable per-document key: re-extraction overwrites it, one archive blob per document, avoiding orphans.
         var blobName = $"extraction-native/{documentId}";
         try
         {
@@ -248,7 +254,7 @@ public class DocumentTextExtractionBackgroundJob
                 ? markdown[.._behaviorOptions.MaxTitleGenerationMarkdownLength]
                 : markdown;
 
-            // 标题策略：跟随文档语言（prompt 内置），不消费 DefaultLanguage —— 故无参调用。
+            // Title policy: follow document language, built into the prompt, and do not consume DefaultLanguage; hence no-arg call.
             var template = _promptProvider.GetTitleGenerationPrompt();
             var messages = new List<ChatMessage>
             {
@@ -274,8 +280,9 @@ public class DocumentTextExtractionBackgroundJob
     }
 
     /// <summary>
-    /// Markdown 标题抽取失败时的确定性回退：使用不带扩展名的原始文件名。
-    /// 仍然为空（极端情况下 FileOrigin.OriginalFileName 为 null）则返回 null，让 UI 沿用原有文件名/blob 名展示。
+    /// Deterministic fallback when Markdown title extraction fails: use the original file name without extension.
+    /// If still empty, for example when FileOrigin.OriginalFileName is null in an extreme case, return null and let the UI keep using
+    /// the existing file name / blob name display.
     /// </summary>
     private static string? FallbackTitleFromFileName(string? originalFileName)
     {

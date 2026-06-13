@@ -8,25 +8,30 @@ using Microsoft.Extensions.Logging;
 namespace Dignite.DocumentAI.Ai;
 
 /// <summary>
-/// 交互式 request/response LLM 助手共用的「超时 + fail-open」信封（#264 review #10）。
+/// Shared "timeout + fail-open" envelope for interactive request/response LLM helpers (#264 review
+/// #10).
 /// <para>
-/// DocumentAI 现有两个同步 LLM 起草助手——<c>SlugSuggestionAppService</c>（DisplayName → slug）与
-/// <c>FieldDraftSuggestionAppService</c>（提示词 → 字段元数据草稿），二者的安全控制流完全一致：
-/// 把调用方取消令牌（ABP 从 <c>HttpContext.RequestAborted</c> 注入）与一个服务端 deadline 链接、
-/// 区分「客户端取消」（原样上抛）与「服务端超时 / provider 故障」（记 warning + 回退），
-/// 不让 LLM 不可用拖死 admin 交互。把这段安全关键的外壳收敛到单点，避免两处复制后静默漂移
-/// （改了一处 deadline / 取消分流语义，另一处忘改 → 削弱已声明的 fail-open 保证）。
+/// DocumentAI currently has two synchronous LLM drafting helpers: <c>SlugSuggestionAppService</c>
+/// (DisplayName to slug) and <c>FieldDraftSuggestionAppService</c> (prompt to field metadata draft).
+/// Their security control flow is identical: link the caller cancellation token, injected by ABP from
+/// <c>HttpContext.RequestAborted</c>, with a server-side deadline; distinguish "client cancelled"
+/// (rethrow as-is) from "server timeout / provider failure" (log warning + fallback); and avoid
+/// letting LLM unavailability stall admin interactions. Centralizing this security-critical shell
+/// prevents silent drift after duplication, such as changing deadline / cancellation-splitting
+/// semantics in one helper but forgetting the other and weakening the declared fail-open guarantee.
 /// </para>
 /// <para>
-/// 仅封装外壳——每个调用点仍各自显式持有 prompt、ResponseFormat 与解析逻辑
-/// （.claude/rules/llm-call-anti-patterns.md 要求每个 LLM 入口的指令 / 解析可审计、不抽象掉）。
+/// Only the shell is encapsulated. Each call site still explicitly owns its prompt, ResponseFormat,
+/// and parsing logic because .claude/rules/llm-call-anti-patterns.md requires every LLM entry point's
+/// instructions / parsing to remain auditable instead of abstracted away.
 /// </para>
 /// </summary>
 internal static class InteractiveLlmCall
 {
     /// <summary>
-    /// 调用 <paramref name="chatClient"/> 并返回原始响应文本；客户端取消原样上抛，服务端超时 / 其他异常记 warning 后返回 <c>null</c>
-    /// （调用方据 null 回退到各自的保守默认）。
+    /// Calls <paramref name="chatClient"/> and returns the raw response text. Client cancellation is
+    /// rethrown as-is; server timeout / other exceptions are logged as warnings and return
+    /// <c>null</c>, letting callers fall back to their conservative defaults.
     /// </summary>
     public static async Task<string?> TryGetResponseTextAsync(
         IChatClient chatClient,
@@ -48,12 +53,14 @@ internal static class InteractiveLlmCall
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // 客户端主动断开 / 取消 —— 正常情况，原样向上抛（按取消语义结束请求），不记为 LLM 失败、不产生日志噪音。
+            // Client disconnected / cancelled. This is normal, so rethrow to end the request by
+            // cancellation semantics; do not count it as an LLM failure or create log noise.
             throw;
         }
         catch (OperationCanceledException)
         {
-            // 服务端 deadline 触发（LLM 太慢 / provider 不响应取消）—— 返回 null，调用方回退保守默认。
+            // Server deadline fired because the LLM was too slow or the provider did not observe
+            // cancellation. Return null so the caller can fall back to a conservative default.
             logger.LogWarning(
                 "{CallName} timed out after {TimeoutSeconds}s; returning null for fallback.",
                 callName, (int)timeout.TotalSeconds);
@@ -61,7 +68,8 @@ internal static class InteractiveLlmCall
         }
         catch (Exception ex)
         {
-            // LLM 不可用不应让 admin 卡死 —— 返回 null，调用方回退保守默认。
+            // LLM unavailability must not stall admin interactions. Return null so the caller can
+            // fall back to a conservative default.
             logger.LogWarning(ex, "{CallName} LLM call failed; returning null for fallback.", callName);
             return null;
         }

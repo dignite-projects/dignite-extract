@@ -6,10 +6,13 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents.Exports;
 
 /// <summary>
-/// ExportTemplate / ExportColumn 实体层不变量测试（#207 收敛为 ExtractedField-only）。重点：
-/// 列引用 <c>FieldDefinitionId</c>、列数与重复字段约束、按 Order 排序、DocumentTypeId 必填。
-/// 列标题由导出引擎在运行时取 <c>FieldDefinition.DisplayName</c>，不在模板列上存储。
-/// 系统字段（LifecycleStatus / ReviewStatus / Title）由导出引擎固定输出（不走列配置），故无系统列白名单测试。
+/// Entity invariant tests for ExportTemplate / ExportColumn (#207 converged to ExtractedField-only).
+/// Focus: columns reference <c>FieldDefinitionId</c>, column count and duplicate-field constraints, Order
+/// sorting, and required DocumentTypeId.
+/// Column titles are resolved by the export engine at runtime from <c>FieldDefinition.DisplayName</c> and
+/// are not stored on template columns.
+/// System fields (LifecycleStatus / ReviewStatus / Title) are emitted fixedly by the export engine and
+/// do not use column configuration, so there is no system-column allowlist test.
 /// </summary>
 public class ExportTemplateTests
 {

@@ -14,40 +14,45 @@ public class GetDocumentListInput : PagedAndSortedResultRequestDto
     [DynamicStringLength(typeof(DocumentTypeConsts), nameof(DocumentTypeConsts.MaxTypeCodeLength))]
     public string? DocumentTypeCode { get; set; }
 
-    /// <summary>按人工审核<b>处置阶段</b>过滤（#284；查"已确认 / 已拒绝"等）。</summary>
+    /// <summary>Filters by manual-review <b>disposition stage</b> (#284), such as confirmed / rejected.</summary>
     public DocumentReviewDisposition? ReviewDisposition { get; set; }
 
-    /// <summary>true = 仅返回有任一未解决待审原因的文档（操作员审核队列，#284；含分类未定 + 必填缺失，单队列）。</summary>
+    /// <summary>true returns only documents with any unresolved review reason (operator review queue, #284; includes unresolved classification + missing required fields in one queue).</summary>
     public bool? HasReviewReasons { get; set; }
 
     /// <summary>
-    /// 软删除过滤：null 或 false = 仅返回未删除文档（默认行为，依赖 EF DataFilter）；
-    /// true = 仅返回已软删除文档（回收站视图，需要 <see cref="Documents.DocumentAIPermissions.Documents.Restore"/> 权限）。
+    /// Soft-delete filter: null or false returns only non-deleted documents, the default behavior via
+    /// EF DataFilter; true returns only soft-deleted documents (recycle-bin view), requiring
+    /// <see cref="Documents.DocumentAIPermissions.Documents.Restore"/> permission.
     /// </summary>
     public bool? IsDeleted { get; set; }
 
-    /// <summary>按文件柜筛选（#194）。null = 不筛选；具体 Guid = 仅返回该柜文档。</summary>
+    /// <summary>Filters by cabinet (#194). null means no filter; a concrete Guid returns only documents in that cabinet.</summary>
     public Guid? CabinetId { get; set; }
 
     /// <summary>
-    /// ExtractedFields 字段值过滤器（多个之间 AND，全部锚定 <see cref="DocumentTypeCode"/>）。
-    /// 提供时 <see cref="DocumentTypeCode"/> 必填——字段声明类型需按类型解析。每个元素须带 Name + 至少一个值
-    /// （由 <see cref="DocumentFieldFilter"/> 自校验）。空 / null = 仅按元数据检索。
+    /// ExtractedFields value filters. Multiple filters are ANDed, and all are anchored to
+    /// <see cref="DocumentTypeCode"/>. When provided, <see cref="DocumentTypeCode"/> is required
+    /// because field declaration types must be resolved by type. Each element must carry Name plus at
+    /// least one value, enforced by <see cref="DocumentFieldFilter"/> self-validation. Empty / null
+    /// means metadata-only search.
     /// </summary>
     [MaxLength(DocumentConsts.MaxSearchFieldFilters)]
     public List<DocumentFieldFilter>? FieldFilters { get; set; }
 
     public override IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        // 先转发基类校验——LimitedResultRequestDto 校验 MaxResultCount ≤ MaxMaxResultCount。
-        // 此前本方法隐藏（而非 override）基类 Validate，导致该上限校验静默失效（CS0114）。
+        // Forward base validation first. LimitedResultRequestDto validates
+        // MaxResultCount <= MaxMaxResultCount. This method previously hid, rather than overrode, base
+        // Validate, which silently disabled that limit validation (CS0114).
         foreach (var result in base.Validate(validationContext))
         {
             yield return result;
         }
 
-        // 字段值过滤器必须锚定单一类型（amount 等字段离开类型无确定含义，且字段类型按类型解析）——
-        // loud fail（AbpValidationException），不静默。
+        // Field-value filters must be anchored to a single type because fields such as amount have no
+        // deterministic meaning outside a type and field types are resolved by type. Fail loudly via
+        // AbpValidationException instead of silently ignoring this.
         if (FieldFilters is { Count: > 0 } && string.IsNullOrWhiteSpace(DocumentTypeCode))
         {
             yield return new ValidationResult(

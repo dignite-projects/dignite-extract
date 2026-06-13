@@ -6,8 +6,10 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents.Cabinets;
 
 /// <summary>
-/// Cabinet 实体层不变量测试。Name / Description 拒控制字符——二者经 #265 选柜 prompt 进 LLM（WrapField 包裹），
-/// 拒控制字符兼作注入深度防御（镜像 <see cref="DocumentTypes.DocumentType"/>）。允许 Unicode 字母数字 / 空格 / 标点（中日文 OK）。
+/// Cabinet entity invariant tests. Name / Description reject control characters because both enter the
+/// LLM through the #265 cabinet-selection prompt wrapped by WrapField. Rejecting control characters is
+/// also injection defense in depth, mirroring <see cref="DocumentTypes.DocumentType"/>. Unicode letters,
+/// numbers, spaces, and punctuation are allowed, including Chinese and Japanese text.
 /// </summary>
 public class CabinetTests
 {
@@ -34,7 +36,8 @@ public class CabinetTests
     [Fact]
     public void Update_Should_Also_Reject_Control_Chars()
     {
-        // 构造时合法，但 Update 路径必须重新校验——避免 admin 通过 Update API 绕过实体不变量。
+        // Valid at construction time, but the Update path must revalidate so admins cannot bypass entity
+        // invariants through the Update API.
         var cabinet = new Cabinet(Guid.NewGuid(), null, "Legal");
         Should.Throw<BusinessException>(() => cabinet.Update("Bad\nName"))
             .Code.ShouldBe(DocumentAIErrorCodes.Cabinet.InvalidName);

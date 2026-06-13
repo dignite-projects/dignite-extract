@@ -15,8 +15,9 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// <see cref="DocumentAppService.UpdateExtractedFieldsAsync"/> 行为测试（元数据手改 #195）。
-/// 复用 <see cref="DocumentAppServiceReviewTestModule"/> 的 mock 依赖 + 真实 DI（ObjectMapper 等）。
+/// Behavior tests for <see cref="DocumentAppService.UpdateExtractedFieldsAsync"/> (manual metadata edits
+/// #195). Reuses mock dependencies from <see cref="DocumentAppServiceReviewTestModule"/> plus real DI
+/// components such as ObjectMapper.
 /// </summary>
 public class DocumentAppService_ExtractedFields_Tests
     : DocumentAIApplicationTestBase<DocumentAppServiceReviewTestModule>
@@ -127,8 +128,9 @@ public class DocumentAppService_ExtractedFields_Tests
     [Fact]
     public async Task Should_Reject_DateTime_With_Timezone_Offset()
     {
-        // DateTime 字段只接受无偏移 wall-clock——带偏移 / Z 的值与查询侧 datetime2 语义不一致，
-        // 操作员手改路径也应拒绝（与 LLM 抽取路径共用 ExtractedFieldValueValidator；Codex 评审 finding 2）。
+        // DateTime fields accept only offset-free wall-clock values. Offset / Z values conflict with
+        // query-side datetime2 semantics, so the operator manual-edit path must reject them too. This
+        // shares ExtractedFieldValueValidator with the LLM extraction path (Codex review finding 2).
         var doc = CreateClassifiedDocument("host.contract");
         StubGet(doc);
         StubFields("host.contract", ("occurredAt", FieldDataType.DateTime));
@@ -160,7 +162,8 @@ public class DocumentAppService_ExtractedFields_Tests
             Fields = new Dictionary<string, JsonElement>()
         });
 
-        // 传空 → 整组清空全部字段行；复用 FieldsExtractedEto 重发，FieldCount = 0。
+        // Empty input clears all field rows as a group; FieldsExtractedEto is republished with
+        // FieldCount = 0.
         doc.ExtractedFieldValues.ShouldBeEmpty();
         await _eventBus.Received().PublishAsync(
             Arg.Is<FieldsExtractedEto>(e => e.DocumentId == doc.Id && e.FieldCount == 0),
@@ -171,7 +174,8 @@ public class DocumentAppService_ExtractedFields_Tests
     [Fact]
     public async Task Should_Expand_MultiValue_String_Field_Into_Ordered_Rows()
     {
-        // #212：多值文本字段——输入 JSON 数组，App 层经 DocumentFieldValueFactory 拆成多行（Order 0,1,2…）。
+        // #212: multi-value text field. JSON array input is split by the App layer through
+        // DocumentFieldValueFactory into multiple rows with Order 0,1,2...
         var doc = CreateClassifiedDocument("host.contract");
         StubGet(doc);
         StubMultiField("host.contract", "tags");
@@ -184,12 +188,12 @@ public class DocumentAppService_ExtractedFields_Tests
             }
         });
 
-        // 数组 → 3 行，按 Order 还原。
+        // Array becomes 3 rows and is restored by Order.
         doc.ExtractedFieldValues.Count.ShouldBe(3);
         doc.ExtractedFieldValues.OrderBy(f => f.Order).Select(f => f.TextValue)
             .ShouldBe(new[] { "urgent", "legal", "2026" });
 
-        // FieldsExtractedEto.FieldCount 是逻辑字段数（1），非展开行数（3）。
+        // FieldsExtractedEto.FieldCount is logical field count (1), not expanded row count (3).
         await _eventBus.Received().PublishAsync(
             Arg.Is<FieldsExtractedEto>(e => e.DocumentId == doc.Id && e.FieldCount == 1),
             Arg.Any<bool>(),
@@ -199,17 +203,19 @@ public class DocumentAppService_ExtractedFields_Tests
     [Fact]
     public async Task Should_Render_MultiValue_Field_As_Array_In_Returned_Dto()
     {
-        // #212：读写对称——多值字段写入数组，出口 DTO 也渲染为 JSON 数组（让 operator 读—改—存往返一致）。
+        // #212: read/write symmetry. Multi-value fields are written as arrays and output DTOs render JSON
+        // arrays too, keeping operator read-edit-save round trips consistent.
         var doc = CreateClassifiedDocument("host.contract");
         StubGet(doc);
         var tags = new FieldDefinition(
             Guid.NewGuid(), tenantId: null, documentTypeId: TypeId("host.contract"),
             name: "tags", displayName: "Tags", prompt: "extract tags",
             dataType: FieldDataType.Text, allowMultiple: true);
-        // 写路径解析（按 typeId 查定义）
+        // Write-path resolution by looking up definitions by typeId.
         _fieldDefinitionRepository.GetListAsync(TypeId("host.contract"), Arg.Any<CancellationToken>())
             .Returns(new List<FieldDefinition> { tags });
-        // 读路径解析（MapToDtoAsync → ResolveReferenceMapsAsync 按 predicate 查定义拿 Name/DataType/AllowMultiple）
+        // Read-path resolution: MapToDtoAsync -> ResolveReferenceMapsAsync queries definitions by
+        // predicate for Name/DataType/AllowMultiple.
         _fieldDefinitionRepository.GetListAsync(
             Arg.Any<Expression<Func<FieldDefinition, bool>>>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new List<FieldDefinition> { tags });
@@ -231,7 +237,8 @@ public class DocumentAppService_ExtractedFields_Tests
     [Fact]
     public async Task Should_Reject_Scalar_For_MultiValue_Field()
     {
-        // 多值字段收到标量（非数组）→ 不合类型 → loud fail（与单值字段类型不符同路径）。
+        // Scalar input for a multi-value field, meaning non-array, is type-incompatible and fails loudly,
+        // same as a single-value field type mismatch.
         var doc = CreateClassifiedDocument("host.contract");
         StubGet(doc);
         StubMultiField("host.contract", "tags");
@@ -249,7 +256,7 @@ public class DocumentAppService_ExtractedFields_Tests
     [Fact]
     public async Task Should_Reject_When_Document_Not_Classified()
     {
-        var doc = CreateDocument(); // DocumentTypeCode 为 null
+        var doc = CreateDocument(); // DocumentTypeCode is null
         StubGet(doc);
 
         var ex = await Should.ThrowAsync<BusinessException>(() =>
@@ -285,7 +292,7 @@ public class DocumentAppService_ExtractedFields_Tests
             .Returns(defs);
     }
 
-    // #212：stub 一个多值文本字段定义（AllowMultiple = true）。
+    // #212: stub a multi-value text field definition (AllowMultiple = true).
     private void StubMultiField(string typeCode, string name)
     {
         var defs = new List<FieldDefinition>
@@ -315,13 +322,14 @@ public class DocumentAppService_ExtractedFields_Tests
     private static Document CreateClassifiedDocument(string typeCode)
     {
         var doc = CreateDocument();
-        // DocumentTypeId 经 Domain internal 方法设置；测试项目只对 Application 开放 internal，
-        // 不能调 Document.ConfirmClassification —— 用反射写 private setter 模拟"已分类"（#207 内部按 Id 关联）。
+        // DocumentTypeId is set through a Domain-internal method; the test project has internal access
+        // only to Application, so it cannot call Document.ConfirmClassification. Use reflection to set the
+        // private setter and simulate "classified" (#207 internally associates by id).
         typeof(Document).GetProperty(nameof(Document.DocumentTypeId))!.SetValue(doc, TypeId(typeCode));
         return doc;
     }
 
-    // typeCode → 稳定 Guid 派生（#207：内部按 DocumentTypeId 关联；与 StubFields 一致）。
+    // typeCode to stable Guid derivation (#207: internal association by DocumentTypeId), matching StubFields.
     private static Guid TypeId(string typeCode)
         => new(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes("type:" + typeCode)));
 

@@ -10,8 +10,8 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 验证 UseDistributedCache 中间件的缓存行为：
-/// 相同输入第二次命中缓存时，底层 IChatClient 不被调用。
+/// Verifies UseDistributedCache middleware caching behavior: when the same input hits cache on the second
+/// call, the underlying IChatClient is not called.
 /// </summary>
 public class PromptCaching_Tests
 {

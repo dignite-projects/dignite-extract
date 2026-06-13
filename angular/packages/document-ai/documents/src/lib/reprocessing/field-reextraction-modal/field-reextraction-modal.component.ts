@@ -19,9 +19,13 @@ import {
 } from '@dignite/document-ai';
 
 /**
- * 批量「字段重抽」预览 + 触发模态（#289 场景二）——叶子操作、轻警告。
- * 打开即拉预览（受影响文档数 + 该类型当前字段清单），确认后入队 dispatcher、立即「已进后台」。
- * 自身负责预览 / 提交 / toaster；父组件只控制开/关（[documentTypeId] + (closed)）。
+ * Bulk field re-extraction preview and trigger modal (#289 scenario 2): leaf operation with a light
+ * warning.
+ * Fetches the preview on open, including affected document count and the current field list for the
+ * type. Confirmation enqueues the dispatcher and immediately reports that work has moved to the
+ * background.
+ * This component owns preview, submit, and toaster behavior; the parent only controls open/close through
+ * [documentTypeId] and (closed).
  */
 @Component({
   selector: 'lib-field-reextraction-modal',
@@ -90,7 +94,8 @@ export class FieldReextractionModalComponent implements OnInit {
     this.closed.emit();
   }
 
-  // 遮罩关闭防误触：mousedown 与 click 都落在遮罩本身才关（与 document-type-list 同例）。
+  // Backdrop close guard: close only when both mousedown and click land on the backdrop itself, matching
+  // document-type-list.
   private backdropMouseDownOnSelf = false;
   onBackdropMouseDown(event: MouseEvent): void {
     this.backdropMouseDownOnSelf = event.target === event.currentTarget;

@@ -5,15 +5,19 @@ using System.Text.Json;
 namespace Dignite.DocumentAI.Documents.Fields;
 
 /// <summary>
-/// 把一个（已经过 <see cref="ExtractedFieldValueValidator"/> 校验的）字段值展开成一个或多个
-/// <see cref="DocumentFieldValue"/> 行（#212）。两条写入路径共用——LLM 抽取
-/// （<c>FieldExtractionEventHandler</c>）与操作员手改（<c>DocumentAppService.UpdateExtractedFieldsAsync</c>）：
+/// Expands one field value, already validated by <see cref="ExtractedFieldValueValidator"/>, into one
+/// or more <see cref="DocumentFieldValue"/> rows (#212). Shared by both write paths: LLM extraction
+/// (<c>FieldExtractionEventHandler</c>) and operator edits
+/// (<c>DocumentAppService.UpdateExtractedFieldsAsync</c>):
 /// <list type="bullet">
-///   <item>单值字段（<c>allowMultiple == false</c>）：标量 <paramref name="value"/> → 1 行，<c>Order = 0</c>。</item>
-///   <item>多值文本字段（<c>allowMultiple == true</c>）：JSON 数组 <paramref name="value"/> → 每元素 1 行，
-///   <c>Order</c> 按数组顺序取 0,1,2…（空数组 → 0 行）。</item>
+///   <item>Single-value fields (<c>allowMultiple == false</c>): scalar <paramref name="value"/> becomes
+///   one row with <c>Order = 0</c>.</item>
+///   <item>Multi-value text fields (<c>allowMultiple == true</c>): JSON array
+///   <paramref name="value"/> becomes one row per element, with <c>Order</c> following array order
+///   0,1,2...; empty array becomes zero rows.</item>
 /// </list>
-/// 调用前必须已 <c>IsValid(value, dataType, allowMultiple)</c>——多值路径假定 <paramref name="value"/> 是数组。
+/// Callers must already have passed <c>IsValid(value, dataType, allowMultiple)</c>; the multi-value
+/// path assumes <paramref name="value"/> is an array.
 /// </summary>
 internal static class DocumentFieldValueFactory
 {
@@ -29,7 +33,8 @@ internal static class DocumentFieldValueFactory
         var order = 0;
         foreach (var element in value.EnumerateArray())
         {
-            // Clone：脱离原 JsonDocument 缓冲，独立持有（与 workflow 侧 root.Clone() 一致的生命周期保险）。
+            // Clone to detach from the original JsonDocument buffer and own the value independently,
+            // matching the lifetime safety used by workflow-side root.Clone().
             yield return new DocumentFieldValue(fieldDefinitionId, dataType, element.Clone(), order++);
         }
     }

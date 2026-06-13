@@ -1,23 +1,33 @@
 namespace Dignite.DocumentAI.Documents.Fields;
 
 /// <summary>
-/// 字段数据类型——影响 LLM 抽取时的 schema 提示与下游解析行为。
-/// 用于统一 <c>FieldDefinition</c> 实体（按 TenantId 区分 Host vs 租户层；详见 CLAUDE.md "类型绑定字段（B 机制）"）。
+/// Field data type, affecting LLM extraction schema hints and downstream parsing behavior.
+/// Used by the unified <c>FieldDefinition</c> entity, which distinguishes host vs tenant layers by
+/// TenantId; see CLAUDE.md "Type-bound fields (Mechanism B)".
 /// <para>
-/// <see cref="Number"/> 统一表示整数与小数（decimal 存储，对整数精确且范围远超 long）——刻意不区分 Integer / Decimal：
-/// 二者查询行为相同（数值等值 + 区间），合并消除"先选 Integer、后来要小数却被 DataType 变更守卫挡住"的错选面。
-/// 同理保留 <see cref="Date"/> 与 <see cref="DateTime"/> 分开——纯日期是文档里最常见的时间字段，
-/// 强并成 DateTime 会逼出不存在的时分秒、把日期等值退化成区间，得不偿失。
+/// <see cref="Number"/> uniformly represents integers and decimals, stored as decimal for exact
+/// integer values and a range far beyond long. Integer / Decimal are intentionally not separated:
+/// their query behavior is the same (numeric equality + ranges), and merging removes the misselection
+/// surface where someone first chooses Integer and later needs decimals but is blocked by DataType
+/// change guards. Likewise, <see cref="Date"/> and <see cref="DateTime"/> stay separate: pure dates
+/// are the most common time fields in documents, and forcing them into DateTime would invent
+/// nonexistent hours / minutes / seconds and degrade date equality into ranges.
 /// </para>
 /// <para>
-/// <see cref="Text"/> 与 <see cref="LongText"/> 刻意分开，二者是"短结构化值 vs 长内容"两种用途：
+/// <see cref="Text"/> and <see cref="LongText"/> are intentionally separate because they serve two
+/// uses: short structured values vs long content.
 /// <list type="bullet">
-///   <item><see cref="Text"/>：结构化短值（姓名 / 编号 / 币种 / 案由等），限长 256（<c>DocumentExtractedFieldConsts.MaxTextValueLength</c>），
-///   落 <c>TextValue</c> 列、进复合索引键，支持等值查询 + 多值（#209 / #212）。</item>
-///   <item><see cref="LongText"/>：长内容（摘要 / 描述 / 风险提示等，由租户用 B 机制自配字段抽取），落独立的
-///   <c>LongTextValue</c> 列（<c>nvarchar(max)</c>），<b>不进任何索引、不可作查询条件、不支持多值</b>——
-///   纯存储载荷，出口 DTO 照常渲染为字符串。注意这是 B 机制下用户自配的<b>类型绑定字段</b>，
-///   与"系统不做全文档 Summary / 派生文本不持久化"（CLAUDE.md）正交——后者约束系统通用字段，不约束用户自配 schema。</item>
+///   <item><see cref="Text"/>: structured short values such as names, numbers, currencies, or case
+///   reasons. Limited to 256 (<c>DocumentExtractedFieldConsts.MaxTextValueLength</c>), stored in the
+///   <c>TextValue</c> column, included in the composite index key, and supports equality query +
+///   multiple values (#209 / #212).</item>
+///   <item><see cref="LongText"/>: long content such as summaries, descriptions, or risk notes,
+///   extracted through tenant-configured fields under Mechanism B. Stored in a separate
+///   <c>LongTextValue</c> column (<c>nvarchar(max)</c>), <b>not included in any index, not queryable,
+///   and not multi-value</b>. It is a pure storage payload and outbound DTOs render it as a string.
+///   Note that this is a user-configured <b>type-bound field</b> under Mechanism B and is orthogonal
+///   to "the system does not persist full-document Summary / derived text" in CLAUDE.md; that rule
+///   constrains system-generic fields, not user-configured schema.</item>
 /// </list>
 /// </para>
 /// </summary>

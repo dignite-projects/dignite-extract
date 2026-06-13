@@ -6,12 +6,14 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents.Fields;
 
 /// <summary>
-/// FieldDefinition 实体层不变量测试。重点：
+/// FieldDefinition entity invariant tests. Focus:
 /// <list type="bullet">
-///   <item>Name 白名单校验——FieldDefinition.Name 会进 LLM prompt 的 JSON schema 描述
-///   （FieldExtractionWorkflow），必须阻断换行 / 引号 / 控制字符等 prompt injection 载体</item>
-///   <item>DisplayName 控制字符过滤——DisplayName 不进 prompt（与 DocumentType.DisplayName 不同），
-///   但 UI 渲染 / 日志输出仍不应承受 \n \t \0 等控制字符，作为深度防御 hygiene</item>
+///   <item>Name allowlist validation: FieldDefinition.Name enters the JSON schema description in the LLM
+///   prompt (FieldExtractionWorkflow), so newline / quote / control-character prompt-injection carriers
+///   must be blocked.</item>
+///   <item>DisplayName control-character filtering: DisplayName does not enter the prompt, unlike
+///   DocumentType.DisplayName, but UI rendering and log output still should not carry \n \t \0 control
+///   characters as defense-in-depth hygiene.</item>
 /// </list>
 /// </summary>
 public class FieldDefinitionTests
@@ -46,17 +48,18 @@ public class FieldDefinitionTests
     public void Should_Reject_Name_Exceeding_Max_Length()
     {
         var tooLong = new string('a', FieldDefinitionConsts.MaxNameLength + 1);
-        // 长度超限走 Check.NotNullOrWhiteSpace 的 maxLength 校验，抛 ArgumentException 而非 BusinessException
+        // Overlength values go through Check.NotNullOrWhiteSpace maxLength validation and throw
+        // ArgumentException rather than BusinessException.
         Should.Throw<ArgumentException>(() => CreateDefinition(tooLong));
     }
 
     [Theory]
     [InlineData("Amount")]
-    [InlineData("合同金额")]              // 中文 OK
-    [InlineData("契約金額")]              // 日文 OK
-    [InlineData("Contract Amount")]       // 空格 OK
-    [InlineData("Party A / Party B")]     // 斜杠 / 空格组合 OK
-    [InlineData("Amount (CNY)")]          // 括号 OK
+    [InlineData("合同金额")]              // Chinese OK
+    [InlineData("契約金額")]              // Japanese OK
+    [InlineData("Contract Amount")]       // space OK
+    [InlineData("Party A / Party B")]     // slash / space combination OK
+    [InlineData("Amount (CNY)")]          // parentheses OK
     public void Should_Accept_Valid_DisplayName(string displayName)
     {
         var def = CreateDefinition("amount", displayName);
@@ -66,7 +69,7 @@ public class FieldDefinitionTests
     [Theory]
     [InlineData("Amount\nIgnore")]        // \n
     [InlineData("Amount\r\nIgnore")]      // \r\n
-    [InlineData("Tab\there")]             // 制表符
+    [InlineData("Tab\there")]             // tab
     [InlineData("Null\0byte")]            // \0
     [InlineData("Vertical\vTab")]
     [InlineData("Form\fFeed")]
@@ -88,7 +91,8 @@ public class FieldDefinitionTests
     [Fact]
     public void Update_Should_Allow_Name_Rename()
     {
-        // #207：解锁 Name 重命名——内部关联改用不可变 FieldDefinitionId，rename 不再被实体层禁止。
+        // #207: unlock Name rename. Internal association now uses immutable FieldDefinitionId, so rename
+        // is no longer forbidden at the entity layer.
         var def = CreateDefinition("amt", "Amount");
         def.Name.ShouldBe("amt");
 
@@ -100,19 +104,19 @@ public class FieldDefinitionTests
     [Fact]
     public void Update_Should_Still_Validate_Name_Format()
     {
-        // rename 解锁不等于跳过 regex 白名单——非法 Name 仍被拒。
+        // Unlocking rename does not skip the regex allowlist; invalid Name is still rejected.
         var def = CreateDefinition("amount", "Amount");
         Should.Throw<BusinessException>(() =>
                 def.Update("bad name", "Amount", "Extract", FieldDataType.Text, 0, false, false))
             .Code.ShouldBe(DocumentAIErrorCodes.FieldDefinition.InvalidName);
     }
 
-    // ─── NormalizeDisplayName 契约（#264：起草助手预填值必能过 ValidateDisplayName） ─────────
+    // ─── NormalizeDisplayName contract (#264: draft assistant prefill must pass ValidateDisplayName) ─────────
 
     [Theory]
-    [InlineData("Amount\nIgnore")]            // \n → 空格
-    [InlineData("Amount\r\nIgnore")]          // \r\n → 折叠空格
-    [InlineData("Tab\there")]                 // 制表符
+    [InlineData("Amount\nIgnore")]            // \n to space
+    [InlineData("Amount\r\nIgnore")]          // \r\n to collapsed space
+    [InlineData("Tab\there")]                 // tab
     [InlineData("Null\0byte")]                // \0
     [InlineData("Vertical\vTab")]
     [InlineData("Form\fFeed")]
@@ -120,8 +124,9 @@ public class FieldDefinitionTests
     [InlineData("多   连续   空白")]
     public void NormalizeDisplayName_Output_Should_Pass_ValidateDisplayName(string raw)
     {
-        // 契约钉死：Normalize 的产出**必须**能过 ValidateDisplayName（经构造器触发），
-        // 防止日后收紧拒绝域时两处静默漂移、起草值一保存就 loud-fail（#264 review2 #3）。
+        // Contract lock: Normalize output must pass ValidateDisplayName through the constructor. This
+        // prevents future tightening of the rejection domain from silently drifting between the two paths
+        // and making drafted values fail loudly when saved (#264 review2 #3).
         var normalized = FieldDefinition.NormalizeDisplayName(raw);
 
         var def = CreateDefinition("amount", normalized);
@@ -135,18 +140,19 @@ public class FieldDefinitionTests
     [Fact]
     public void NormalizeDisplayName_Should_Truncate_Without_Leaving_Lone_Surrogate()
     {
-        // 第 MaxDisplayNameLength 个码元正好是某 astral 字符（emoji）的高代理项：截断不得残留孤立高代理项。
+        // The MaxDisplayNameLength-th code unit is exactly the high surrogate of an astral character
+        // (emoji); truncation must not leave an orphan high surrogate.
         var raw = new string('a', FieldDefinitionConsts.MaxDisplayNameLength - 1) + "😀"; // 😀 = U+D83D U+DE00
 
         var normalized = FieldDefinition.NormalizeDisplayName(raw);
 
         normalized.Length.ShouldBeLessThanOrEqualTo(FieldDefinitionConsts.MaxDisplayNameLength);
-        // 末位不是孤立高代理项；要么完整保留 😀，要么整体丢弃。
+        // Last char is not an orphan high surrogate; either keep 😀 intact or drop it entirely.
         if (normalized.Length > 0)
         {
             char.IsHighSurrogate(normalized[^1]).ShouldBeFalse();
         }
-        // 仍可安全构造（不抛、可序列化）。
+        // Still safe to construct: no throw and serializable.
         var def = CreateDefinition("amount", normalized);
         def.DisplayName.ShouldBe(normalized);
     }
@@ -158,7 +164,7 @@ public class FieldDefinitionTests
         FieldDefinition.NormalizeDisplayName("   ").ShouldBe(string.Empty);
     }
 
-    // ─── AllowMultiple 不变量（#212：仅文本字段可多值） ───────────────────────
+    // ─── AllowMultiple invariant (#212: only text fields can be multi-value) ───────────────────────
 
     [Fact]
     public void Should_Accept_AllowMultiple_On_String_Field()

@@ -13,7 +13,7 @@ public class UpdateExportTemplateDto
 
     public ExportFormat Format { get; set; } = ExportFormat.Csv;
 
-    /// <summary>限定的文档类型不可变 Id（#207 收敛为 ExtractedField-only 列后必填——列引用该类型下的字段定义）。</summary>
+    /// <summary>Immutable id of the constrained document type (#207: required after converging to ExtractedField-only columns, because columns reference field definitions under this type).</summary>
     [Required]
     public Guid DocumentTypeId { get; set; }
 

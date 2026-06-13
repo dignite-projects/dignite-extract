@@ -9,11 +9,14 @@ namespace Dignite.DocumentAI.Documents.Fields;
 public interface IFieldDefinitionRepository : IRepository<FieldDefinition, Guid>
 {
     /// <summary>
-    /// 按当前 ambient 租户层查某文档类型下的字段定义（按 <paramref name="documentTypeId"/> 内部关联匹配，#207，
-    /// 按 <c>DisplayOrder</c> 排序）。字段抽取路径与管理 / MCP 读取路径共用此查询。
+    /// Queries field definitions under a document type in the current ambient tenant layer, matched by
+    /// the internal association <paramref name="documentTypeId"/> (#207) and ordered by
+    /// <c>DisplayOrder</c>. Field extraction, management, and MCP read paths share this query.
     /// <para>
-    /// 隔离由 ambient <c>IMultiTenant</c> filter 施加，不跨层。后台 / 事件路径（如字段抽取）调用前
-    /// 必须 <c>ICurrentTenant.Change(targetTenantId)</c>，使 ambient 层对齐 <c>Document.TenantId</c>。
+    /// Isolation is enforced by the ambient <c>IMultiTenant</c> filter, without cross-layer reads.
+    /// Background and event paths, such as field extraction, must call
+    /// <c>ICurrentTenant.Change(targetTenantId)</c> before invoking this so the ambient layer matches
+    /// <c>Document.TenantId</c>.
     /// </para>
     /// </summary>
     Task<List<FieldDefinition>> GetListAsync(

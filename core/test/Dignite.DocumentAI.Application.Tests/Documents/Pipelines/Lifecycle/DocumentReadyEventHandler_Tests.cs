@@ -25,8 +25,8 @@ public class DocumentReadyEventHandlerTestModule : AbpModule
 }
 
 /// <summary>
-/// DocumentReadyEventHandler 行为测试：验证它在 lifecycle 跃迁到 Ready 时按
-/// CLAUDE.md "出口事件契约" 发出 DocumentReadyEto，其他跃迁忽略。
+/// DocumentReadyEventHandler behavior tests: verifies that it emits DocumentReadyEto according to the
+/// CLAUDE.md "exit event contract" when lifecycle transitions to Ready, and ignores other transitions.
 /// </summary>
 public class DocumentReadyEventHandler_Tests
     : DocumentAIApplicationTestBase<DocumentReadyEventHandlerTestModule>
@@ -49,7 +49,7 @@ public class DocumentReadyEventHandler_Tests
     {
         var doc = CreateDocument(documentTypeCode: "contract.general");
         SetupDocumentRepository(doc);
-        // #207：handler 由 DocumentTypeId 解析 TypeCode 填进 ETO。
+        // #207: handler resolves TypeCode from DocumentTypeId for the ETO.
         _documentTypeRepository
             .FindAsync(TypeId("contract.general"), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new DocumentType(TypeId("contract.general"), null, "contract.general", "Contract"));
@@ -120,7 +120,8 @@ public class DocumentReadyEventHandler_Tests
 
         if (!string.IsNullOrEmpty(documentTypeCode))
         {
-            // 走 internal 通道写入 DocumentTypeId（高置信度路径；#207 分类结果是内部 Id）
+            // Use the internal channel to write DocumentTypeId, the high-confidence path; #207 classification
+            // result is the internal Id.
             typeof(Document)
                 .GetMethod("ApplyAutomaticClassificationResult",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!

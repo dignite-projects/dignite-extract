@@ -1,7 +1,8 @@
 namespace Dignite.DocumentAI.Documents.Exports;
 
 /// <summary>
-/// 导出模板输出格式。仅 CSV + XLSX——JSON 文件导出价值薄（程序化消费走 REST 即可拿 JSON）。
+/// Export template output format. Only CSV and XLSX are supported; JSON file export has limited value
+/// because programmatic consumers can already get JSON through REST.
 /// </summary>
 public enum ExportFormat
 {

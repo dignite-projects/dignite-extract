@@ -5,19 +5,23 @@ using Dignite.DocumentAI.Documents.Fields;
 namespace Dignite.DocumentAI.Slugging;
 
 /// <summary>
-/// 把任意原始文本兜底归一化为 <c>[a-z0-9_]</c> 的 snake_case slug——**不信任 LLM 输出**的安全边界。
+/// Fallback-normalizes arbitrary raw text into a <c>[a-z0-9_]</c> snake_case slug: the safety boundary
+/// for <b>not trusting LLM output</b>.
 /// <para>
-/// 由 <see cref="SlugSuggestionAppService"/>（DisplayName → slug，#190）与
-/// <see cref="Dignite.DocumentAI.Documents.Fields.FieldDraftSuggestionAppService"/>（提示词起草建议的 Name，#264）
-/// 共用——Name/TypeCode 机器键的派生 sanitize 逻辑单点维护，杜绝两处漂移导致一边漏过非法字符。
+/// Shared by <see cref="SlugSuggestionAppService"/> (DisplayName to slug, #190) and
+/// <see cref="Dignite.DocumentAI.Documents.Fields.FieldDraftSuggestionAppService"/> (Name suggested
+/// by prompt drafting, #264). The derivation / sanitize logic for Name/TypeCode machine keys is
+/// maintained in one place, avoiding drift where one path lets illegal characters through.
 /// </para>
 /// </summary>
 internal static class SlugNormalizer
 {
     /// <summary>
-    /// 小写化、非 <c>[a-z0-9]</c> 折叠成单下划线、去首尾下划线、截断到
-    /// <see cref="FieldDefinitionConsts.MaxNameLength"/>（64，FieldDefinition.Name 与 DocumentType.TypeCode 单段两套白名单中较紧的上限）。
-    /// 输入为空 / sanitize 后无合法字符（如未翻译的纯 CJK）→ 返回空字符串（调用方回退本地占位）。
+    /// Lowercases, collapses non-<c>[a-z0-9]</c> characters into single underscores, trims leading /
+    /// trailing underscores, and truncates to <see cref="FieldDefinitionConsts.MaxNameLength"/> (64,
+    /// the stricter per-segment limit across FieldDefinition.Name and DocumentType.TypeCode
+    /// whitelists). Empty input or input with no valid characters after sanitization, such as
+    /// untranslated pure CJK, returns an empty string so callers can fall back to a local placeholder.
     /// </summary>
     public static string Sanitize(string? raw)
     {
@@ -36,7 +40,8 @@ internal static class SlugNormalizer
             }
             else
             {
-                // 空格 / 短横线 / 标点 / CJK 等一律折叠为下划线占位，下一步再合并。
+                // Spaces / hyphens / punctuation / CJK and similar characters all collapse to an
+                // underscore placeholder, then the next step merges repeated underscores.
                 sb.Append('_');
             }
         }

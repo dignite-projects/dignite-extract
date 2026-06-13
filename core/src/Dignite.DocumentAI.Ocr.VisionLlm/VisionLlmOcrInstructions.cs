@@ -4,7 +4,7 @@ namespace Dignite.DocumentAI.Ocr.VisionLlm;
 /// Compile-time constant prompts for the vision-LLM OCR provider.
 /// <para>
 /// These are <b>compile-time constants</b> with no runtime string concatenation of user-controlled data
-/// (CLAUDE.md "## 安全约定 / Description / Instructions 编译期常量"). The OCR input is the image itself,
+/// (CLAUDE.md "Security covenant / Description / Instructions compile-time constants"). The OCR input is the image itself,
 /// not user free-text entering a prompt, so no <c>PromptBoundary</c> wrapping is required.
 /// </para>
 /// </summary>

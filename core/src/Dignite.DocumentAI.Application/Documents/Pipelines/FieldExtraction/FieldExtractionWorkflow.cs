@@ -15,19 +15,19 @@ using Volo.Abp.DependencyInjection;
 namespace Dignite.DocumentAI.Documents.Pipelines.FieldExtraction;
 
 /// <summary>
-/// 统一字段抽取工作流（字段架构 v2）。按 <see cref="FieldExtractionDescriptor"/> 列表用 LLM
-/// 单次调用提取字段值——不区分 Host 字段 / 租户字段（来源由调用方决定）。
+/// Unified field extraction workflow (field architecture v2). Uses one LLM call to extract field values according to
+/// a <see cref="FieldExtractionDescriptor"/> list, without distinguishing Host fields from tenant fields; the caller decides the source.
 /// <para>
-/// 设计要点：
+/// Design points:
 /// <list type="bullet">
-///   <item>所有字段一次调用提取，减少 LLM 往返 + 上下文重复</item>
-///   <item>用 <c>ChatResponseFormat.ForJsonSchema</c> 限定输出 schema</item>
-///   <item>归一化由 prompt 要求 AI 按 <see cref="FieldDataType"/> 输出规范形（数字裸 JSON number、
-///         日期 ISO-8601 字符串、布尔 JSON true/false）；解析时再经 <see cref="ExtractedFieldValueValidator"/>
-///         严格校验（不符声明类型的值写 null + log）——保证 <c>ExtractedFields</c> 类型自洽
-///         （Issue #204：让 GetFieldMatchedIdsAsync 的类型化查询建立在干净数据上）</item>
-///   <item>所有字段的 prompt（包括 Host 来源）统一经 <c>PromptBoundary.WrapField</c> 包裹——
-///         比 v1 区分 Host/Tenant 是否 wrap 更保守，无功能损失</item>
+///   <item>Extract all fields in one call, reducing LLM round-trips and repeated context.</item>
+///   <item>Constrain output schema with <c>ChatResponseFormat.ForJsonSchema</c>.</item>
+///   <item>Normalization is requested in the prompt: the AI should output canonical shapes by <see cref="FieldDataType"/>
+///         (bare JSON number for numbers, ISO-8601 string for dates, JSON true/false for booleans). Parsing then runs strict validation through
+///         <see cref="ExtractedFieldValueValidator"/>. Values that do not match the declared type are written as null and logged, ensuring
+///         <c>ExtractedFields</c> type consistency (Issue #204: typed queries in GetFieldMatchedIdsAsync are built on clean data).</item>
+///   <item>Prompts for all fields, including Host-origin fields, are uniformly wrapped with <c>PromptBoundary.WrapField</c>.
+///         This is more conservative than v1's Host/Tenant distinction and has no functional loss.</item>
 /// </list>
 /// </para>
 /// </summary>
@@ -45,7 +45,7 @@ public class FieldExtractionWorkflow : ITransientDependency
     }
 
     /// <summary>
-    /// 按字段定义批量抽取。返回 (字段名 → JsonElement) 字典；缺失/无法解析的字段以 null 形式出现。
+    /// Extracts fields in batch according to field definitions. Returns a field-name -> JsonElement dictionary; missing or unparseable fields appear as null.
     /// </summary>
     public virtual async Task<IReadOnlyDictionary<string, JsonElement?>> ExtractAsync(
         IReadOnlyList<FieldExtractionDescriptor> fields,
@@ -57,25 +57,29 @@ public class FieldExtractionWorkflow : ITransientDependency
             return new Dictionary<string, JsonElement?>();
         }
 
-        // 可观测性：移除截断后字段抽取喂全文，这里记录输入规模（字符数 + 字段数）。补偿原"截断 warning"
-        // 消失留下的盲区——当超大文档撞 provider 上下文窗口（抛 provider 异常）时，紧邻的这条日志给出
-        // "是不是文档太大"的本地线索。Debug 级：逐文档调用不污染正常日志；真实 token 用量另由 OTel 的
-        // gen_ai.* span 记录。
+        // Observability: after removing truncation, field extraction feeds full text. Log input size here (character count + field count)
+        // to compensate for the blind spot left by the old "truncation warning". If an oversized document hits the provider context window
+        // and throws a provider exception, this nearby log gives a local clue about whether the document was too large.
+        // Debug level avoids polluting normal logs for per-document calls; real token usage is recorded separately by OTel gen_ai.* spans.
         _logger.LogDebug(
             "Field extraction over {CharCount} characters across {FieldCount} fields (full document, no truncation).",
             markdown.Length, fields.Count);
 
-        // 字段抽取喂入**完整 Markdown**，绝不截断：类型绑定字段（合同金额 / 发票号 / 到期日等）
-        // 可能出现在文档任何位置，按字符数截断尾部会静默漏抽关键字段。这与分类路径有意分化——
-        // DocumentClassificationWorkflow 只需文档前段语义即可判型，故按 MaxTextLengthPerExtraction 截断；
-        // 字段抽取需要全文覆盖。超大文档的 token 成本 / 上下文窗口由 host 选用的模型 + provider 负责，
-        // 通道层不预截（预截只会把"漏抽"伪装成"抽取成功"，比直接的 provider 报错更难排查）。
+        // Field extraction feeds **complete Markdown** and never truncates. Type-bound fields such as contract amount,
+        // invoice number, and expiration date may appear anywhere in the document; character-based tail truncation silently misses key fields.
+        // This intentionally differs from classification: DocumentClassificationWorkflow can usually classify from front-section semantics
+        // and therefore truncates by MaxTextLengthPerExtraction. Field extraction needs full coverage.
+        // Token cost / context window for oversized documents is the responsibility of the host-selected model + provider.
+        // The channel layer does not pre-truncate, because pre-truncation disguises "missed extraction" as "successful extraction",
+        // which is harder to diagnose than a direct provider error.
         //
-        // system role 保持**编译期常量** —— 防 prompt injection（CLAUDE.md "## 安全约定 / Description / Instructions 编译期常量"）。
-        // 字段 schema（含租户用户输入的 f.Name / f.Prompt）放进 user role 第一条 message，
-        // 让模型把"指令"与"用户数据"分开看待——配合 PromptBoundary.WrapField + BoundaryRule。
-        // FieldDefinition.Name 在实体层已强制白名单 [A-Za-z0-9_-]{1,64}（参见 FieldDefinitionConsts.NamePattern），
-        // 不会含换行 / 引号 / Markdown 控制字符；f.Prompt 长度受 MaxPromptLength 上限保护。
+        // Keep the system role as a **compile-time constant** to prevent prompt injection
+        // (CLAUDE.md "Security covenant / Description and Instructions must be compile-time constants").
+        // Field schema, including tenant-user input f.Name / f.Prompt, goes into the first user-role message so the model treats
+        // "instructions" and "user data" separately, together with PromptBoundary.WrapField + BoundaryRule.
+        // FieldDefinition.Name is already entity-layer allow-list validated as [A-Za-z0-9_-]{1,64}
+        // (see FieldDefinitionConsts.NamePattern), so it cannot contain line breaks, quotes, or Markdown control characters.
+        // f.Prompt is protected by the MaxPromptLength limit.
         var schemaMessage = BuildSchemaUserMessage(fields);
         var messages = new List<ChatMessage>
         {
@@ -96,7 +100,7 @@ public class FieldExtractionWorkflow : ITransientDependency
     }
 
     /// <summary>
-    /// 编译期常量 system instructions。**不允许**拼接任何运行时字符串。
+    /// Compile-time constant system instructions. **Do not** concatenate any runtime string into this value.
     /// </summary>
     private const string SystemInstructions =
         "You extract structured fields from a Markdown document. " +
@@ -123,14 +127,15 @@ public class FieldExtractionWorkflow : ITransientDependency
         sb.AppendLine("Fields to extract:");
         foreach (var f in fields)
         {
-            // f.Name 已经在 FieldDefinition 实体层经白名单 regex 校验，仅含 [A-Za-z0-9_-]。
-            // f.Prompt 来自 Host 编译期常量或租户用户输入 —— 经 PromptBoundary.WrapField 显式标记为数据，
-            // BoundaryRule 让模型把它当指令以外的内容看待。
-            // #212：多值字段在类型标注后追加 "[]"（如 "Text[]"）提示模型返回数组。
+            // f.Name has already been allow-list regex validated in the FieldDefinition entity layer and contains only [A-Za-z0-9_-].
+            // f.Prompt comes from Host compile-time constants or tenant user input. PromptBoundary.WrapField explicitly marks it as data,
+            // and BoundaryRule tells the model to treat it as non-instruction content.
+            // #212: multi-value fields append "[]" after the type label, such as "Text[]", to tell the model to return an array.
             var typeLabel = f.AllowMultiple ? $"{f.DataType}[]" : f.DataType.ToString();
             var header = $"- \"{f.Name}\" ({typeLabel}, {(f.IsRequired ? "required" : "optional")})";
-            // Prompt 选填：留空时只给「字段名 + 类型」，让模型靠 Name 语义推断该抽什么；绝不输出空的 PromptBoundary 包裹块
-            // （WrapField("") 会产出一个空的数据边界标记，污染 schema、对模型是噪声）。
+            // Prompt is optional. When empty, provide only "field name + type" and let the model infer what to extract from Name semantics.
+            // Never output an empty PromptBoundary-wrapped block: WrapField("") would produce an empty data boundary marker,
+            // polluting the schema and adding noise for the model.
             sb.AppendLine(string.IsNullOrWhiteSpace(f.Prompt)
                 ? header
                 : $"{header}: {PromptBoundary.WrapField(f.Prompt)}");
@@ -166,7 +171,7 @@ public class FieldExtractionWorkflow : ITransientDependency
 
     private static JsonObject BuildFieldValueSchema(FieldDataType dataType, bool allowMultiple)
     {
-        // #212：多值字段（仅文本，FieldDefinition 实体层保证）→ array-or-null，元素为限长 string。
+        // #212: multi-value fields (text only, guaranteed by the FieldDefinition entity layer) -> array-or-null, with length-limited string elements.
         if (allowMultiple)
         {
             return new JsonObject
@@ -268,11 +273,11 @@ public class FieldExtractionWorkflow : ITransientDependency
                 continue;
             }
 
-            // 强校验：值必须符合声明的 FieldDataType（与操作员手改路径
-            // DocumentAppService.UpdateExtractedFieldsAsync 共用 ExtractedFieldValueValidator）。
-            // 归一化责任在 prompt（AI 输出规范形）；此处是兜底护栏，不做强制转换——
-            // 不符声明类型的值写 null + log，保证字段值类型自洽
-            // （让 DocumentExtractedField 的类型化列查询建立在干净数据上）。
+            // Strict validation: the value must match the declared FieldDataType, using the same ExtractedFieldValueValidator
+            // as the operator-edit path DocumentAppService.UpdateExtractedFieldsAsync.
+            // Normalization responsibility belongs to the prompt (AI outputs canonical shape); this is the fallback guard and does not coerce.
+            // Values that do not match the declared type are written as null and logged, ensuring field value type consistency
+            // so typed-column queries over DocumentExtractedField are built on clean data.
             if (!ExtractedFieldValueValidator.IsValid(prop, field.DataType, field.AllowMultiple))
             {
                 _logger.LogWarning(
@@ -282,7 +287,7 @@ public class FieldExtractionWorkflow : ITransientDependency
                 continue;
             }
 
-            // 校验通过：保留原始 JsonElement（已是规范 JSON 类型），避免双重转换 + 精度损失。
+            // Validation passed: keep the original JsonElement, already in canonical JSON type, avoiding double conversion and precision loss.
             result[field.Name] = prop;
         }
 

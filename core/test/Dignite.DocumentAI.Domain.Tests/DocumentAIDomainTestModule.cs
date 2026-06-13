@@ -12,8 +12,8 @@ public class DocumentAIDomainTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        // Manager 依赖 IDocumentPipelineRunRepository（#216）；用 Domain.Tests 共享的 closure-state fake
-        // 让 QueueAsync / DeriveLifecycle 的 DB 查询路径在内存里就能完整跑通。
+        // Manager depends on IDocumentPipelineRunRepository (#216). Use the closure-state fake shared by
+        // Domain.Tests so QueueAsync / DeriveLifecycle DB-query paths can run completely in memory.
         context.Services.AddSingleton(PipelineRunRepositoryFake.Create());
     }
 }

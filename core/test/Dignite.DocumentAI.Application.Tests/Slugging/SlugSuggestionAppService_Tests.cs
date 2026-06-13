@@ -11,9 +11,10 @@ using Xunit;
 namespace Dignite.DocumentAI.Slugging;
 
 /// <summary>
-/// SlugSuggestionAppService 的降级 / 取消语义（issue #190 + Codex 对抗式评审 finding 2）。
-/// IChatClient 用 NSubstitute 替代，无真实 LLM 调用；不验证 CancelAfter 计时本身（标准 .NET 行为），
-/// 只验证「OperationCanceledException 如何分流」与「异常 / 坏输出一律降级为空 slug」这套自有逻辑。
+/// Fallback / cancellation semantics for SlugSuggestionAppService (issue #190 + Codex adversarial review
+/// finding 2). IChatClient is replaced with NSubstitute, with no real LLM calls. These tests do not verify
+/// CancelAfter timing itself, which is standard .NET behavior; they verify only the service-owned logic
+/// for routing OperationCanceledException and degrading exceptions / bad output to an empty slug.
 /// </summary>
 public class SlugSuggestionAppService_Tests
 {
@@ -49,7 +50,7 @@ public class SlugSuggestionAppService_Tests
 
         var result = await svc.SuggestAsync(new SuggestSlugInput { Label = "合同金额" });
 
-        // 服务端 sanitize：小写、非 [a-z0-9] 折叠为下划线、合并、去首尾。
+        // Server-side sanitize: lowercase, fold non-[a-z0-9] to underscores, merge, and trim edges.
         result.Slug.ShouldBe("contract_amount");
     }
 
@@ -76,7 +77,8 @@ public class SlugSuggestionAppService_Tests
     [Fact]
     public async Task Returns_empty_when_slug_has_no_ascii_after_sanitize()
     {
-        // LLM 未翻译，原样返回 CJK —— sanitize 后无合法字符 → 空 slug → 前端回退本地占位。
+        // LLM did not translate and returned CJK as-is; after sanitize there are no legal characters, so
+        // slug is empty and the frontend falls back to a local placeholder.
         var svc = CreateService(ChatClientReturning("{\"slug\": \"合同\"}"));
 
         var result = await svc.SuggestAsync(new SuggestSlugInput { Label = "合同金额" });
@@ -97,8 +99,8 @@ public class SlugSuggestionAppService_Tests
     [Fact]
     public async Task Returns_empty_on_server_deadline_cancellation()
     {
-        // 模拟服务端 deadline（CancelAfter）触发：调用方令牌未取消，但 LLM 调用抛 OperationCanceledException。
-        // 应降级为空 slug，而非向上抛。
+        // Simulate server deadline (CancelAfter): caller token is not canceled, but the LLM call throws
+        // OperationCanceledException. This should degrade to empty slug rather than throw upward.
         var svc = CreateService(ChatClientThrowing(new OperationCanceledException()));
 
         var result = await svc.SuggestAsync(new SuggestSlugInput { Label = "合同金额" });
@@ -109,7 +111,8 @@ public class SlugSuggestionAppService_Tests
     [Fact]
     public async Task Propagates_cancellation_when_caller_cancels()
     {
-        // 客户端主动断开：调用方令牌已取消 + LLM 抛 OperationCanceledException → 原样向上抛（不当作 LLM 失败吞掉）。
+        // Client disconnect: caller token is canceled and the LLM throws OperationCanceledException. Throw
+        // it upward as-is instead of swallowing it as an LLM failure.
         var svc = CreateService(ChatClientThrowing(new OperationCanceledException()));
         var canceled = new CancellationToken(canceled: true);
 

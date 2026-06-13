@@ -4,11 +4,13 @@ using Volo.Abp.EventBus;
 namespace Dignite.DocumentAI.Abstractions.Documents;
 
 /// <summary>
-/// 文档上传完成（落库 + Blob 落盘）后发布；处于通道流水线起点。
-/// 薄载荷：下游通过 REST / MCP 回拉详细数据。不受 Ready 闸门约束。
+/// Published after document upload completes (DB row + blob persisted); this is the start of the
+/// channel pipeline. Thin payload: downstream consumers pull detailed data back through REST / MCP.
+/// Not constrained by the Ready gate.
 /// <para>
-/// 不变契约（issue #188）：所有属性 <c>init</c>-only——ETO 是事件载荷，发布后不可变；
-/// <see cref="EventTime"/> 标 <c>required</c>，编译期强制对象初始化器填值，杜绝 default(DateTime) 风险。
+/// Stable contract (issue #188): all properties are <c>init</c>-only because ETOs are event payloads
+/// and immutable after publication. <see cref="EventTime"/> is marked <c>required</c>, forcing object
+/// initializers at compile time and preventing default(DateTime) risk.
 /// </para>
 /// </summary>
 [EventName("DocumentAI.Document.Uploaded")]
@@ -21,10 +23,10 @@ public class DocumentUploadedEto
     public Guid? TenantId { get; init; }
 
     /// <summary>
-    /// 事件发生时间——DocumentAI 在 publish 时填入 <see cref="Volo.Abp.Timing.IClock.Now"/>。
-    /// 下游消费方按 <c>(DocumentId, EventType, EventTime)</c> 做幂等：
-    /// 同一 key 下若已处理过更晚的 EventTime，则丢弃。
-    /// 配合 ABP 内置 transactional outbox 的 at-least-once 投递使用。
+    /// Event occurrence time. DocumentAI fills it with <see cref="Volo.Abp.Timing.IClock.Now"/> at
+    /// publish time. Downstream consumers can use <c>(DocumentId, EventType, EventTime)</c> for
+    /// idempotence: discard an event when a later EventTime has already been processed for the same
+    /// key. Designed for ABP's built-in transactional outbox with at-least-once delivery.
     /// </summary>
     public required DateTime EventTime { get; init; }
 

@@ -1,18 +1,18 @@
 namespace Dignite.DocumentAI.Ai;
 
 /// <summary>
-/// 为各 MAF Workflow 提供系统提示词。
-/// 实现侧可按语言、租户或业务场景返回不同模板；
-/// 测试侧注入替代实现以隔离 LLM 调用。
+/// Provides system prompts for MAF workflows.
+/// Implementations may return different templates by language, tenant, or business scenario. Tests
+/// inject substitute implementations to isolate LLM calls.
 /// </summary>
 public interface IPromptProvider
 {
     PromptTemplate GetClassificationPrompt(string language);
 
     /// <summary>
-    /// 标题生成提示词。<b>不</b>接受 language 参数——标题策略是「跟随文档语言」
-    /// （prompt 内置 "Respond in the same language as the document."），
-    /// 不受 <c>DocumentAIBehaviorOptions.DefaultLanguage</c> 影响。
+    /// Title generation prompt. It <b>does not</b> accept a language parameter because the title
+    /// strategy is "follow the document language"; the prompt includes "Respond in the same language
+    /// as the document." It is not affected by <c>DocumentAIBehaviorOptions.DefaultLanguage</c>.
     /// </summary>
     PromptTemplate GetTitleGenerationPrompt();
 }

@@ -11,11 +11,14 @@ using ModelContextProtocol.Server;
 namespace Dignite.DocumentAI.Mcp.Documents;
 
 /// <summary>
-/// 文档类型发现 tool——供不支持 MCP <c>resources/list</c> + <c>resources/read</c> 的客户端
-/// 通过 tool 调用获取文档类型字段 schema（#285）。数据源与 <see cref="DocumentTypeResources"/> 相同，
-/// 无独立维护负担。支持 MCP Resources 的客户端（如 Claude Code CLI）仍走标准 Resource 路径。
-/// 结果集硬上限 <see cref="DocumentAIMcpConsts.MaxDocumentTypeResults"/>（llm-call-anti-patterns
-/// 反例 B 要点 3——租户 admin 可自建任意多类型）；字段定义单次批量读取后内存分组，不做 per-type N+1 查询。
+/// Document type discovery tool for clients that do not support MCP <c>resources/list</c> +
+/// <c>resources/read</c>, allowing them to obtain document type field schemas through a tool call
+/// (#285). It uses the same data source as <see cref="DocumentTypeResources"/> and adds no separate
+/// maintenance burden. Clients that support MCP Resources, such as Claude Code CLI, should still use
+/// the standard Resource path. Result sets are hard-capped by
+/// <see cref="DocumentAIMcpConsts.MaxDocumentTypeResults"/> (llm-call-anti-patterns counterexample B
+/// point 3: tenant admins can create any number of types). Field definitions are loaded once in bulk
+/// and grouped in memory, avoiding per-type N+1 queries.
 /// </summary>
 [McpServerToolType]
 public sealed class DocumentTypeTools
@@ -33,19 +36,23 @@ public sealed class DocumentTypeTools
         IFieldDefinitionAppService fieldDefinitionAppService,
         CancellationToken cancellationToken = default)
     {
-        // 委托 GetVisibleAsync：fail-closed 权限断言 + ambient 租户隔离（两层独立单层模型）在 AppService 内执行。
+        // Delegate to GetVisibleAsync. Fail-closed authorization assertions and ambient tenant
+        // isolation (two-layer independent single-layer model) execute inside the AppService.
         var types = await documentTypeAppService.GetVisibleAsync();
 
-        // 结果集硬上限（llm-call-anti-patterns 反例 B 要点 3）：全量枚举会炸 LLM context / 形成费用攻击面。
-        // 按 TypeCode 稳定排序后截断（不依赖 AppService 返回顺序）；Truncated + TotalCount 显式告知 LLM
-        // 还有更多——截断是安全边界而非分页，不提供分页参数。
+        // Hard result cap (llm-call-anti-patterns counterexample B point 3): full enumeration can
+        // blow up LLM context and create a cost-attack surface. Sort stably by TypeCode before
+        // truncation without depending on AppService order. Truncated + TotalCount explicitly tell
+        // the LLM more exist. Truncation is a safety boundary, not pagination, so no paging
+        // parameters are provided.
         var visibleTypes = types
             .OrderBy(t => t.TypeCode, StringComparer.Ordinal)
             .Take(DocumentAIMcpConsts.MaxDocumentTypeResults)
             .ToList();
 
-        // 消 N+1：DocumentTypeId 留空 = 单次批量取当前层全部活跃字段定义（权限断言 / 租户隔离仍在
-        // AppService 内统一执行），内存按不可变 DocumentTypeId 分组（#207）。
+        // Eliminate N+1: leaving DocumentTypeId empty performs one bulk read of all active field
+        // definitions in the current layer. Authorization assertions / tenant isolation still execute
+        // in the AppService, and grouping by immutable DocumentTypeId happens in memory (#207).
         var fieldsByType = visibleTypes.Count == 0
             ? new Dictionary<Guid, List<FieldDefinitionDto>>()
             : (await fieldDefinitionAppService.GetListAsync(new GetFieldDefinitionListInput()))
@@ -60,7 +67,8 @@ public sealed class DocumentTypeTools
             schemas.Add(new DocumentTypeSchema
             {
                 TypeCode = type.TypeCode,
-                // DisplayName 是 admin 配置的用户派生文本，PromptBoundary 包裹防 indirect prompt injection。
+                // DisplayName is admin-configured user-derived text; PromptBoundary wrapping prevents
+                // indirect prompt injection.
                 DisplayName = PromptBoundary.WrapField(type.DisplayName),
                 Fields = fields
                     .OrderBy(f => f.DisplayOrder)

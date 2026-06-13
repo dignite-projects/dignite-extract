@@ -5,34 +5,47 @@ using System.Text.Json;
 namespace Dignite.DocumentAI.Documents.Fields;
 
 /// <summary>
-/// 判定一个 <see cref="JsonElement"/> 值是否符合声明的 <see cref="FieldDataType"/>——字段值类型自洽的单一事实源。
-/// 校验通过的值才会被拆进 <c>DocumentExtractedField</c> 对应的类型化列（Issue #206）。
+/// Single source of truth for deciding whether a <see cref="JsonElement"/> value matches the
+/// declared <see cref="FieldDataType"/>.
+/// Only values that pass this validation are split into the typed columns on
+/// <c>DocumentExtractedField</c> (Issue #206).
 /// <para>
-/// 两条写入路径共用此校验器，保证落库的字段值永远"合类型或为 null"：
+/// Both write paths share this validator so persisted field values are always either type-compatible
+/// or null:
 /// <list type="bullet">
-///   <item><b>操作员手改</b>（<c>DocumentAppService.UpdateExtractedFieldsAsync</c>）：交互式路径，
-///   不符 → 抛 <see cref="DocumentAIErrorCodes.ExtractedField.InvalidValue"/> 让操作员纠正。</item>
-///   <item><b>LLM 抽取</b>（<c>FieldExtractionWorkflow</c>）：后台非交互式路径，不符 → 存 null + log
-///   （归一化责任在 prompt，由 AI 输出规范形；校验器是兜底护栏）。</item>
+///   <item><b>Operator edits</b> (<c>DocumentAppService.UpdateExtractedFieldsAsync</c>): interactive
+///   path; invalid values throw <see cref="DocumentAIErrorCodes.ExtractedField.InvalidValue"/> so the
+///   operator can correct them.</item>
+///   <item><b>LLM extraction</b> (<c>FieldExtractionWorkflow</c>): background non-interactive path;
+///   invalid values are persisted as null plus a log entry. Normalization belongs in the prompt and
+///   the AI should output canonical shapes; this validator is the last guardrail.</item>
 /// </list>
-/// 干净的字段值让 <c>GetFieldMatchedIdsAsync</c> 的类型化列查询（普通等值 / 范围比较）建立在可信数据上，
-/// 也保证 <c>DocumentExtractedField</c> 的 <c>SetValue</c> 把 JSON 拆进类型化列时不会因类型不符抛错。
+/// Clean field values let typed-column queries in <c>GetFieldMatchedIdsAsync</c> (plain equality /
+/// range comparison) operate on trusted data. They also ensure that
+/// <c>DocumentExtractedField.SetValue</c> can split JSON into typed columns without throwing because
+/// of a type mismatch.
 /// </para>
 /// <para>
-/// 严格语义（不做强制转换）：声明类型即承诺值可表达为该 JSON 类型。数字字段须为 JSON number、
-/// 布尔字段须为 JSON true/false、日期字段须为 ISO-8601 字符串。要存自由文本有两个档位：
-/// <see cref="FieldDataType.Text"/>（结构化短值，长度须 ≤ <see cref="DocumentExtractedFieldConsts.MaxTextValueLength"/>，
-/// 与持久化列长同源、入复合索引、可等值查询，#209）或 <see cref="FieldDataType.LongText"/>
-/// （长内容如摘要 / 描述，长度须 ≤ <see cref="DocumentExtractedFieldConsts.MaxLongTextValueLength"/>，落 nvarchar(max) 列、不索引不可查询）。
-/// 真正的全文载荷仍归 Document.Markdown，不在类型绑定字段承载。
+/// Strict semantics with no coercion: the declared type promises that the value can be expressed as
+/// that JSON type. Number fields must be JSON numbers, Boolean fields must be JSON true/false, and
+/// Date fields must be ISO-8601 strings. Free text has two lanes:
+/// <see cref="FieldDataType.Text"/> for structured short values with length less than or equal to
+/// <see cref="DocumentExtractedFieldConsts.MaxTextValueLength"/> (same source as the persisted column
+/// length, included in the composite index, equality-queryable, #209), or
+/// <see cref="FieldDataType.LongText"/> for long content such as summaries / descriptions with length
+/// less than or equal to <see cref="DocumentExtractedFieldConsts.MaxLongTextValueLength"/> (stored in
+/// an nvarchar(max) column, not indexed, and not queryable). The real full-text payload still belongs
+/// to Document.Markdown, not to type-bound fields.
 /// </para>
 /// </summary>
 internal static class ExtractedFieldValueValidator
 {
     /// <summary>
-    /// 多值感知校验（#212）。<paramref name="allowMultiple"/> 为 true 时（仅 <see cref="FieldDataType.Text"/> 字段，
-    /// 由 <c>FieldDefinition</c> 实体层保证）：<paramref name="value"/> 必须是 JSON 数组，且每个元素都是合法标量值；
-    /// 空数组合法（零行）。为 false 时退化为标量校验（与原 <see cref="IsValid(JsonElement, FieldDataType)"/> 一致）。
+    /// Multi-value-aware validation (#212). When <paramref name="allowMultiple"/> is true (only for
+    /// <see cref="FieldDataType.Text"/> fields, enforced by the <c>FieldDefinition</c> entity layer),
+    /// <paramref name="value"/> must be a JSON array and every element must be a valid scalar value.
+    /// Empty arrays are valid (zero rows). When false, this falls back to scalar validation, matching
+    /// the original <see cref="IsValid(JsonElement, FieldDataType)"/>.
     /// </summary>
     public static bool IsValid(JsonElement value, FieldDataType dataType, bool allowMultiple)
     {
@@ -46,8 +59,10 @@ internal static class ExtractedFieldValueValidator
             return false;
         }
 
-        // 结果集硬上限（#212）：超过 MaxMultiValueCount 个值整组判不合法——防恶意文档诱导 LLM 吐超长数组造成行膨胀
-        // （LLM 路径据此存 null + log，操作员手改路径 loud fail）。schema 的 maxItems 是软提示，此处是硬护栏。
+        // Hard result cap (#212): more than MaxMultiValueCount values makes the whole group invalid,
+        // preventing malicious documents from inducing the LLM to emit huge arrays and inflate rows.
+        // The LLM path stores null plus a log entry; operator edits fail loudly. Schema maxItems is a
+        // soft hint, while this is the hard guardrail.
         if (value.GetArrayLength() > DocumentExtractedFieldConsts.MaxMultiValueCount)
         {
             return false;
@@ -93,10 +108,12 @@ internal static class ExtractedFieldValueValidator
 
     private static bool IsValidDateTimeString(JsonElement value)
     {
-        // 只接受无偏移的 wall-clock ISO-8601（YYYY-MM-DDThh:mm:ss）。带偏移 / Z 的串会被 .NET
-        // 换算到本地时区，与存储 / 查询侧 datetime2 列的 wall-clock 语义不一致（比较随服务器时区
-        // 漂移）——DateTimeKind.Unspecified 即表示输入未携带时区信息。带时区的瞬时值不在通道
-        // DateTime 字段的范畴；要存这类值应在下游业务聚合根处理。
+        // Accept only offset-free wall-clock ISO-8601 values (YYYY-MM-DDThh:mm:ss). .NET converts
+        // strings with offsets / Z to the local time zone, which conflicts with the wall-clock
+        // semantics of the datetime2 storage / query column and makes comparisons drift with the
+        // server time zone. DateTimeKind.Unspecified means the input did not carry time-zone
+        // information. Zoned instants are outside the channel DateTime field contract; downstream
+        // business aggregate roots should own those values when needed.
         return value.ValueKind == JsonValueKind.String &&
                DateTime.TryParse(
                    value.GetString(),

@@ -6,15 +6,19 @@ using Volo.Abp.Application.Services;
 namespace Dignite.DocumentAI.Documents.Cabinets;
 
 /// <summary>
-/// 文件柜管理（#194）。两层独立单层（参照 <see cref="IDocumentTypeAppService"/>）：
+/// Cabinet management (#194). Two independent single layers, following
+/// <see cref="IDocumentTypeAppService"/>:
 /// <para>
-/// <see cref="GetListAsync"/> 返回当前层全部柜（Host admin → Host 柜；租户 admin → 自己租户柜，不跨层 union）；
-/// Create / Update / Delete 只作用于当前层（TenantId == CurrentTenant.Id）。
+/// <see cref="GetListAsync"/> returns all cabinets in the current layer: host admins see host
+/// cabinets, tenant admins see their own tenant cabinets, with no cross-layer union. Create / Update /
+/// Delete affect only the current layer (TenantId == CurrentTenant.Id).
 /// </para>
 /// <para>
-/// 与 <see cref="IDocumentTypeAppService"/> 的区别——<b>不做回收站</b>（柜删错重建即可，无级联字段定义）；
-/// <b>删除不阻止 InUse</b>（柜正交于 pipeline），但删柜会<b>原子清空</b>该柜全部文档的 CabinetId 让它们回退
-/// "未归类"，不留悬空引用，不影响分类 / 抽取。
+/// Difference from <see cref="IDocumentTypeAppService"/>: there is <b>no recycle bin</b> because a
+/// mistakenly deleted cabinet can simply be recreated and has no cascading field definitions.
+/// <b>Deletion is not blocked by InUse</b> because cabinets are orthogonal to pipelines, but deleting a
+/// cabinet <b>atomically clears</b> CabinetId on all documents in it so they fall back to
+/// "uncategorized", leaving no dangling references and not affecting classification / extraction.
 /// </para>
 /// </summary>
 public interface ICabinetAppService : IApplicationService

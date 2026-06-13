@@ -240,7 +240,8 @@ export class DocumentReviewQueueComponent implements OnInit {
     const doc = this.rejectingDoc();
     if (!doc) return;
     const reason = this.rejectReason().trim();
-    // #284：拒绝理由必填（后端 RejectReviewInput.Reason [Required]）——空则不提交。
+    // #284: rejection reason is required by backend RejectReviewInput.Reason [Required], so do not submit
+    // empty input.
     if (!reason) {
       this.toaster.warn('::Document:Review:RejectReasonRequired');
       return;

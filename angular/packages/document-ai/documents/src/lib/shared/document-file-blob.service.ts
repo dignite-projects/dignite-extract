@@ -6,7 +6,7 @@ import { DocumentService } from '@dignite/document-ai';
 /**
  * Owns the original-file blob lifecycle for the document preview path (#277): fetch via
  * DocumentService.getBlob (Bearer token, never in the URL) → createObjectURL → sanitize for the
- * PDF iframe → revoke on destroy. Both the detail page's「原文件」Tab and the standalone
+ * PDF iframe → revoke on destroy. Both the detail page's Original File tab and the standalone
  * file-preview page consume this single seam so the lifecycle can no longer drift across two
  * hand-copied implementations.
  *

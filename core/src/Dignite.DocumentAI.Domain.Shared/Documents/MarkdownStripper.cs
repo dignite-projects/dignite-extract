@@ -3,8 +3,9 @@ using System.Text.RegularExpressions;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 把 Markdown 还原为纯文本（去除标记）。仅做语法层面的去除，不解析复杂结构。
-/// 主要用于纯文本上下文（DTO 摘要、ContentLength 估算、不渲染 Markdown 的旧 UI 等）。
+/// Converts Markdown back to plain text by removing markup. This only performs syntax-level removal
+/// and does not parse complex structures. Mainly used for plain-text contexts such as DTO summaries,
+/// ContentLength estimates, or legacy UI surfaces that do not render Markdown.
 /// </summary>
 public static class MarkdownStripper
 {
@@ -14,42 +15,42 @@ public static class MarkdownStripper
 
         var s = markdown;
 
-        // 围栏代码块 ``` ... ``` —— 保留内部文本，去掉栅栏行
+        // Fenced code blocks ``` ... ```: keep inner text and remove fence lines.
         s = Regex.Replace(s, @"^```[^\n]*\n", string.Empty, RegexOptions.Multiline);
         s = Regex.Replace(s, @"\n```\s*$", string.Empty, RegexOptions.Multiline);
 
-        // 图片 ![alt](url) → alt
+        // Image ![alt](url) -> alt.
         s = Regex.Replace(s, @"!\[([^\]]*)\]\([^\)]*\)", "$1");
 
-        // 链接 [text](url) → text
+        // Link [text](url) -> text.
         s = Regex.Replace(s, @"\[([^\]]+)\]\([^\)]*\)", "$1");
 
-        // 表格分隔行 |---|---|
+        // Table separator rows such as |---|---|.
         s = Regex.Replace(s, @"^\s*\|?[\s:\-\|]+\|\s*$", string.Empty, RegexOptions.Multiline);
 
-        // 表格管道符 → 空格
+        // Table pipe characters -> spaces.
         s = s.Replace("|", " ");
 
-        // 标题 # ## ### ...
+        // Headings # ## ### ...
         s = Regex.Replace(s, @"^\s{0,3}#{1,6}\s*", string.Empty, RegexOptions.Multiline);
 
-        // 引用 >
+        // Block quotes >.
         s = Regex.Replace(s, @"^\s{0,3}>\s?", string.Empty, RegexOptions.Multiline);
 
-        // 列表项 -, *, +, 1.
+        // List items -, *, +, 1.
         s = Regex.Replace(s, @"^\s{0,3}([-*+]|\d+\.)\s+", string.Empty, RegexOptions.Multiline);
 
-        // 水平线 ---, ***, ___
+        // Horizontal rules ---, ***, ___.
         s = Regex.Replace(s, @"^\s{0,3}([-*_]\s*){3,}$", string.Empty, RegexOptions.Multiline);
 
-        // 加粗/斜体 **x**, __x__, *x*, _x_
+        // Bold / italic **x**, __x__, *x*, _x_.
         s = Regex.Replace(s, @"(\*\*|__)(.+?)\1", "$2");
         s = Regex.Replace(s, @"(?<!\w)([*_])(.+?)\1(?!\w)", "$2");
 
-        // 行内代码 `code`
+        // Inline code `code`.
         s = Regex.Replace(s, @"`([^`]+)`", "$1");
 
-        // 多余空行折叠
+        // Collapse excessive blank lines.
         s = Regex.Replace(s, @"\n{3,}", "\n\n");
 
         return s.Trim();

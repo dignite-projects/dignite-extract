@@ -88,7 +88,7 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
         Guid classificationRunId = default;
         await WithUnitOfWorkAsync(async () =>
         {
-            // #216：PipelineRun 独立聚合根后改走 runRepo 查询。
+            // #216: after PipelineRun became an independent aggregate root, queries use runRepo.
             var textExtractionRun = await _runRepository.FindAsync(textExtractionRunId);
             var allRuns = await _runRepository.GetListByDocumentAsync(documentId);
             var classificationRuns = allRuns
@@ -109,8 +109,9 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
             Arg.Any<BackgroundJobPriority>(),
             Arg.Any<TimeSpan?>());
 
-        // #265：文本提取成功后 fan-out「留空 AI 兜底选柜」作业（无条件——一次性由 Markdown write-once 保证，
-        // 成功路径每文档至多命中一次；不用 AttemptNumber==1 门控以免漏掉「首次失败、retry 才成功」场景）。
+        // #265: after successful text extraction, fan out a "blank cabinet AI fallback" job unconditionally.
+        // The write-once Markdown rule ensures the success path runs at most once per document; avoid an
+        // AttemptNumber==1 gate so the "first attempt failed, retry succeeded" case is not missed.
         await _backgroundJobManager.Received(1).EnqueueAsync(
             Arg.Is<DocumentCabinetSuggestionJobArgs>(x => x.DocumentId == documentId),
             Arg.Any<BackgroundJobPriority>(),
@@ -120,8 +121,8 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
     [Fact]
     public async Task Text_Extraction_Job_Should_Queue_Classification_For_Ocr_Path()
     {
-        // #196 契约固化：OCR 不做事前质量门控。即便走 OCR 路径识别质量差，
-        // 文档也照常推进到 classification，不被路由到 PendingReview。
+        // #196 contract lock: OCR does not perform pre-quality gating. Even poor recognition quality on the OCR
+        // path still advances the document to classification instead of routing it to PendingReview.
         var documentId = _guidGenerator.Create();
         var textExtractionRunId = await ArrangeQueuedTextExtractionAsync(documentId);
         StubExtraction("# Blurry Scan\n\nlow quality ocr text.", usedOcr: true);
@@ -162,14 +163,15 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
             PipelineRunId = textExtractionRunId
         });
 
-        // 归档进 blob：稳定 per-document key + overwrite。
+        // Archive into blob storage with a stable per-document key and overwrite semantics.
         await _blobContainer.Received(1).SaveAsync(
             $"extraction-native/{documentId}",
             Arg.Any<Stream>(),
             overrideExisting: true,
             Arg.Any<CancellationToken>());
 
-        // 重新加载（独立 UoW → 新 DbContext → 从 DB 反序列化 JSON 列）验证三字段落值 + JSON 往返一致。
+        // Reload through an independent UoW and new DbContext, deserializing the JSON column from DB, to verify
+        // all three fields were written and the JSON round-trip is consistent.
         await WithUnitOfWorkAsync(async () =>
         {
             var document = await _documentRepository.GetAsync(documentId, includeDetails: false);
@@ -205,7 +207,8 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
             PipelineRunId = textExtractionRunId
         });
 
-        // 无 payload → 不写归档 blob（GetAsync 读原始文件 blob 仍发生，但 SaveAsync 不应被调用）。
+        // No payload -> do not write an archive blob. GetAsync still reads the original file blob, but SaveAsync
+        // should not be called.
         await _blobContainer.DidNotReceive().SaveAsync(
             Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
 
@@ -223,8 +226,9 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
     {
         var documentId = _guidGenerator.Create();
         var textExtractionRunId = await ArrangeQueuedTextExtractionAsync(documentId);
-        // payload 超过归档上限（DocumentConsts.MaxNativePayloadArchiveBytes）→ fail-open：跳过归档、manifest 置 null、
-        // 文本提取仍成功。用真实超限大小而非改全局 static，避免与并行测试类共享可变状态串扰。
+        // Payload exceeds the archive limit (DocumentConsts.MaxNativePayloadArchiveBytes) -> fail open: skip the
+        // archive, set manifest to null, and keep text extraction successful. Use a real over-limit size instead
+        // of changing global static state, avoiding mutable-state interference with parallel test classes.
         var oversized = new byte[(int)DocumentConsts.MaxNativePayloadArchiveBytes + 1];
         StubExtraction("# Scan\n\nbody", usedOcr: true,
             nativePayload: new NativePayload(oversized, "application/json", "PaddleOCR/PP-StructureV3"));
@@ -235,7 +239,7 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
             PipelineRunId = textExtractionRunId
         });
 
-        // 超限 → 不写归档 blob。
+        // Over limit -> do not write an archive blob.
         await _blobContainer.DidNotReceive().SaveAsync(
             Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
 
@@ -253,8 +257,10 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
     {
         var documentId = _guidGenerator.Create();
         var textExtractionRunId = await ArrangeQueuedTextExtractionAsync(documentId);
-        // NativePayload 契约不强制 ContentType/SchemaName 非空（未来 rich Markdown / 第三方 provider 可能半填）。
-        // 归档须 fail-open：缺字段 → 不写 blob、manifest 置 null、文本提取仍成功，绝不因辅助审计抛异常打挂主 pipeline。
+        // NativePayload contract does not require ContentType / SchemaName to be non-empty; future rich Markdown
+        // or third-party providers may partially fill them.
+        // Archiving must fail open: missing fields -> do not write blob, set manifest to null, and keep text
+        // extraction successful. Auxiliary audit data must never throw and fail the main pipeline.
         StubExtraction("# Scan\n\nbody", usedOcr: true,
             nativePayload: new NativePayload(new byte[] { 1, 2, 3 }, contentType: "", schemaName: ""));
 
@@ -284,7 +290,7 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
         var payload = new NativePayload(new byte[] { 1, 2, 3 }, "application/json", "PaddleOCR/PP-StructureV3");
         StubExtraction("# Scan\n\nbody", usedOcr: true, nativePayload: payload);
 
-        // 归档 blob 写失败 → fail-open：manifest 置 null，文本提取仍成功。
+        // Archive blob write failure -> fail open: set manifest to null and keep text extraction successful.
         _blobContainer.SaveAsync(
                 Arg.Any<string>(), Arg.Any<Stream>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("blob storage down"));
@@ -321,7 +327,7 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
 
         await _documentAppService.PermanentDeleteAsync(documentId);
 
-        // 永久删除按 manifest 的稳定 key 删归档 blob（与删原始文件 blob 并列）。
+        // Permanent delete removes the archive blob by the stable manifest key, alongside original-file blob deletion.
         await _blobContainer.Received(1).DeleteAsync(
             $"extraction-native/{documentId}", Arg.Any<CancellationToken>());
         await _blobContainer.Received(1).DeleteAsync(
@@ -342,7 +348,8 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
         return textExtractionRunId;
     }
 
-    // stub 回调内断言外部提取工作不在 ambient UoW 下运行（background-jobs.md 短 UoW 规则）。
+    // Stub callback assertion that external extraction work runs outside the ambient UoW, matching the
+    // background-jobs.md short-UoW rule.
     private void StubExtraction(string markdown, bool usedOcr, NativePayload? nativePayload = null)
     {
         _blobContainer.GetAsync(Arg.Any<string>())

@@ -4,11 +4,13 @@ using Volo.Abp.EventBus;
 namespace Dignite.DocumentAI.Abstractions.Documents;
 
 /// <summary>
-/// 文档被软删除（进入回收站）时发布。
-/// 下游业务消费方应将自身派生数据置为可恢复的归档状态——等 <see cref="DocumentRestoredEto"/> 还原，
-/// 或 <see cref="DocumentPermanentlyDeletedEto"/> 后再物理删除。
+/// Published when a document is soft-deleted and enters the recycle bin.
+/// Downstream business consumers should put their derived data into a recoverable archived state:
+/// restore it after <see cref="DocumentRestoredEto"/>, or physically delete it only after
+/// <see cref="DocumentPermanentlyDeletedEto"/>.
 /// <para>
-/// 不变契约（issue #188）：所有属性 <c>init</c>-only；<see cref="EventTime"/> 标 <c>required</c>。
+/// Stable contract (issue #188): all properties are <c>init</c>-only; <see cref="EventTime"/> is
+/// marked <c>required</c>.
 /// </para>
 /// </summary>
 [EventName("DocumentAI.Document.Deleted")]
@@ -21,8 +23,9 @@ public class DocumentDeletedEto
     public Guid? TenantId { get; init; }
 
     /// <summary>
-    /// 事件发生时间——DocumentAI 在 publish 时填入 <see cref="Volo.Abp.Timing.IClock.Now"/>。
-    /// 下游消费方按 <c>(DocumentId, EventType, EventTime)</c> 做幂等（at-least-once 投递）。
+    /// Event occurrence time. DocumentAI fills it with <see cref="Volo.Abp.Timing.IClock.Now"/> at
+    /// publish time. Downstream consumers can use <c>(DocumentId, EventType, EventTime)</c> for
+    /// idempotence under at-least-once delivery.
     /// </summary>
     public required DateTime EventTime { get; init; }
 }

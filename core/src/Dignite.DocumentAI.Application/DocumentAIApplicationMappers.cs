@@ -12,17 +12,17 @@ namespace Dignite.DocumentAI;
 /// <summary>
 /// Document -> DocumentDto。
 /// <para>
-/// <c>DocumentTypeCode</c>（外部 wire-format）与 <c>ExtractedFields</c> 字典 key（字段名）是 Id → code/name 的查找投影
-/// （#207：内部存 <see cref="Document.DocumentTypeId"/> 与 <see cref="DocumentExtractedField.FieldDefinitionId"/>），
-/// 需穿透 soft-delete 的批量 join，mapper 无法独立完成——故 <see cref="MapperIgnoreTargetAttribute"/> 忽略后由
-/// <c>DocumentAppService</c> 批量填充（无 N+1）。
-/// <c>ExtractionMetadata</c> 在 Document 上是 typed JSON 值对象，整体<b>不出口</b>（内部 provenance）；但其中的
-/// 完整性质量信号经 <c>ExtractionIsComplete</c> / <c>ExtractionIncompleteReason</c> 出口（#268），同样 ignore 后由
-/// <c>DocumentAppService</c> 填充——null metadata（历史 / 数字版）按完整处理（<c>?? true</c>）。
+/// <c>DocumentTypeCode</c> (external wire-format) and <c>ExtractedFields</c> dictionary keys (field names) are Id -> code/name lookup projections.
+/// Internally, #207 stores <see cref="Document.DocumentTypeId"/> and <see cref="DocumentExtractedField.FieldDefinitionId"/>.
+/// These require batch joins that traverse soft-delete, which the mapper cannot complete independently. Therefore
+/// <see cref="MapperIgnoreTargetAttribute"/> ignores them and <c>DocumentAppService</c> batch-fills them with no N+1.
+/// <c>ExtractionMetadata</c> on Document is a typed JSON value object and is <b>not exported as a whole</b> because it is internal provenance.
+/// Its integrity quality signals are exported through <c>ExtractionIsComplete</c> / <c>ExtractionIncompleteReason</c> (#268),
+/// also ignored here and filled by <c>DocumentAppService</c>. Null metadata (historical / digital-native) is treated as complete (<c>?? true</c>).
 /// </para>
 /// <para>
-/// #216：PipelineRuns 已从 DocumentDto 出口契约移除，<see cref="DocumentPipelineRunToDocumentPipelineRunDtoMapper"/>
-/// 不再以 <c>[UseMapper]</c> 嵌套调用，改由独立 <c>IDocumentPipelineRunAppService</c> 直接调用其 <c>Map</c>。
+/// #216: PipelineRuns was removed from the DocumentDto export contract. <see cref="DocumentPipelineRunToDocumentPipelineRunDtoMapper"/>
+/// is no longer nested through <c>[UseMapper]</c>; the independent <c>IDocumentPipelineRunAppService</c> now calls its <c>Map</c> directly.
 /// </para>
 /// </summary>
 [Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
@@ -47,18 +47,17 @@ public partial class DocumentToDocumentDtoMapper : MapperBase<Document, Document
 
 /// <summary>
 /// DocumentPipelineRun -> DocumentPipelineRunDto.
-/// <see cref="MapExtraPropertiesAttribute"/> 透传通用 <c>ExtraProperties</c> bag；同时把
-/// <c>ExtraProperties["Candidates"]</c> 反序列化为强类型 <see cref="DocumentPipelineRunDto.Candidates"/>，
-/// 让前端 / 下游 HttpApi.Client 不必按字符串 key cast。
+/// <see cref="MapExtraPropertiesAttribute"/> passes through the generic <c>ExtraProperties</c> bag, and also deserializes
+/// <c>ExtraProperties["Candidates"]</c> into strongly typed <see cref="DocumentPipelineRunDto.Candidates"/>,
+/// so the frontend / downstream HttpApi.Client does not have to cast by string key.
 /// <para>
-/// <b>为什么手动在 <c>Map</c> 内调 <c>AfterMap</c></b>：<c>MapperBase.AfterMap</c> 的 auto-wire
-/// 由 ABP <c>MapperlyAutoObjectMappingProvider</c>（IObjectMapper 层）做，<b>不是</b>
-/// Mapperly source generator 做的。但本 mapper 是被 <see cref="DocumentToDocumentDtoMapper"/>
-/// 通过 <c>[UseMapper]</c> 嵌套调用的子 mapper —— Mapperly 直接调 <c>Map(source)</c>，
-/// 绕过 IObjectMapper layer，<c>AfterMap</c> 不会自动触发。手动在 <c>Map</c> wrapper 内
-/// 调用是当前唯一可靠的方案。
-/// 上游计划：Riok.Mapperly 团队不打算引入 attribute-based auto-wire（哲学：显式优于隐式，
-/// 参 Mapperly Discussion #1421）；ABP 团队认为当前行为 by design（参 abpframework/abp#24592）。
+/// <b>Why <c>AfterMap</c> is called manually inside <c>Map</c></b>: auto-wiring for <c>MapperBase.AfterMap</c>
+/// is done by ABP <c>MapperlyAutoObjectMappingProvider</c> at the IObjectMapper layer, <b>not</b> by the Mapperly source generator.
+/// This mapper is a child mapper nested through <c>[UseMapper]</c> by <see cref="DocumentToDocumentDtoMapper"/>.
+/// Mapperly calls <c>Map(source)</c> directly and bypasses the IObjectMapper layer, so <c>AfterMap</c> is not triggered automatically.
+/// Calling it manually inside the <c>Map</c> wrapper is currently the only reliable option.
+/// Upstream position: the Riok.Mapperly team does not plan attribute-based auto-wire because their philosophy is explicit over implicit
+/// (see Mapperly Discussion #1421); the ABP team considers the current behavior by design (see abpframework/abp#24592).
 /// </para>
 /// </summary>
 [Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
@@ -98,14 +97,14 @@ public partial class DocumentPipelineRunToDocumentPipelineRunDtoMapper : MapperB
             return null;
         }
 
-        // 同一 UoW 内尚未持久化往返时是写入的原始类型。
+        // Within the same UoW before a persistence round-trip, this is the original written type.
         if (raw is IReadOnlyList<PipelineRunCandidate> alreadyTyped)
         {
             return alreadyTyped;
         }
 
-        // EF Core / ABP 持久化读回时 ExtraProperties 的 value 是 JsonElement
-        // （参考 docs/pipeline-runs.md "Server-Side Notes"）。
+        // When read back from EF Core / ABP persistence, ExtraProperties values are JsonElement.
+        // See docs/pipeline-runs.md "Server-Side Notes".
         if (raw is JsonElement json && json.ValueKind == JsonValueKind.Array)
         {
             return JsonSerializer.Deserialize<List<PipelineRunCandidate>>(json.GetRawText());
@@ -116,8 +115,9 @@ public partial class DocumentPipelineRunToDocumentPipelineRunDtoMapper : MapperB
 }
 
 /// <summary>
-/// Document -> DocumentListItemDto。<c>DocumentTypeCode</c> 与 <c>ExtractedFields</c> 同 <see cref="DocumentToDocumentDtoMapper"/>
-/// 由 <c>DocumentAppService</c> 批量填充（Id → code/name 穿透 soft-delete 的 join，分页后一次性解析，无 N+1）。
+/// Document -> DocumentListItemDto. <c>DocumentTypeCode</c> and <c>ExtractedFields</c> are batch-filled by
+/// <c>DocumentAppService</c>, same as <see cref="DocumentToDocumentDtoMapper"/>: Id -> code/name joins that traverse soft-delete,
+/// resolved once after pagination with no N+1.
 /// </summary>
 [Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
 public partial class DocumentToDocumentListItemDtoMapper : MapperBase<Document, DocumentListItemDto>
@@ -141,8 +141,8 @@ public partial class DocumentTypeToDtoMapper : MapperBase<DocumentType, Document
 }
 
 /// <summary>
-/// FieldDefinition -> FieldDefinitionDto。所有标量（含不可变 <see cref="FieldDefinition.DocumentTypeId"/>，#207）
-/// 由 Mapperly 直接映射，无需查找投影。
+/// FieldDefinition -> FieldDefinitionDto. All scalar values, including immutable <see cref="FieldDefinition.DocumentTypeId"/> (#207),
+/// are mapped directly by Mapperly with no lookup projection.
 /// </summary>
 [Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
 public partial class FieldDefinitionToDtoMapper : MapperBase<FieldDefinition, FieldDefinitionDto>
@@ -152,8 +152,8 @@ public partial class FieldDefinitionToDtoMapper : MapperBase<FieldDefinition, Fi
 }
 
 /// <summary>
-/// ExportTemplate -> ExportTemplateDto（#207）。所有标量（含不可变 <see cref="ExportTemplate.DocumentTypeId"/>）
-/// 及列集合（FieldDefinitionId / Order）由 Mapperly 直接映射，无需查找投影。
+/// ExportTemplate -> ExportTemplateDto (#207). All scalar values, including immutable <see cref="ExportTemplate.DocumentTypeId"/>,
+/// and the column collection (FieldDefinitionId / Order) are mapped directly by Mapperly with no lookup projection.
 /// </summary>
 [Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
 public partial class ExportTemplateToDtoMapper : MapperBase<ExportTemplate, ExportTemplateDto>

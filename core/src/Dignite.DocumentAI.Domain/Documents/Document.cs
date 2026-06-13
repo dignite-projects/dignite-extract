@@ -14,104 +14,104 @@ namespace Dignite.DocumentAI.Documents;
 
 public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
 {
-    // 多租户
+    // Multi-tenancy
     public virtual Guid? TenantId { get; private set; }
 
-    /// <summary>文件来源信息（不可变）</summary>
+    /// <summary>File origin information (immutable).</summary>
     public virtual FileOrigin FileOrigin { get; private set; } = default!;
 
     /// <summary>
-    /// 所属文件柜（人工组织归属维度，#194）。可空——null 表示"未归类"。
-    /// 上传时由操作员人工设定，<b>正交于 pipeline</b>：OCR / 分类 / 字段抽取均不读不写此字段
-    /// （否则柜子会退化成第二个 DocumentType，人工组织维度与 AI 内容维度焊死）。
-    /// 以可空 Guid 外键引用 <see cref="Cabinet"/> 聚合根（DDD reference-by-id，无导航属性）。
+    /// Owning cabinet (manual organization dimension, #194). Nullable; null means "uncategorized".
+    /// Set manually by the operator during upload, and <b>orthogonal to pipelines</b>: OCR / classification / field extraction do not read or write this field
+    /// (otherwise cabinets would collapse into a second DocumentType, binding manual organization to AI content classification).
+    /// References the <see cref="Cabinet"/> aggregate root through a nullable Guid foreign key (DDD reference-by-id, no navigation property).
     /// </summary>
     public virtual Guid? CabinetId { get; private set; }
 
     /// <summary>
-    /// 文档类型内部关联（由分类流水线 Run 成功后写入）。引用 <see cref="DocumentType"/>.Id（DDD reference-by-id，无导航属性）。
-    /// null 表示当前没有已确认/可用的文档类型；是否等待人工确认由 <see cref="ReviewDisposition"/> / <see cref="ReviewReasons"/> 表达。
+    /// Internal document type association, written after a successful classification pipeline run. References <see cref="DocumentType"/>.Id (DDD reference-by-id, no navigation property).
+    /// null means there is currently no confirmed or usable document type; manual-review state is expressed by <see cref="ReviewDisposition"/> / <see cref="ReviewReasons"/>.
     /// <para>
-    /// 内部用不可变 Id 关联（#207）——外部 wire-format（REST / MCP / ETO）仍输出 <c>DocumentTypeCode</c> 字符串，
-    /// 由读路径 join <see cref="DocumentType"/> 解析当前（或软删后最后已知）TypeCode。TypeCode rename 不再级联本表。
+    /// Internally associated by immutable Id (#207); external wire formats (REST / MCP / ETO) still output the <c>DocumentTypeCode</c> string.
+    /// Read paths join <see cref="DocumentType"/> to resolve the current, or last-known after soft delete, TypeCode. TypeCode renames no longer cascade to this table.
     /// </para>
     /// </summary>
     public virtual Guid? DocumentTypeId { get; private set; }
 
     /// <summary>
-    /// 文档宏观生命周期状态。
-    /// 由 DocumentPipelineRunManager 根据关键流水线的 Run 结果派生，不由应用层直接设置。
+    /// Coarse document lifecycle state.
+    /// Derived by DocumentPipelineRunManager from key pipeline run results; not set directly by the application layer.
     /// </summary>
     public virtual DocumentLifecycleStatus LifecycleStatus { get; private set; }
 
     /// <summary>
-    /// 人工审核<b>处置阶段</b>（操作员动作轴，#284）。NotReviewed（默认）/ Confirmed（人工确认类型）/
-    /// Rejected（操作员拒绝，可恢复——后续 Reclassify 会转回 Confirmed）。
-    /// 与<b>待审原因</b>（<see cref="ReviewReasons"/>）正交：本字段只由操作员动作写。
-    /// "是否需操作员关注"由 <see cref="ReviewReasonPolicy.RequiresAttention(DocumentReviewReasons, DocumentReviewDisposition)"/>
-    /// 派生（<c>ReviewReasons != None 且本字段 != Rejected</c>）——Rejected 抑制需关注（操作员已处置），其余仅由原因轴驱动。
+    /// Manual review <b>disposition phase</b> (operator action axis, #284): NotReviewed (default), Confirmed (operator-confirmed type),
+    /// or Rejected (operator rejection, recoverable; a later Reclassify moves it back to Confirmed).
+    /// Orthogonal to <b>review reasons</b> (<see cref="ReviewReasons"/>): this field is written only by operator actions.
+    /// Whether operator attention is required is derived by <see cref="ReviewReasonPolicy.RequiresAttention(DocumentReviewReasons, DocumentReviewDisposition)"/>
+    /// (<c>ReviewReasons != None and this field != Rejected</c>). Rejected suppresses attention because the operator already handled it; otherwise the reason axis drives attention.
     /// </summary>
     public virtual DocumentReviewDisposition ReviewDisposition { get; private set; }
 
     /// <summary>
-    /// 待审原因集合（客观未解决问题轴，#284）——为什么需要操作员关注。每个 bit 由唯一一个 pipeline 阶段维护
-    /// （UnresolvedClassification←分类阶段、MissingRequiredFields←字段抽取阶段，按位 set/clear 互不覆盖）。
-    /// blocking 原因（见 <see cref="ReviewReasonPolicy"/>）经
-    /// <see cref="Pipelines.DocumentPipelineRunManager.DeriveLifecycleAsync"/> 挡住 Ready；
-    /// non-blocking 只进操作员队列、不阻断下游。
+    /// Review reason set (objective unresolved-problem axis, #284): why operator attention is required. Each bit is maintained by exactly one pipeline phase
+    /// (UnresolvedClassification <- classification phase, MissingRequiredFields <- field extraction phase; bitwise set/clear avoids overwriting between phases).
+    /// Blocking reasons (see <see cref="ReviewReasonPolicy"/>) prevent Ready through
+    /// <see cref="Pipelines.DocumentPipelineRunManager.DeriveLifecycleAsync"/>;
+    /// non-blocking reasons only enter the operator queue and do not block downstream consumers.
     /// </summary>
     public virtual DocumentReviewReasons ReviewReasons { get; private set; }
 
     /// <summary>
-    /// 提取的结构化 Markdown 内容（文本提取流水线 Run 成功后写入，不可变）。
-    /// 这是 Document 唯一的文本载荷——下游需要纯文本时通过 <see cref="MarkdownStripper.Strip"/> 投影。
+    /// Extracted structured Markdown content, written after a successful text extraction pipeline run and immutable afterward.
+    /// This is the only text payload on Document; downstream consumers that need plain text project it through <see cref="MarkdownStripper.Strip"/>.
     /// </summary>
     public virtual string? Markdown { get; private set; }
 
     /// <summary>
-    /// 文档展示标题（文本提取流水线 Run 成功后写入，不可变）。
-    /// 由 <see cref="MarkdownTitleExtractor"/> 从 <see cref="Markdown"/> 提取，失败时上游回退为不带扩展名的文件名。
-    /// 迁移之前的历史记录可能为 null；读路径需回退到 <see cref="FileOrigin"/>.OriginalFileName / <see cref="FileOrigin"/>.BlobName。
+    /// Display title for the document, written after a successful text extraction pipeline run and immutable afterward.
+    /// Extracted from <see cref="Markdown"/> by <see cref="MarkdownTitleExtractor"/>; if extraction fails, upstream falls back to the file name without extension.
+    /// Historical records from before the migration may be null; read paths should fall back to <see cref="FileOrigin"/>.OriginalFileName / <see cref="FileOrigin"/>.BlobName.
     /// </summary>
     public virtual string? Title { get; private set; }
 
     /// <summary>
-    /// 文档分类置信度（0.0 ~ 1.0），为最后一次成功分类 Run 的快照。
-    /// 当 <see cref="DocumentTypeId"/> 为 null 时此值为 0；是否等待人工确认由 <see cref="ReviewDisposition"/> / <see cref="ReviewReasons"/> 表达。
-    /// 人工确认（<see cref="DocumentReviewDisposition.Confirmed"/>）时固定写入 1.0。
+    /// Document classification confidence (0.0 to 1.0), captured from the latest successful classification run.
+    /// When <see cref="DocumentTypeId"/> is null, this value is 0; manual-review state is expressed by <see cref="ReviewDisposition"/> / <see cref="ReviewReasons"/>.
+    /// Operator confirmation (<see cref="DocumentReviewDisposition.Confirmed"/>) always writes 1.0.
     /// </summary>
     public virtual double ClassificationConfidence { get; private set; }
 
     /// <summary>
-    /// 操作员拒绝审核时填写的拒绝理由（#284：从原 ClassificationReason 独立出来，拒绝时<b>必填</b>）。
-    /// 仅在 <see cref="ReviewDisposition"/> = Rejected 时有值；语义单一——人工输入的拒绝说明，
-    /// 不再兼做 AI 分类解释。长度受 <see cref="DocumentConsts.MaxRejectionReasonLength"/> 约束。
+    /// Rejection reason entered by the operator during review rejection (#284: split from the former ClassificationReason; <b>required</b> when rejecting).
+    /// Has a value only when <see cref="ReviewDisposition"/> = Rejected; its single meaning is the human-entered rejection note,
+    /// no longer doubling as an AI classification explanation. Length is constrained by <see cref="DocumentConsts.MaxRejectionReasonLength"/>.
     /// </summary>
     public virtual string? RejectionReason { get; private set; }
 
-    // === 字段架构 v2：系统通用字段（顶层 typed columns，由 pipeline 各阶段填充） ===
+    // === Field architecture v2: system common fields (top-level typed columns filled by pipeline phases) ===
 
-    /// <summary>文档语言（ISO 639-1 / IETF tag）。OCR / 抽取阶段检测；影响下游 prompt 语言选择。</summary>
+    /// <summary>Document language (ISO 639-1 / IETF tag). Detected by OCR / extraction phases; affects downstream prompt language selection.</summary>
     public virtual string? Language { get; private set; }
 
     /// <summary>
-    /// 文本提取 provenance 元数据（#210）：胜出 provider 名 + 原生 payload 归档清单。
-    /// Domain 自有 typed 值对象 → JSON 列（解耦 provider 契约）。
-    /// 原始 bbox / cell 等空间信号<b>留 blob</b>，本字段只存 manifest。文本提取流水线 Run 成功后写入；历史记录可能为 null。
+    /// Text extraction provenance metadata (#210): winning provider name + archived native payload manifest.
+    /// Domain-owned typed value object -> JSON column, decoupled from provider contracts.
+    /// Raw spatial signals such as bbox / cell data <b>stay in blob storage</b>; this field stores only the manifest. Written after a successful text extraction pipeline run; historical records may be null.
     /// </summary>
     public virtual DocumentTextExtractionMetadata? ExtractionMetadata { get; private set; }
 
-    // --- 聚合内的字段值集合（字段架构 v2 / Issue #206） ---
+    // --- Aggregate-internal field value collection (field architecture v2 / Issue #206) ---
 
     private readonly List<DocumentExtractedField> _extractedFieldValues = new();
 
     /// <summary>
-    /// 类型绑定字段抽取结果（字段架构 v2）——一行一个字段值的 child 集合，字段值查询与持久化的唯一 truth source。
+    /// Type-bound field extraction results (field architecture v2): a child collection with one row per field value, the sole truth source for field value queries and persistence.
     /// <para>
-    /// 同一 Document 只跑一层字段抽取（来源层由 <see cref="TenantId"/> 决定）——不分桶、不存在跨层命名冲突。
+    /// A single Document runs field extraction in exactly one layer, determined by <see cref="TenantId"/>; there is no bucketing and no cross-layer naming conflict.
     /// </para>
-    /// 出口 DTO / MCP / REST 的 <c>ExtractedFields</c> 字典由 App / Mapper 层从这些行即时组装
-    /// （见 <see cref="DocumentExtractedField.ToJsonElement"/>），wire-format 与旧 JSON 列兼容。
+    /// The export DTO / MCP / REST <c>ExtractedFields</c> dictionary is assembled on demand from these rows by the App / Mapper layer
+    /// (see <see cref="DocumentExtractedField.ToJsonElement"/>), preserving wire-format compatibility with the old JSON column.
     /// </summary>
     public virtual IReadOnlyCollection<DocumentExtractedField> ExtractedFieldValues => _extractedFieldValues.AsReadOnly();
 
@@ -132,7 +132,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         LifecycleStatus = DocumentLifecycleStatus.Uploaded;
     }
 
-    // --- 写入方法（由 DocumentPipelineRunManager 在流水线完成后调用） ---
+    // --- Write methods (called by DocumentPipelineRunManager when a pipeline completes) ---
 
     internal void SetMarkdown(string markdown)
     {
@@ -152,9 +152,10 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
             return;
         }
 
-        // Title 是 LLM 输出（攻击者可经文档内容间接操控）：控制字符（含 \r \n \t / null byte）折叠为空格、
-        // 连续空白合并为单个空格，再 Trim + 截断——手法与 FieldDefinition.NormalizeDisplayName 一致
-        // （含截断后丢弃末位孤立高代理项，防切断代理对破坏 JSON 序列化 / DB 往返）。
+        // Title is LLM output and can be indirectly controlled through document content: collapse control characters
+        // (including \r \n \t / null byte) to spaces, merge consecutive whitespace into one space, then Trim + truncate.
+        // This mirrors FieldDefinition.NormalizeDisplayName, including dropping a trailing unpaired high surrogate after truncation
+        // so JSON serialization / DB round-trips are not broken by a split surrogate pair.
         var cleaned = new string(title.Select(c => char.IsControl(c) ? ' ' : c).ToArray()).Trim();
         cleaned = Regex.Replace(cleaned, @"\s+", " ");
         if (cleaned.Length > DocumentConsts.MaxTitleLength)
@@ -172,12 +173,12 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// 写入 OCR / 抽取阶段检测到的语言（#210：终结此前 write-never 死字段）。
-    /// 候选值先 Trim 再经 <see cref="LanguageTagValidator"/> 白名单校验——该值会在 MCP 出口的资源元数据
-    /// header 以裸值（PromptBoundary 之外）透出，白名单是契约级注入防线（与 DocumentType.TypeCodePattern
-    /// "白名单即注入防线"同源）。空 / 空白 / 不匹配白名单的入参<b>不</b>覆盖
-    /// （按"未检测到语言"丢弃，保留既有值）。
-    /// 由 <see cref="Pipelines.DocumentPipelineRunManager.CompleteTextExtractionAsync"/> 在文本提取完成时调用。
+    /// Writes the language detected by OCR / extraction (#210: ending the former write-never dead field).
+    /// Candidate values are trimmed and then allow-list validated by <see cref="LanguageTagValidator"/>. This value is exposed as a raw value
+    /// outside PromptBoundary in MCP resource metadata headers, so the allow-list is a contract-level injection defense, sharing the same principle as
+    /// DocumentType.TypeCodePattern: "the allow-list is the injection boundary". Empty, whitespace, or non-matching inputs do <b>not</b> overwrite
+    /// existing values; they are discarded as "language not detected".
+    /// Called by <see cref="Pipelines.DocumentPipelineRunManager.CompleteTextExtractionAsync"/> when text extraction completes.
     /// </summary>
     internal void SetLanguage(string? language)
     {
@@ -191,9 +192,9 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// 写入文本提取 provenance（#210）：Domain typed 元数据值对象（provider 名 + 归档 manifest）。
-    /// 由 <see cref="Pipelines.DocumentPipelineRunManager.CompleteTextExtractionAsync"/> 调用，
-    /// 与 <see cref="SetMarkdown"/> 同事务原子写入（Markdown write-once 不变式天然把本写入也钳成 write-once）。
+    /// Writes text extraction provenance (#210): a Domain typed metadata value object (provider name + archived manifest).
+    /// Called by <see cref="Pipelines.DocumentPipelineRunManager.CompleteTextExtractionAsync"/>,
+    /// and written atomically in the same transaction as <see cref="SetMarkdown"/>. The Markdown write-once invariant naturally makes this write-once too.
     /// </summary>
     internal void SetExtractionMetadata(DocumentTextExtractionMetadata? extractionMetadata)
     {
@@ -201,10 +202,10 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// 改派 / 指派文档所属文件柜（#257）。<c>null</c> = 移出文件柜（未归类）。
-    /// CabinetId 是正交组织维度——改派<b>不</b>触发任何 pipeline / 领域事件，是原子状态变更
-    /// （与 <see cref="SetFields"/> 同类，由 Application 层直接调，无需经 DomainService 中转）。
-    /// 目标柜的存在性与当前层归属由 Application 层校验（<c>DocumentAppService.UpdateCabinetAsync</c>）。
+    /// Reassigns / assigns the document's cabinet (#257). <c>null</c> = remove from cabinet (uncategorized).
+    /// CabinetId is an orthogonal organization dimension. Reassignment <b>does not</b> trigger any pipeline or domain event; it is an atomic state change
+    /// (same category as <see cref="SetFields"/>, called directly by the Application layer without a DomainService).
+    /// The Application layer validates target cabinet existence and current-layer ownership (<c>DocumentAppService.UpdateCabinetAsync</c>).
     /// </summary>
     public void SetCabinet(Guid? cabinetId)
     {
@@ -212,8 +213,8 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// 删柜时把文档回退"未归类"（#194）——<see cref="SetCabinet"/> 传 <c>null</c> 的语义别名。
-    /// 由 <c>CabinetAppService.DeleteAsync</c> 在删柜前对该柜全部文档调用，避免悬空指向已删柜。
+    /// Moves the document back to "uncategorized" when a cabinet is deleted (#194): semantic alias for calling <see cref="SetCabinet"/> with <c>null</c>.
+    /// Called by <c>CabinetAppService.DeleteAsync</c> for all documents in the cabinet before deletion, avoiding dangling references to a deleted cabinet.
     /// </summary>
     public void UnassignCabinet()
     {
@@ -221,19 +222,19 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// 整组替换类型绑定字段值（字段架构 v2 / Issue #206 + #207）。<c>FieldExtractionEventHandler</c> 在分类完成后调用，
-    /// 操作员手改（<c>UpdateExtractedFieldsAsync</c>）亦走此路径；传空集合清空全部字段行。
-    /// 调用方提交该文档当前的全部字段值（已校验值类型与 <see cref="DocumentFieldValue.DataType"/> 对齐，
-    /// 且每个 <see cref="DocumentFieldValue.FieldDefinitionId"/> 解析自该文档所属层 / 类型下的 <c>FieldDefinition</c>）。
+    /// Replaces the full set of type-bound field values (field architecture v2 / Issue #206 + #207). <c>FieldExtractionEventHandler</c> calls this after classification completes;
+    /// operator edits (<c>UpdateExtractedFieldsAsync</c>) use the same path. Passing an empty collection clears all field rows.
+    /// Callers submit the current full field value set for the document, after validating that value types match <see cref="DocumentFieldValue.DataType"/>
+    /// and each <see cref="DocumentFieldValue.FieldDefinitionId"/> resolves from a <c>FieldDefinition</c> in the document's layer / type.
     /// <para>
-    /// 用 <b>reconcile</b> 而非 clear+add：同字段值行（按 <see cref="DocumentFieldValue.FieldDefinitionId"/> +
-    /// <see cref="DocumentFieldValue.Order"/>，#212）<b>原地更新</b>、消失的删除、新增的插入。原因——复合主键
-    /// <c>(DocumentId, FieldDefinitionId, Order)</c> 下，clear+add 会在单次 SaveChanges 内对同键产生 delete+insert，
-    /// 触发唯一冲突 / EF 操作排序风险（操作员把 <c>amount=100</c> 改 <c>200</c> 即同字段同 Order 替换；多值文本
-    /// 字段 <c>["a","b","c"] → ["x","y"]</c> 时 Order 0/1 原地改、Order 2 删除，无键碰撞）。
+    /// Uses <b>reconcile</b> rather than clear+add: rows for the same field value (by <see cref="DocumentFieldValue.FieldDefinitionId"/> +
+    /// <see cref="DocumentFieldValue.Order"/>, #212) are <b>updated in place</b>, missing rows are deleted, and new rows are inserted. Reason: under the composite key
+    /// <c>(DocumentId, FieldDefinitionId, Order)</c>, clear+add creates delete+insert for the same key within one SaveChanges,
+    /// risking unique conflicts / EF operation ordering issues. Changing <c>amount=100</c> to <c>200</c> is a same-field same-Order replacement;
+    /// changing multi-value text <c>["a","b","c"] -> ["x","y"]</c> updates Order 0/1 in place and deletes Order 2 without key collision.
     /// </para>
-    /// 原子状态变更，无需经 DomainService 中转（与 <see cref="SetMarkdown"/> 等必须与 pipeline 完成事务组合的 internal setter 不同）。
-    /// <b>前置条件</b>：<see cref="DocumentTypeId"/> 非空（字段挂在文档类型下；两条调用路径均在分类完成后调用）。
+    /// Atomic state change without DomainService mediation, unlike internal setters such as <see cref="SetMarkdown"/> that must be composed with pipeline completion transactions.
+    /// <b>Precondition</b>: <see cref="DocumentTypeId"/> is not null because fields hang off document types; both caller paths run after classification completes.
     /// </summary>
     public void SetFields(IEnumerable<DocumentFieldValue>? values)
     {
@@ -258,18 +259,18 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// 按位 set / clear 单个待审原因（#284）——原因写入的<b>唯一</b>入口。每个 bit 由唯一一个阶段维护
-    /// （UnresolvedClassification←分类阶段，内联于本类方法；MissingRequiredFields←字段抽取阶段，由 Application 层
-    /// handler / appservice 在写字段同一 UoW 内评估后调用），用按位操作保证两阶段互不覆盖
-    /// （聚合根不暴露整体 setter，防一个阶段误覆盖另一阶段的判定）。
-    /// <c>public</c> 是因 MRF 维度的写入点在 Application 层（跨程序集）；可见性放宽但仍约定"每 bit 单阶段维护"。
+    /// Bitwise set / clear for one review reason (#284): the <b>only</b> entry point for writing reasons. Each bit is maintained by exactly one phase
+    /// (UnresolvedClassification <- classification phase, inline in this class; MissingRequiredFields <- field extraction phase, called by the Application-layer
+    /// handler / appservice after evaluation in the same UoW as field writes). Bitwise operations ensure the two phases do not overwrite each other.
+    /// The aggregate root does not expose a whole-value setter, preventing one phase from accidentally overwriting another phase's decision.
+    /// <c>public</c> is required because the MRF write point lives in the Application layer across assemblies; visibility is broader, but the "one bit, one phase" rule still applies.
     /// </summary>
     public void SetReviewReason(DocumentReviewReasons reason, bool present)
     {
         ReviewReasons = present ? (ReviewReasons | reason) : (ReviewReasons & ~reason);
     }
 
-    // 高置信度路径：分类已定 → 清 UnresolvedClassification、处置回 NotReviewed。
+        // High-confidence path: classification is decided -> clear UnresolvedClassification and reset disposition to NotReviewed.
     internal void ApplyAutomaticClassificationResult(
         Guid documentTypeId,
         double classificationConfidence)
@@ -278,19 +279,19 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         ClassificationConfidence = Check.Range(classificationConfidence, nameof(classificationConfidence), 0d, 1d);
         SetReviewReason(DocumentReviewReasons.UnresolvedClassification, present: false);
         ReviewDisposition = DocumentReviewDisposition.NotReviewed;
-        RejectionReason = null; // #284 review-fix：离开 Rejected 处置 → 清陈旧拒绝理由（仅 Rejected 时该有值）
+        RejectionReason = null; // #284 review-fix: leaving Rejected disposition -> clear stale rejection reason; only Rejected should have one.
     }
 
     /// <summary>
-    /// 标记分类未定（待人工确认类型）：收回未确认的分类结果，置
-    /// <see cref="DocumentReviewReasons.UnresolvedClassification"/>（blocking），避免历史值污染外部读模型。
+    /// Marks classification as unresolved (waiting for operator-confirmed type): retracts the unconfirmed classification result and sets
+    /// <see cref="DocumentReviewReasons.UnresolvedClassification"/> (blocking), preventing stale values from polluting external read models.
     /// <para>
-    /// 不变量「无已确认类型 ⟹ 无类型绑定字段值」：类型被收回（<see cref="DocumentTypeId"/> = null）后，
-    /// 旧的 <see cref="ExtractedFieldValues"/> 不再属于任何已确认类型，必须一并清空——否则出口 DTO / MCP /
-    /// 导出会出现「无类型却带字段」的脏读模型（#267：自动重判落到低置信度时首次暴露）。重新确认类型
-    /// （<see cref="ConfirmClassification"/> 或高置信度重判 → <c>DocumentClassifiedEto</c> → 字段重抽）会补回字段。
-    /// 在聚合根一处收敛此不变量，省得在每个读路径各自按类型过滤（避免特例堆叠）。
-    /// 同时清 <see cref="DocumentReviewReasons.MissingRequiredFields"/>——无类型则必填维度不可判定，归零。
+    /// Invariant: "no confirmed type implies no type-bound field values". Once the type is retracted (<see cref="DocumentTypeId"/> = null),
+    /// old <see cref="ExtractedFieldValues"/> no longer belong to any confirmed type and must be cleared together. Otherwise export DTO / MCP /
+    /// export paths would expose a dirty model with fields but no type (#267 first exposed this when automatic reclassification fell to low confidence).
+    /// Re-confirming a type (<see cref="ConfirmClassification"/> or high-confidence reclassification -> <c>DocumentClassifiedEto</c> -> field re-extraction) will restore fields.
+    /// Centralizing this invariant in the aggregate root avoids per-read-path type filtering and special-case buildup.
+    /// Also clears <see cref="DocumentReviewReasons.MissingRequiredFields"/> because without a type, required-field status cannot be evaluated.
     /// </para>
     /// </summary>
     internal void RequestClassificationReview()
@@ -300,7 +301,7 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         SetReviewReason(DocumentReviewReasons.UnresolvedClassification, present: true);
         SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: false);
         ReviewDisposition = DocumentReviewDisposition.NotReviewed;
-        RejectionReason = null; // #284 review-fix：离开 Rejected 处置 → 清陈旧拒绝理由
+        RejectionReason = null; // #284 review-fix: leaving Rejected disposition -> clear stale rejection reason.
         _extractedFieldValues.Clear();
     }
 
@@ -308,28 +309,28 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     {
         DocumentTypeId = Check.NotDefaultOrNull<Guid>(documentTypeId, nameof(documentTypeId));
         ClassificationConfidence = 1.0;
-        // 人工确认类型 → 清 UC；MRF 由随后的字段重抽重算（此处先清，避免旧 schema 的必填判定残留）。
+        // Operator-confirmed type -> clear UC; MRF will be recomputed by subsequent field re-extraction. Clear it here first to avoid stale required-field decisions from the old schema.
         SetReviewReason(DocumentReviewReasons.UnresolvedClassification, present: false);
         SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: false);
         ReviewDisposition = DocumentReviewDisposition.Confirmed;
-        RejectionReason = null; // #284 review-fix：拒绝可恢复——Reclassify/Confirm 后清陈旧拒绝理由
+        RejectionReason = null; // #284 review-fix: rejection is recoverable; clear stale rejection reason after Reclassify / Confirm.
     }
 
     /// <summary>
-    /// 操作员拒绝审核（#284：理由<b>必填</b>）——把 <see cref="ReviewDisposition"/> 置为 Rejected（拒绝的权威信号）、
-    /// 写入 <see cref="RejectionReason"/>，并把 <see cref="LifecycleStatus"/> 落到 Failed 作为"宏观不可用"外观。
-    /// 保留原文件、Markdown、confidence、字段值与待审原因（<see cref="ReviewReasons"/> 不动）。
+    /// Operator rejects review (#284: reason is <b>required</b>): sets <see cref="ReviewDisposition"/> to Rejected as the authoritative rejection signal,
+    /// writes <see cref="RejectionReason"/>, and moves <see cref="LifecycleStatus"/> to Failed as the coarse "unavailable" appearance.
+    /// Keeps original file, Markdown, confidence, field values, and review reasons (<see cref="ReviewReasons"/> is unchanged).
     /// <para>
-    /// <b>拒绝可恢复，不是终态</b>（#237）：本方法只记录"操作员此刻拒绝"这一事实，不封死文档。操作员后续可对
-    /// 同一文档 Reclassify 指派类型——届时 <see cref="ConfirmClassification"/> 把 ReviewDisposition 转回 Confirmed、
-    /// 流水线派生回 Ready、<c>DocumentReadyEto</c> 重新发布；下游按 ETO 的 <c>EventTime</c> 单调幂等吸收重发
-    /// （见 CLAUDE.md 投递语义）。"曾被拒绝 → 已复审"的轨迹由 ABP 实体审计日志承载，不在聚合根上建吸收态 / Reopen 状态机。
+    /// <b>Rejection is recoverable, not terminal</b> (#237): this method only records the fact that the operator rejected it now; it does not seal the document.
+    /// The operator may later Reclassify the same document to assign a type. At that point <see cref="ConfirmClassification"/> moves ReviewDisposition back to Confirmed,
+    /// pipeline derivation returns it to Ready, and <c>DocumentReadyEto</c> is published again. Downstream consumers absorb the re-delivery monotonically and idempotently by ETO <c>EventTime</c>
+    /// (see CLAUDE.md delivery semantics). The "was rejected -> has been reviewed again" trail is carried by ABP entity audit logs, not by an absorbing state / Reopen state machine on the aggregate root.
     /// </para>
     /// <para>
-    /// <b>lifecycle 派生规则的合法例外</b>：通常 <see cref="LifecycleStatus"/> 由
-    /// <see cref="DocumentPipelineRunManager"/> 从 pipeline run 状态派生，此处直接 <see cref="TransitionLifecycle"/>
-    /// 到 Failed 是人工审核轴的合法越权。Failed 统一表示"宏观不可用"，<b>原因</b>由细分字段正交说明
-    /// （pipeline run = 技术失败；<see cref="ReviewDisposition"/> = Rejected = 操作员拒绝）。
+    /// <b>Valid exception to lifecycle derivation rules</b>: normally <see cref="LifecycleStatus"/> is derived by
+    /// <see cref="DocumentPipelineRunManager"/> from pipeline run state. Directly calling <see cref="TransitionLifecycle"/>
+    /// to Failed here is a valid override from the manual-review axis. Failed uniformly means "coarsely unavailable"; the <b>reason</b> is explained orthogonally by detailed fields
+    /// (pipeline run = technical failure; <see cref="ReviewDisposition"/> = Rejected = operator rejection).
     /// </para>
     /// </summary>
     public void RejectReview(string reason)
@@ -340,12 +341,12 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// 迁移 <see cref="LifecycleStatus"/> 并发 <see cref="DocumentLifecycleStatusChangedEvent"/>（仅在状态实变时）。
+    /// Transitions <see cref="LifecycleStatus"/> and emits <see cref="DocumentLifecycleStatusChangedEvent"/> only when the state actually changes.
     /// <para>
-    /// <b>无合法转移矩阵是有意的</b>（#237 Finding B）：除 <c>old == new</c> 短路外，任意 <c>(old, new)</c> 跳转都允许，
-    /// 包括 <c>Failed → Ready</c>（拒绝后 Reclassify 复活）与 <c>Ready → Processing → Ready</c>（已就绪文档手动重跑流水线）。
-    /// 二者都会重新派生 Ready 并重发 <c>DocumentReadyEto</c>——通道层不拦，由下游按 ETO 的 <c>EventTime</c> 单调幂等吸收
-    /// （CLAUDE.md 投递语义）。在网关聚合根上不引入硬状态机，是"通道保持简单、幂等交给下游"的有意取舍。
+    /// <b>The absence of a legal transition matrix is intentional</b> (#237 Finding B): except for the <c>old == new</c> short-circuit, any <c>(old, new)</c> transition is allowed,
+    /// including <c>Failed -> Ready</c> (revival by Reclassify after rejection) and <c>Ready -> Processing -> Ready</c> (manual pipeline rerun for an already-ready document).
+    /// Both derive Ready again and re-emit <c>DocumentReadyEto</c>. The channel layer does not block this; downstream consumers absorb it monotonically and idempotently by ETO <c>EventTime</c>
+    /// (CLAUDE.md delivery semantics). Not adding a hard state machine to the gateway aggregate root is an intentional tradeoff: keep the channel simple and push idempotency downstream.
     /// </para>
     /// </summary>
     internal void TransitionLifecycle(DocumentLifecycleStatus newStatus)

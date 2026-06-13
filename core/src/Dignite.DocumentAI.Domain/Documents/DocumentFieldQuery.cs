@@ -4,17 +4,24 @@ using Dignite.DocumentAI.Documents.Fields;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 已解析的单字段值查询——<see cref="IDocumentRepository.GetFieldMatchedIdsAsync"/> 的 <c>fieldQueries</c> 列表元素。
-/// 同一次检索可带多个，仓储把各元素编译成对 <see cref="Document.ExtractedFieldValues"/> 的一个 <c>Any</c>（EXISTS）
-/// 谓词、之间用 <c>AND</c> 拼接（结构化检索惯例：不同字段互相收窄）。
+/// Resolved single-field value query: one element of the <c>fieldQueries</c> list passed to
+/// <see cref="IDocumentRepository.GetFieldMatchedIdsAsync"/>. One search can include multiple
+/// queries. The repository compiles each element into one <c>Any</c> (EXISTS) predicate over
+/// <see cref="Document.ExtractedFieldValues"/> and combines them with <c>AND</c>, matching structured
+/// search convention where different fields narrow each other.
 /// <para>
-/// <see cref="FieldDefinitionId"/> 与 <see cref="FieldDataType"/> 由调用层（出口适配器）从 <c>FieldDefinition</c> 解析后填入
-/// （#207：内部按不可变 Id 匹配 child 行，不再按字段名字符串）——仓储据此用 <see cref="FieldDefinitionId"/> 定位 child、
-/// 再分派到对应类型化列做普通等值 / 区间比较；仓储不依赖其它聚合的仓储。<see cref="FieldName"/> 仅用于错误信息
-/// （可读诊断），不参与匹配。
+/// <see cref="FieldDefinitionId"/> and <see cref="FieldDataType"/> are resolved from
+/// <c>FieldDefinition</c> by the caller layer (outbound adapter) before being filled here (#207:
+/// internally match child rows by immutable Id, no longer by field-name string). The repository uses
+/// <see cref="FieldDefinitionId"/> to locate the child row, then dispatches to the corresponding typed
+/// column for plain equality / range comparisons. The repository does not depend on repositories for
+/// other aggregates. <see cref="FieldName"/> is used only for readable error diagnostics and does not
+/// participate in matching.
 /// </para>
-/// 等值（<see cref="FieldValue"/>）与区间（<see cref="FieldValueMin"/> / <see cref="FieldValueMax"/>）
-/// 至少给其一，否则该查询残缺 → 仓储 fail-closed 空结果，绝不退化成"该类型全捞"。
+/// At least one of equality (<see cref="FieldValue"/>) or range (<see cref="FieldValueMin"/> /
+/// <see cref="FieldValueMax"/>) must be provided. Otherwise the query is incomplete and the
+/// repository fails closed with an empty result instead of degrading to "return all documents of this
+/// type".
 /// </summary>
 public sealed record DocumentFieldQuery(
     Guid FieldDefinitionId,

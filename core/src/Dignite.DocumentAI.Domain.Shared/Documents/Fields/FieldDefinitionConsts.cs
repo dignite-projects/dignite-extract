@@ -7,15 +7,16 @@ public static class FieldDefinitionConsts
     public static int MaxPromptLength { get; set; } = 1024;
 
     /// <summary>
-    /// Field <see cref="FieldDefinition.Name"/> 白名单：仅允许字母 / 数字 / 下划线 / 短横线，1-64 字符。
-    /// 防 prompt injection——Name 会被字面拼进 LLM prompt 的 JSON schema 描述，
-    /// 不能允许换行 / 标点 / Markdown 控制字符渗入 prompt 上下文。
+    /// Whitelist for field <see cref="FieldDefinition.Name"/>: only letters / digits / underscore /
+    /// hyphen, 1-64 characters. Prompt injection defense: Name is concatenated literally into the JSON
+    /// schema description in the LLM prompt, so newlines / punctuation / Markdown control characters
+    /// must not enter prompt context.
     /// <para>
-    /// 必须是 <c>const</c>：这是 LLM prompt injection 防御链路的安全边界
-    /// （参见 <see cref="FieldDefinition"/> XML doc 与 <c>FieldExtractionWorkflow</c> 的相关注释）。
-    /// 任何运行时 mutate 都会把白名单打穿，攻击面凭空多一条；
-    /// 同时 <c>FieldDefinition</c> 类型加载时将本字段一次性 cache 成 static readonly Regex，
-    /// runtime 覆盖也不会生效，制造 footgun。
+    /// Must be <c>const</c>: this is a safety boundary in the LLM prompt injection defense chain; see
+    /// <see cref="FieldDefinition"/> XML docs and related comments in <c>FieldExtractionWorkflow</c>.
+    /// Any runtime mutation would pierce the whitelist and add an attack surface. Also,
+    /// <c>FieldDefinition</c> caches this field once into a static readonly Regex when the type loads,
+    /// so runtime overrides would not take effect and would become a footgun.
     /// </para>
     /// </summary>
     public const string NamePattern = @"^[A-Za-z0-9_\-]{1,64}$";

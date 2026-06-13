@@ -3,34 +3,38 @@ using System.Collections.Generic;
 namespace Dignite.DocumentAI.Documents.Pipelines;
 
 /// <summary>
-/// 核心层定义的流水线标识常量。
-/// 业务模块可注册自定义 PipelineCode（建议命名前缀 "{moduleCode}."），
-/// 但不会被计入生命周期派生。
+/// Pipeline identifier constants defined by the core layer.
+/// Business modules may register custom PipelineCode values, with "{moduleCode}." as the recommended
+/// naming prefix, but they are not included in lifecycle derivation.
 /// <para>
-/// <see cref="TextExtraction"/> / <see cref="Classification"/> 必须是 <c>const</c>：
-/// 它们持久化到 <c>DocumentPipelineRun.PipelineCode</c> 列、跨 JobArgs / ETO 载荷传递，
-/// 且用作 <c>DocumentPipelineJobScheduler</c> switch expression 的 constant pattern。
-/// 任何运行时 mutate 都会让历史 DB 数据按旧 code 写、新代码按新 code 查，分发逻辑断裂。
+/// <see cref="TextExtraction"/> / <see cref="Classification"/> must be <c>const</c>: they are
+/// persisted to the <c>DocumentPipelineRun.PipelineCode</c> column, passed across JobArgs / ETO
+/// payloads, and used as constant patterns in the <c>DocumentPipelineJobScheduler</c> switch
+/// expression. Any runtime mutation would make historical DB data write under the old code while new
+/// code reads under the new code, breaking dispatch logic.
 /// </para>
 /// </summary>
 public static class DocumentAIPipelines
 {
-    /// <summary>文本提取（OCR 或原生提取）。关键流水线。</summary>
+    /// <summary>Text extraction (OCR or native extraction). Key pipeline.</summary>
     public const string TextExtraction = "text-extraction";
 
-    /// <summary>文档分类（规则匹配 / AI）。关键流水线。</summary>
+    /// <summary>Document classification (rule matching / AI). Key pipeline.</summary>
     public const string Classification = "classification";
 
     /// <summary>
-    /// 类型绑定字段抽取（#289）。**非关键流水线、生命周期中性**——刻意不入 <see cref="KeyPipelines"/>，
-    /// 故 <c>DocumentPipelineRunManager.DeriveLifecycleAsync</c> 不据它派生 <c>LifecycleStatus</c>，
-    /// 重抽字段不会把已 Ready 文档打回 Processing。复用 <c>DocumentPipelineRun</c> 仅为拿可观测 + 重试，
-    /// 不参与 Ready 闸门。字段抽取的级联仍由分类完成事件（<c>FieldExtractionEventHandler</c>）驱动；
-    /// 本 pipeline 是「按需 / 批量字段重抽」重处理的独立触发入口。
+    /// Type-bound field extraction (#289). <b>Non-key pipeline, lifecycle-neutral</b>: intentionally
+    /// excluded from <see cref="KeyPipelines"/>, so
+    /// <c>DocumentPipelineRunManager.DeriveLifecycleAsync</c> does not derive
+    /// <c>LifecycleStatus</c> from it, and field re-extraction does not move an already Ready document
+    /// back to Processing. It reuses <c>DocumentPipelineRun</c> only for observability + retry and does
+    /// not participate in the Ready gate. Field-extraction cascade is still driven by the
+    /// classification-completed event (<c>FieldExtractionEventHandler</c>); this pipeline is the
+    /// independent trigger for on-demand / bulk field re-extraction.
     /// </summary>
     public const string FieldExtraction = "field-extraction";
 
-    /// <summary>生命周期派生时视为"关键"的流水线集合。<see cref="FieldExtraction"/> 刻意不在其中（生命周期中性）。</summary>
+    /// <summary>Pipelines considered "key" during lifecycle derivation. <see cref="FieldExtraction"/> is intentionally excluded because it is lifecycle-neutral.</summary>
     public static readonly IReadOnlyCollection<string> KeyPipelines = new[]
     {
         TextExtraction,
@@ -38,8 +42,8 @@ public static class DocumentAIPipelines
     };
 
     /// <summary>
-    /// 用户可手动重试的流水线集合。
-    /// 业务模块自定义的流水线不通过此 API 暴露重试。
+    /// Pipelines users can manually retry.
+    /// Custom pipelines from business modules are not exposed for retry through this API.
     /// </summary>
     public static readonly IReadOnlyCollection<string> RetryablePipelines = new[]
     {

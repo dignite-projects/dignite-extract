@@ -7,26 +7,33 @@ using Volo.Abp.MultiTenancy;
 namespace Dignite.DocumentAI.Documents.Cabinets;
 
 /// <summary>
-/// 文件柜——人工组织归属维度（#194），与 <see cref="DocumentTypes.DocumentType"/> 正交：前者答「属于哪个组 / 批次」
-/// （人工指定），后者答「这是什么」（AI 分类）。Guid 主键 + <see cref="Name"/> 层内唯一（<c>(TenantId, Name)</c>），
-/// <c>Document.CabinetId</c> 以可空 Guid 引用。
+/// Cabinet: the human organization ownership dimension (#194), orthogonal to
+/// <see cref="DocumentTypes.DocumentType"/>. Cabinet answers "which group / batch does it belong to"
+/// and is human-assigned; DocumentType answers "what is it" and is AI-classified. It uses a Guid
+/// primary key plus layer-unique <see cref="Name"/> (<c>(TenantId, Name)</c>), and
+/// <c>Document.CabinetId</c> references it with a nullable Guid.
 /// <para>
-/// 分类 / 字段抽取 pipeline 完全不读写 <c>CabinetId</c>。唯一例外是上传留空时的「AI 兜底选柜」（#265）：把本层柜的
-/// <see cref="Name"/> + <see cref="Description"/>（#273）经 <c>PromptBoundary.WrapField</c> 包裹喂 LLM 选一个——
-/// 独立一次性的上传时步骤，不使柜退化为第二个 DocumentType（详见 <c>CabinetSuggestionWorkflow</c>）。
+/// Classification / field-extraction pipelines never read or write <c>CabinetId</c>. The only
+/// exception is "AI fallback cabinet selection" when upload leaves it blank (#265): this feeds the
+/// current layer cabinet <see cref="Name"/> + <see cref="Description"/> (#273), wrapped with
+/// <c>PromptBoundary.WrapField</c>, to the LLM so it can choose one. This is an independent one-shot
+/// upload-time step and does not make cabinets degrade into a second DocumentType; see
+/// <c>CabinetSuggestionWorkflow</c>.
 /// </para>
 /// </summary>
 public class Cabinet : FullAuditedAggregateRoot<Guid>, IMultiTenant
 {
     public virtual Guid? TenantId { get; private set; }
 
-    /// <summary>柜名（运行时直接展示）。唯一约束 <c>(TenantId, Name)</c>，层内不可重名。</summary>
+    /// <summary>Cabinet name, shown directly at runtime. Unique constraint <c>(TenantId, Name)</c>; names cannot repeat within a layer.</summary>
     public virtual string Name { get; private set; } = default!;
 
     /// <summary>
-    /// 可选柜说明（#273）。与 <see cref="Name"/> 同列喂入 #265 选柜 prompt 辅助 AI 判归属；<c>null</c> = 无说明。
-    /// 同样经 <c>PromptBoundary.WrapField</c> 包裹进 LLM，故 <see cref="ValidateDescription"/> 拒控制字符做注入深度防御
-    /// （镜像 <c>DocumentType.Description</c>）。
+    /// Optional cabinet description (#273). Fed into the #265 cabinet-selection prompt alongside
+    /// <see cref="Name"/> to help AI decide ownership; <c>null</c> means no description. It is also
+    /// wrapped with <c>PromptBoundary.WrapField</c> before entering the LLM, so
+    /// <see cref="ValidateDescription"/> rejects control characters as prompt-injection
+    /// defense-in-depth, mirroring <c>DocumentType.Description</c>.
     /// </summary>
     public virtual string? Description { get; private set; }
 
@@ -46,7 +53,7 @@ public class Cabinet : FullAuditedAggregateRoot<Guid>, IMultiTenant
         Description = ValidateDescription(description);
     }
 
-    /// <summary>Name 卫生校验：拒控制字符。Name 经 #265 选柜 prompt 进 LLM（WrapField 包裹），此处拒控制字符兼作注入深度防御。</summary>
+    /// <summary>Name hygiene validation: reject control characters. Name enters the #265 cabinet-selection prompt wrapped with WrapField, so this also acts as prompt-injection defense-in-depth.</summary>
     private static string ValidateName(string name)
     {
         Check.NotNullOrWhiteSpace(name, nameof(name), CabinetConsts.MaxNameLength);
@@ -61,8 +68,10 @@ public class Cabinet : FullAuditedAggregateRoot<Guid>, IMultiTenant
     }
 
     /// <summary>
-    /// Description 可空（null / 空白 → 归一化为 <c>null</c>，选柜 prompt 不追加该行）。有值时：长度上限 + 拒控制字符
-    /// ——与 <see cref="ValidateName"/> 同源、镜像 <c>DocumentType.ValidateDescription</c> 的注入深度防御。
+    /// Description is nullable: null / blank is normalized to <c>null</c> and the cabinet-selection
+    /// prompt does not add that line. When present, it has a length limit and rejects control
+    /// characters, the same injection defense-in-depth as <see cref="ValidateName"/> and mirroring
+    /// <c>DocumentType.ValidateDescription</c>.
     /// </summary>
     private static string? ValidateDescription(string? description)
     {

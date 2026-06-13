@@ -3,43 +3,50 @@ using System.Collections.Generic;
 namespace Dignite.DocumentAI.Mcp.Documents;
 
 /// <summary>
-/// 文档类型字段 schema（MCP resource <c>docai://document-types/{code}</c> 的 read 投影，LLM-facing）。
-/// 让下游 AI 客户端发现某类型有哪些字段、什么数据类型，据此给检索 tool 的 <c>fieldFilters</c> / <c>includeFields</c>
-/// 填对字段名。<see cref="DisplayName"/> 是 admin 配置的用户派生文本，已经 <c>PromptBoundary.WrapField</c> 包裹
-/// （防 indirect prompt injection）；<see cref="TypeCode"/> / 字段 <c>Name</c> / <c>DataType</c> 是系统受控值
-/// （白名单 / 枚举），裸值。
+/// Document type field schema: the LLM-facing read projection for MCP resource
+/// <c>docai://document-types/{code}</c>. It lets downstream AI clients discover which fields a type
+/// has and what data types they use, so they can populate the search tool's <c>fieldFilters</c> /
+/// <c>includeFields</c> with correct field names. <see cref="DisplayName"/> is admin-configured
+/// user-derived text and is already wrapped with <c>PromptBoundary.WrapField</c> to prevent indirect
+/// prompt injection. <see cref="TypeCode"/> / field <c>Name</c> / <c>DataType</c> are
+/// system-controlled values (whitelist / enum), so they are emitted raw.
 /// </summary>
 public sealed record DocumentTypeSchema
 {
     public required string TypeCode { get; init; }
 
-    /// <summary>类型显示名（已 PromptBoundary 包裹）。</summary>
+    /// <summary>Type display name, already wrapped with PromptBoundary.</summary>
     public string? DisplayName { get; init; }
 
     public required IReadOnlyList<DocumentTypeFieldSchema> Fields { get; init; }
 }
 
 /// <summary>
-/// 单个字段的 schema 投影。<see cref="Name"/> 是 immutable 标识符（用于 <c>fieldFilters</c> / <c>includeFields</c>）；
-/// <see cref="DataType"/> 决定可用查询算子（Text / Boolean 仅等值，数字 / 日期可区间）；
-/// <see cref="AllowMultiple"/> 告知该字段在检索结果 <c>extractedFields</c> 里是数组还是标量（#212）；
-/// <see cref="DisplayName"/> 已 PromptBoundary 包裹。不含抽取指令 <c>Prompt</c>——抽取指令对查询 / 投影编排无用，
-/// 省 LLM context + 注入面。
+/// Schema projection for a single field. <see cref="Name"/> is the immutable identifier used in
+/// <c>fieldFilters</c> / <c>includeFields</c>. <see cref="DataType"/> determines available query
+/// operators: Text / Boolean support equality only, while numbers / dates support ranges.
+/// <see cref="AllowMultiple"/> tells clients whether the field appears in search-result
+/// <c>extractedFields</c> as an array or scalar (#212). <see cref="DisplayName"/> is already wrapped
+/// with PromptBoundary. Extraction instruction <c>Prompt</c> is intentionally omitted because it is
+/// useless for query / projection orchestration and would waste LLM context while increasing the
+/// injection surface.
 /// </summary>
 public sealed record DocumentTypeFieldSchema
 {
     public required string Name { get; init; }
 
-    /// <summary>字段数据类型（<c>FieldDataType</c> 枚举名：Text / Number / Boolean / Date / DateTime / LongText）。</summary>
+    /// <summary>Field data type (<c>FieldDataType</c> enum name: Text / Number / Boolean / Date / DateTime / LongText).</summary>
     public required string DataType { get; init; }
 
     /// <summary>
-    /// 是否多值（#212，仅文本字段可为 true）。为 true 时该字段在检索结果的 <c>extractedFields</c> 里是
-    /// <b>JSON 数组</b>（<c>string[]</c>）而非标量字符串——客户端据此正确解析。等值过滤仍按单个值匹配（命中含该值的文档）。
+    /// Whether the field is multi-value (#212, true only for text fields). When true, the field is a
+    /// <b>JSON array</b> (<c>string[]</c>) in search-result <c>extractedFields</c> rather than a scalar
+    /// string, so clients can parse it correctly. Equality filtering still matches one value and
+    /// returns documents containing that value.
     /// </summary>
     public bool AllowMultiple { get; init; }
 
-    /// <summary>字段显示名（已 PromptBoundary 包裹）。</summary>
+    /// <summary>Field display name, already wrapped with PromptBoundary.</summary>
     public string? DisplayName { get; init; }
 
     public bool IsRequired { get; init; }

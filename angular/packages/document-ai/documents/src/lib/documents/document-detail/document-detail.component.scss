@@ -13,7 +13,7 @@
   border: 1px solid #dee2e6;
 }
 
-// Markdown 预览（#274）：marked 渲染后的 HTML 排版。内容已过 Angular DomSanitizer 消毒。
+// Markdown preview (#274): typography for HTML rendered by marked. Content has passed Angular DomSanitizer.
 .markdown-body {
   font-size: 0.9rem;
   line-height: 1.6;

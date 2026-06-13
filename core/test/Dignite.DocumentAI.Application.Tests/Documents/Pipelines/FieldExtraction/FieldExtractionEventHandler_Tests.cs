@@ -32,8 +32,8 @@ public class FieldExtractionEventHandlerTestModule : AbpModule
         context.Services.AddSingleton(Substitute.For<IFieldDefinitionRepository>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
 
-        // FieldExtractionWorkflow 是具体类——用 ForPartsOf + 假 ctor 依赖，
-        // 测试 case 内对 virtual ExtractAsync 设 Returns/Throws。
+        // FieldExtractionWorkflow is a concrete class, so use ForPartsOf with fake constructor dependencies.
+        // Each test case configures the virtual ExtractAsync with Returns / Throws.
         var workflow = Substitute.ForPartsOf<FieldExtractionWorkflow>(
             Substitute.For<IChatClient>(),
             NullLogger<FieldExtractionWorkflow>.Instance);
@@ -42,14 +42,15 @@ public class FieldExtractionEventHandlerTestModule : AbpModule
 }
 
 /// <summary>
-/// <see cref="FieldExtractionEventHandler"/> 行为测试——重点覆盖三类正确性约束：
+/// Behavior tests for <see cref="FieldExtractionEventHandler"/>, focused on three correctness constraints:
 /// <list type="number">
-///   <item>**Reclassify race**：飞行期间被操作员 reclassify 的 stale 事件必须丢弃（不能用旧 schema 写入污染 ExtractedFields）</item>
-///   <item>**Cross-tenant 防护**：事件 TenantId 与 Document.TenantId 不一致时丢弃（防 DataFilter disable 路径泄漏）</item>
-///   <item>**ETO 契约**：FieldsExtractedEto 在空字段 / 有字段两条路径下都按 outbox 语义发布</item>
+///   <item>Reclassify race: stale events for documents reclassified by an operator while in flight must be discarded, so old-schema values cannot pollute ExtractedFields.</item>
+///   <item>Cross-tenant defense: discard events when TenantId and Document.TenantId mismatch, preventing leaks through DataFilter disable paths.</item>
+///   <item>ETO contract: FieldsExtractedEto is published with outbox semantics for both empty-field and populated-field paths.</item>
 /// </list>
-/// #207：handler 以 Document 当前 DocumentTypeId 为准读字段定义；事件 TypeCode 只作为 stale reclassify 辅助判断。
-/// 测试用 name/code → 稳定 Guid 派生保证 mock 一致。
+/// #207: handler reads field definitions according to the Document's current DocumentTypeId; event TypeCode is
+/// only a stale-reclassify helper.
+/// Tests derive stable Guids from name / code to keep mocks consistent.
 /// </summary>
 public class FieldExtractionEventHandler_Tests
     : DocumentAIApplicationTestBase<FieldExtractionEventHandlerTestModule>
@@ -99,7 +100,8 @@ public class FieldExtractionEventHandler_Tests
         _documentRepository
             .FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(doc);
-        // 空字段清空路径 + 写回路径改走 FindWithFieldValuesAsync（只 eager-load 字段值，不含 PipelineRuns）。
+        // Empty-field clearing path + write-back path use FindWithFieldValuesAsync, eager-loading only field values,
+        // not PipelineRuns.
         _documentRepository
             .FindWithFieldValuesAsync(doc.Id, Arg.Any<CancellationToken>())
             .Returns(doc);
@@ -118,7 +120,7 @@ public class FieldExtractionEventHandler_Tests
 
         await _handler.HandleEventAsync(evt);
 
-        // 即使没有字段定义，也要发空事件让下游 DocumentReady 推进
+        // Publish an empty event even with no field definitions, so downstream DocumentReady can advance.
         await _eventBus.Received(1).PublishAsync(
             Arg.Is<FieldsExtractedEto>(e =>
                 e.DocumentId == doc.Id &&
@@ -126,7 +128,7 @@ public class FieldExtractionEventHandler_Tests
                 e.FieldCount == 0),
             Arg.Any<bool>(), Arg.Any<bool>());
 
-        // LLM 不应被调用——无字段定义直接 short-circuit
+        // LLM should not be called; no field definitions short-circuit directly.
         await _workflow.DidNotReceive().ExtractAsync(
             Arg.Any<IReadOnlyList<FieldExtractionDescriptor>>(),
             Arg.Any<string>(),
@@ -136,7 +138,8 @@ public class FieldExtractionEventHandler_Tests
     [Fact]
     public async Task No_Field_Definitions_Clears_Stale_Fields_From_Previous_Type()
     {
-        // reclassify 到无字段定义的类型：旧 schema 残留字段行必须被清空（#206 验收「reclassify 不残留旧 schema」+ 审查发现 #1）。
+        // Reclassifying to a type with no field definitions must clear stale field rows from the old schema
+        // (#206 acceptance: reclassify leaves no old-schema residue; review finding #1).
         var doc = CreateDocument(tenantId: null, typeCode: "blank.type");
         doc.SetFields(new[]
         {
@@ -148,7 +151,8 @@ public class FieldExtractionEventHandler_Tests
         _documentRepository
             .FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(doc);
-        // 空字段清空路径 + 写回路径改走 FindWithFieldValuesAsync（只 eager-load 字段值，不含 PipelineRuns）。
+        // Empty-field clearing path + write-back path use FindWithFieldValuesAsync, eager-loading only field values,
+        // not PipelineRuns.
         _documentRepository
             .FindWithFieldValuesAsync(doc.Id, Arg.Any<CancellationToken>())
             .Returns(doc);
@@ -204,7 +208,7 @@ public class FieldExtractionEventHandler_Tests
 
         await _handler.HandleEventAsync(evt);
 
-        // FieldsExtractedEto 不应发布——Document 都没了，下游消费方没用
+        // FieldsExtractedEto should not be published; the Document is gone, so downstream consumers cannot use it.
         await _eventBus.DidNotReceive().PublishAsync(
             Arg.Any<FieldsExtractedEto>(), Arg.Any<bool>(), Arg.Any<bool>());
     }
@@ -212,16 +216,17 @@ public class FieldExtractionEventHandler_Tests
     [Fact]
     public async Task Cross_Tenant_Event_Is_Discarded_Without_Writing_Fields()
     {
-        // CLAUDE.md "## 安全约定 / 多租户隔离"：
-        // 事件 TenantId 与 Document.TenantId 不一致 → 防 DataFilter disable 路径泄漏
+        // CLAUDE.md "Security covenant / multi-tenant isolation":
+        // event TenantId and Document.TenantId mismatch -> prevent leaks through DataFilter disable paths.
         var eventTenant = Guid.NewGuid();
-        var docTenant = Guid.NewGuid();   // 不同租户
+        var docTenant = Guid.NewGuid();   // Different tenant.
         var doc = CreateDocument(tenantId: docTenant, typeCode: "contract.general");
         SetupType("contract.general");
         _documentRepository
             .FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(doc);
-        // 空字段清空路径 + 写回路径改走 FindWithFieldValuesAsync（只 eager-load 字段值，不含 PipelineRuns）。
+        // Empty-field clearing path + write-back path use FindWithFieldValuesAsync, eager-loading only field values,
+        // not PipelineRuns.
         _documentRepository
             .FindWithFieldValuesAsync(doc.Id, Arg.Any<CancellationToken>())
             .Returns(doc);
@@ -256,18 +261,20 @@ public class FieldExtractionEventHandler_Tests
     [Fact]
     public async Task Stale_TypeCode_From_Reclassify_Race_Is_Discarded()
     {
-        // Reclassify race 防护——核心安全约束：
-        // 事件载荷 DocumentTypeCode=contract.general，但 Document 当前已被操作员
-        // reclassify 成 invoice.general（DocumentTypeId 不同）。继续抽取会用旧 schema (contract) 写入
-        // ExtractedFields，造成"TypeId=invoice 但字段来自 contract"的脏状态。
-        // 正确做法：丢弃 stale 事件，等新分类事件触发新一轮抽取。
+        // Reclassify race defense, the core safety constraint:
+        // the event payload has DocumentTypeCode=contract.general, but the current Document has already been
+        // reclassified by an operator to invoice.general with a different DocumentTypeId. Continuing extraction
+        // would write old contract-schema values into ExtractedFields, creating a dirty state where TypeId=invoice
+        // but fields come from contract. Correct behavior: discard the stale event and wait for the new
+        // classification event to trigger another extraction.
         var doc = CreateDocument(tenantId: null, typeCode: "invoice.general");
         SetupType("contract.general");
         SetupType("invoice.general");
         _documentRepository
             .FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(doc);
-        // 空字段清空路径 + 写回路径改走 FindWithFieldValuesAsync（只 eager-load 字段值，不含 PipelineRuns）。
+        // Empty-field clearing path + write-back path use FindWithFieldValuesAsync, eager-loading only field values,
+        // not PipelineRuns.
         _documentRepository
             .FindWithFieldValuesAsync(doc.Id, Arg.Any<CancellationToken>())
             .Returns(doc);
@@ -292,7 +299,8 @@ public class FieldExtractionEventHandler_Tests
 
         await _handler.HandleEventAsync(staleEvent);
 
-        // 关键断言：不能把基于 contract schema 抽取的字段写入 Document（现在 typeId=invoice）
+        // Key assertion: fields extracted from the contract schema must not be written to the Document, whose
+        // current typeId is invoice.
         doc.ExtractedFieldValues.ShouldBeEmpty();
         await _documentRepository.DidNotReceive().UpdateAsync(
             Arg.Any<Document>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
@@ -308,12 +316,14 @@ public class FieldExtractionEventHandler_Tests
         _documentRepository
             .FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(doc);
-        // 空字段清空路径 + 写回路径改走 FindWithFieldValuesAsync（只 eager-load 字段值，不含 PipelineRuns）。
+        // Empty-field clearing path + write-back path use FindWithFieldValuesAsync, eager-loading only field values,
+        // not PipelineRuns.
         _documentRepository
             .FindWithFieldValuesAsync(doc.Id, Arg.Any<CancellationToken>())
             .Returns(doc);
 
-        // 类型与 DataType 对齐（生产中 workflow 已校验类型；amount=Number 数字、party=Text 字符串、date=Date）。
+        // Values align with DataType. In production, workflow has already validated types:
+        // amount=Number numeric, party=Text string, date=Date.
         var defs = new List<FieldDefinition>
         {
             CreateFieldDefinition("contract.general", "amount", FieldDataType.Number),
@@ -332,7 +342,7 @@ public class FieldExtractionEventHandler_Tests
             {
                 ["amount"] = JsonDocument.Parse("1500").RootElement,
                 ["party"] = JsonDocument.Parse("\"Acme Corp\"").RootElement,
-                ["date"] = null   // LLM 未能抽到——不应进入字段集
+                ["date"] = null   // LLM failed to extract it, so it should not enter the field set.
             });
 
         var evt = new DocumentClassifiedEto
@@ -346,7 +356,7 @@ public class FieldExtractionEventHandler_Tests
 
         await _handler.HandleEventAsync(evt);
 
-        // 字段值按 FieldDefinitionId 写入（#207）；null 值不入字段集。
+        // Field values are written by FieldDefinitionId (#207); null values do not enter the field set.
         var fieldIds = doc.ExtractedFieldValues.Select(f => f.FieldDefinitionId).ToList();
         fieldIds.Count.ShouldBe(2);
         fieldIds.ShouldContain(FieldId("amount"));
@@ -356,7 +366,7 @@ public class FieldExtractionEventHandler_Tests
         await _documentRepository.Received(1).UpdateAsync(
             doc, Arg.Any<bool>(), Arg.Any<CancellationToken>());
 
-        // FieldCount 等于实际非空字段数，不是 definition 总数
+        // FieldCount equals actual non-null field count, not total definition count.
         await _eventBus.Received(1).PublishAsync(
             Arg.Is<FieldsExtractedEto>(e =>
                 e.DocumentId == doc.Id &&
@@ -368,15 +378,17 @@ public class FieldExtractionEventHandler_Tests
     [Fact]
     public async Task Renamed_TypeCode_Event_Uses_Current_DocumentTypeId_And_Publishes_Current_Code()
     {
-        // TypeCode rename race：事件里还是旧 code，但 DocumentTypeId 是稳定内部关联。
-        // 旧 code 解析不到时不应跳过抽取；应按当前类型 Id 抽取并发布当前 TypeCode。
+        // TypeCode rename race: event still has the old code, but DocumentTypeId is the stable internal relation.
+        // When the old code cannot be resolved, extraction should not be skipped; it should extract by current
+        // type Id and publish the current TypeCode.
         var typeId = TypeId("contract.general");
         var doc = CreateDocument(tenantId: null, documentTypeId: typeId);
         SetupType("contract.renamed", typeId: typeId);
         _documentRepository
             .FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(doc);
-        // 空字段清空路径 + 写回路径改走 FindWithFieldValuesAsync（只 eager-load 字段值，不含 PipelineRuns）。
+        // Empty-field clearing path + write-back path use FindWithFieldValuesAsync, eager-loading only field values,
+        // not PipelineRuns.
         _documentRepository
             .FindWithFieldValuesAsync(doc.Id, Arg.Any<CancellationToken>())
             .Returns(doc);
@@ -423,13 +435,15 @@ public class FieldExtractionEventHandler_Tests
     [Fact]
     public async Task DataType_Changed_During_Extraction_Skips_Stale_Value()
     {
-        // LLM 调用期间 admin 把字段类型 Number 改成 Text：旧 descriptor 抽到的 number 不能写进当前 文本字段。
+        // While the LLM call is in flight, an admin changes the field type from Number to Text. The number extracted
+        // from the old descriptor must not be written into the current text field.
         var doc = CreateDocument(tenantId: null, typeCode: "contract.general");
         SetupType("contract.general");
         _documentRepository
             .FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(doc);
-        // 空字段清空路径 + 写回路径改走 FindWithFieldValuesAsync（只 eager-load 字段值，不含 PipelineRuns）。
+        // Empty-field clearing path + write-back path use FindWithFieldValuesAsync, eager-loading only field values,
+        // not PipelineRuns.
         _documentRepository
             .FindWithFieldValuesAsync(doc.Id, Arg.Any<CancellationToken>())
             .Returns(doc);
@@ -481,7 +495,8 @@ public class FieldExtractionEventHandler_Tests
     [Fact]
     public async Task Missing_Required_Field_Sets_MissingRequiredFields_Reason()
     {
-        // #284：required 字段没抽到 → 抽取完成那一刻物化 MissingRequiredFields（non-blocking，进操作员队列）。
+        // #284: required field was not extracted -> materialize MissingRequiredFields when extraction completes.
+        // It is non-blocking and enters the operator queue.
         var doc = CreateDocument(tenantId: null, typeCode: "contract.general");
         SetupType("contract.general");
         _documentRepository.FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(doc);
@@ -502,7 +517,7 @@ public class FieldExtractionEventHandler_Tests
                 Arg.Any<CancellationToken>())
             .Returns(new Dictionary<string, JsonElement?>
             {
-                ["amount"] = null,   // required 缺
+                ["amount"] = null,   // Required value is missing.
                 ["party"] = JsonDocument.Parse("\"Acme\"").RootElement
             });
 
@@ -522,7 +537,8 @@ public class FieldExtractionEventHandler_Tests
     [Fact]
     public async Task All_Required_Fields_Present_Does_Not_Set_MissingRequiredFields()
     {
-        // #284：required 字段都抽到 → 不置 MissingRequiredFields（不进必填队列）。
+        // #284: all required fields were extracted -> do not set MissingRequiredFields, so it does not enter the
+        // required-field queue.
         var doc = CreateDocument(tenantId: null, typeCode: "contract.general");
         SetupType("contract.general");
         _documentRepository.FindAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>()).Returns(doc);
@@ -587,7 +603,8 @@ public class FieldExtractionEventHandler_Tests
                 fileSize: 1024,
                 originalFileName: "test.pdf"));
 
-        // 走 internal 通道写入 DocumentTypeId 模拟分类已完成状态（#207：分类结果是内部 Id）
+        // Use the internal channel to write DocumentTypeId and simulate the classified state (#207: classification
+        // result is the internal Id).
         typeof(Document)
             .GetMethod("ApplyAutomaticClassificationResult",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!

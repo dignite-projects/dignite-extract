@@ -16,7 +16,7 @@
       </div>
 
       <div class="modal-body" [formGroup]="form">
-        <!-- 范围选择：由人按意图选，系统不预设默认 -->
+        <!-- Scope selection: humans choose by intent; the system does not prescribe a default. -->
         <div class="mb-3">
           <label class="form-label fw-semibold">{{ '::Document:Reprocess:Reclassification:Scope' | abpLocalization }}</label>
 
@@ -50,7 +50,7 @@
           </div>
         </div>
 
-        <!-- 保护人工确认（默认开启）：勾选才连人工确认的也重分 -->
+        <!-- Protect manual confirmations by default; checked means manually confirmed documents are reclassified too. -->
         <div class="form-check mb-3" [class.opacity-50]="!includeToggleApplies">
           <input class="form-check-input" type="checkbox" formControlName="includeManuallyConfirmed"
                  id="include-confirmed" />
@@ -60,7 +60,7 @@
           </label>
         </div>
 
-        <!-- 受影响文档数预览 -->
+        <!-- Affected document count preview. -->
         <div class="alert alert-secondary py-2">
           @if (isLoadingPreview()) {
             <span class="spinner-border spinner-border-sm me-2"></span>
@@ -77,7 +77,7 @@
           }
         </div>
 
-        <!-- 重警告：级联 + 破坏性 -->
+        <!-- Strong warning: cascading and destructive. -->
         <div class="alert alert-danger mb-0 small">
           <i class="fas fa-triangle-exclamation me-1"></i>
           {{ '::Document:Reprocess:Reclassification:Warning' | abpLocalization }}

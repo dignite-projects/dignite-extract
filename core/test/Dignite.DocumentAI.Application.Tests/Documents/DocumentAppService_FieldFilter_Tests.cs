@@ -12,11 +12,14 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// <see cref="DocumentAppService.GetListAsync"/> 字段值过滤的输入校验 + 字段定义解析行为（验证上移重构）。
-/// 复用 <see cref="DocumentAppServiceReviewTestModule"/> 的 mock 仓储；这些用例都在触达 <c>GetQueryableAsync</c>
-/// 之前短路——DTO 校验抛 <see cref="AbpValidationException"/>（loud，替掉旧的静默空）/ 未定义字段抛
-/// <see cref="BusinessException"/>，故无需真实 DB。实际字段值匹配（<c>GetFieldMatchedIdsAsync</c> 的
-/// Documents-anchored LINQ）由 <c>EfCoreDocumentRepositorySearch_Tests</c> 在真实 EF（SQLite）上覆盖。
+/// Input validation and field-definition resolution behavior for field value filters in
+/// <see cref="DocumentAppService.GetListAsync"/> (verifies the refactor that moved validation upward).
+/// Reuses mock repositories from <see cref="DocumentAppServiceReviewTestModule"/>. These cases short-
+/// circuit before reaching <c>GetQueryableAsync</c>: DTO validation throws
+/// <see cref="AbpValidationException"/> loudly, replacing the old silent-empty behavior, and undefined
+/// fields throw <see cref="BusinessException"/>. No real DB is needed. Actual field value matching,
+/// <c>GetFieldMatchedIdsAsync</c>'s Documents-anchored LINQ, is covered by
+/// <c>EfCoreDocumentRepositorySearch_Tests</c> against real EF (SQLite).
 /// </summary>
 public class DocumentAppService_FieldFilter_Tests
     : DocumentAIApplicationTestBase<DocumentAppServiceReviewTestModule>
@@ -35,7 +38,8 @@ public class DocumentAppService_FieldFilter_Tests
     [Fact]
     public async Task Requires_document_type_when_field_filters_present()
     {
-        // 无 DocumentTypeCode + 有 FieldFilters → GetDocumentListInput.Validate 失败（字段值离开类型无确定含义）。
+        // No DocumentTypeCode plus FieldFilters makes GetDocumentListInput.Validate fail, because field
+        // values have no deterministic meaning outside a type.
         await Should.ThrowAsync<AbpValidationException>(() => _appService.GetListAsync(new GetDocumentListInput
         {
             FieldFilters = new List<DocumentFieldFilter> { new() { Name = "amount", Value = "100" } }
@@ -45,7 +49,7 @@ public class DocumentAppService_FieldFilter_Tests
     [Fact]
     public async Task Rejects_filter_without_value()
     {
-        // filter 无任何值（等值 / 区间皆缺）→ DocumentFieldFilter.Validate 失败。
+        // Filter has no value at all, neither equality nor range, so DocumentFieldFilter.Validate fails.
         await Should.ThrowAsync<AbpValidationException>(() => _appService.GetListAsync(new GetDocumentListInput
         {
             DocumentTypeCode = "host.contract",
@@ -56,7 +60,7 @@ public class DocumentAppService_FieldFilter_Tests
     [Fact]
     public async Task Rejects_invalid_field_name()
     {
-        // 字段名含白名单外字符 → [RegularExpression] 失败。
+        // Field name contains characters outside the allowlist, so [RegularExpression] fails.
         await Should.ThrowAsync<AbpValidationException>(() => _appService.GetListAsync(new GetDocumentListInput
         {
             DocumentTypeCode = "host.contract",
@@ -71,7 +75,7 @@ public class DocumentAppService_FieldFilter_Tests
             .Select(i => new DocumentFieldFilter { Name = $"f{i}", Value = "x" })
             .ToList();
 
-        // 超过 MaxSearchFieldFilters → [MaxLength] 失败。
+        // Exceeds MaxSearchFieldFilters, so [MaxLength] fails.
         await Should.ThrowAsync<AbpValidationException>(() => _appService.GetListAsync(new GetDocumentListInput
         {
             DocumentTypeCode = "host.contract",
@@ -82,7 +86,7 @@ public class DocumentAppService_FieldFilter_Tests
     [Fact]
     public async Task Throws_when_field_not_defined_on_type()
     {
-        // #207：AppService 先把 TypeCode 解析为内部 DocumentTypeId，再按 Id 解析字段。
+        // #207: AppService first resolves TypeCode to internal DocumentTypeId, then resolves fields by id.
         var typeId = Guid.NewGuid();
         _documentTypeRepository
             .FindByTypeCodeAsync("host.contract", Arg.Any<CancellationToken>())
@@ -91,7 +95,8 @@ public class DocumentAppService_FieldFilter_Tests
             .FindByNameAsync(typeId, "ghost", Arg.Any<CancellationToken>())
             .Returns((FieldDefinition?)null);
 
-        // DTO 校验通过，但该类型下无 "ghost" 字段 → loud fail（UnknownExtractedField，可纠正），不静默空。
+        // DTO validation passes, but this type has no "ghost" field, so fail loudly with
+        // UnknownExtractedField, a correctable error, instead of silently returning empty.
         var ex = await Should.ThrowAsync<BusinessException>(() => _appService.GetListAsync(new GetDocumentListInput
         {
             DocumentTypeCode = "host.contract",

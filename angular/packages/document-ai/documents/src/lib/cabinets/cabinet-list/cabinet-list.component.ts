@@ -168,7 +168,8 @@ export class CabinetListComponent implements OnInit {
 
     this.isSubmitting.set(true);
     const raw = this.form.getRawValue();
-    // 空白描述归一化为 undefined——后端 ValidateDescription 同样把空白视作"无说明"。
+    // Normalize blank descriptions to undefined; backend ValidateDescription also treats blanks as
+    // "no description".
     const description = raw.description.trim() || undefined;
 
     if (mode === 'create') {

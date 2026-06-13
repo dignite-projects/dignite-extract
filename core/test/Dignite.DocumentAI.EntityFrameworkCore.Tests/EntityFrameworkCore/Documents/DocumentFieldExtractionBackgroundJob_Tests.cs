@@ -29,7 +29,8 @@ public class FieldExtractionJobTestModule : AbpModule
     {
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
 
-        // 直接注册 stub workflow 实例（ForPartsOf 经真实 ctor 构造，DI 取该单例，绕开 keyed IChatClient 解析）。
+        // Register the stub workflow instance directly. ForPartsOf uses the real constructor; DI takes this
+        // singleton and bypasses keyed IChatClient resolution.
         var workflow = Substitute.ForPartsOf<FieldExtractionWorkflow>(
             Substitute.For<IChatClient>(), NullLogger<FieldExtractionWorkflow>.Instance);
         context.Services.AddSingleton(workflow);
@@ -37,9 +38,11 @@ public class FieldExtractionJobTestModule : AbpModule
 }
 
 /// <summary>
-/// <see cref="DocumentFieldExtractionBackgroundJob"/> 的 UoW 边界回归测试（<c>.claude/rules/background-jobs.md</c>
-/// "Tests" 要求）：外部 LLM 调用（<see cref="FieldExtractionWorkflow.ExtractAsync"/>）必须在任何 ambient UoW 之外执行。
-/// 同时验证 field-extraction run 落地 Succeeded + 字段值写入（端到端经真实 EF）。
+/// UoW-boundary regression tests for <see cref="DocumentFieldExtractionBackgroundJob"/>, required by
+/// <c>.claude/rules/background-jobs.md</c> "Tests": external LLM calls
+/// (<see cref="FieldExtractionWorkflow.ExtractAsync"/>) must execute outside any ambient UoW.
+/// Also verifies that the field-extraction run is persisted as Succeeded and field values are written end to end
+/// through real EF.
 /// </summary>
 public class DocumentFieldExtractionBackgroundJob_Tests
     : DocumentAITestBase<FieldExtractionJobTestModule>
@@ -86,7 +89,8 @@ public class DocumentFieldExtractionBackgroundJob_Tests
             await _documentRepository.InsertAsync(doc, autoSave: true);
         });
 
-        // 核心断言：LLM 调用发生时不在任何 ambient UoW 内（background-jobs.md 短 UoW 硬约束）。
+        // Core assertion: the LLM call occurs outside any ambient UoW, matching the background-jobs.md short-UoW
+        // hard constraint.
         _workflow
             .ExtractAsync(Arg.Any<IReadOnlyList<FieldExtractionDescriptor>>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
@@ -95,7 +99,7 @@ public class DocumentFieldExtractionBackgroundJob_Tests
                 return new Dictionary<string, JsonElement?> { ["amount"] = JsonDocument.Parse("1500").RootElement };
             });
 
-        // PipelineRunId=null —— 批量路径形态：作业内 StartAsync 自建 field-extraction run。
+        // PipelineRunId=null: bulk-path shape. The job creates its own field-extraction run through StartAsync.
         await _job.ExecuteAsync(new DocumentFieldExtractionJobArgs { DocumentId = documentId, PipelineRunId = null });
 
         await _workflow.Received(1).ExtractAsync(
@@ -110,7 +114,7 @@ public class DocumentFieldExtractionBackgroundJob_Tests
             var doc = await _documentRepository.FindWithFieldValuesAsync(documentId);
             doc!.ExtractedFieldValues.Single().FieldDefinitionId.ShouldBe(fieldId);
 
-            // 生命周期中性：field-extraction 非 key pipeline，未把文档推进/打回。
+            // Lifecycle-neutral: field-extraction is not a key pipeline and does not advance or roll back the document.
             doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Processing);
         });
     }

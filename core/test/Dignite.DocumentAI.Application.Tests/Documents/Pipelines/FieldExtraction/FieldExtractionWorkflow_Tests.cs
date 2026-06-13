@@ -13,9 +13,10 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// <see cref="FieldExtractionWorkflow"/> 的归一化 / 强校验语义（Issue #204 任务 2）。
-/// IChatClient 用 NSubstitute 替代（无真实 LLM）；只验证「LLM 输出按声明 <see cref="FieldDataType"/>
-/// 校验——合类型保留、不合类型存 null」这套自有逻辑（与操作员手改路径共用 ExtractedFieldValueValidator）。
+/// Normalization / strict-validation semantics for <see cref="FieldExtractionWorkflow"/> (Issue #204 task 2).
+/// IChatClient is replaced with NSubstitute, with no real LLM. These tests verify only service-owned logic:
+/// LLM output is validated according to the declared <see cref="FieldDataType"/>. Matching types are kept;
+/// mismatches are stored as null. This shares ExtractedFieldValueValidator with the operator manual-edit path.
 /// </summary>
 public class FieldExtractionWorkflow_Tests
 {
@@ -36,7 +37,7 @@ public class FieldExtractionWorkflow_Tests
     private static FieldExtractionDescriptor Field(string name, FieldDataType type)
         => new(System.Guid.NewGuid(), name, $"Extract {name}.", type, false, false);
 
-    // #212：多值文本字段（AllowMultiple）。
+    // #212: multi-value text field (AllowMultiple).
     private static FieldExtractionDescriptor MultiField(string name)
         => new(System.Guid.NewGuid(), name, $"Extract {name}.", FieldDataType.Text, false, true);
 
@@ -75,11 +76,12 @@ public class FieldExtractionWorkflow_Tests
     [Fact]
     public async Task Nulls_values_that_do_not_match_declared_type()
     {
-        // 脏值：货币串给 Number、非 ISO 日期给 Date、字符串 "true" 给 Boolean、数字给文本、布尔给 Number。
-        // 全部应被强校验拦下存 null——保证 ExtractedFields 类型自洽（任务 3 类型化查询的干净数据前提）。
+        // Dirty values: currency string for Number, non-ISO date for Date, string "true" for Boolean,
+        // number for Text, and boolean for Number. All should be blocked by strict validation and stored as null,
+        // preserving ExtractedFields type consistency for task 3 typed-query clean-data assumptions.
         var json = """
         {
-          "amount": "约10万",
+          "amount": "about 100k",
           "signed_on": "2024/01/15",
           "active": "true",
           "party": 123,
@@ -109,8 +111,8 @@ public class FieldExtractionWorkflow_Tests
     [Fact]
     public async Task DateTime_must_be_offset_free_wall_clock()
     {
-        // 通道 DateTime 字段统一为无偏移 wall-clock——带偏移 / Z 的值会让 datetime2 列比较随服务器时区
-        // 漂移，故抽取阶段就拦下存 null（Codex 评审 finding 2）。
+        // Channel DateTime fields are offset-free wall-clock values. Offset / Z values make datetime2 column
+        // comparisons drift with server time zones, so extraction blocks them and stores null (Codex review finding 2).
         var json = """
         {
           "offset_free": "2024-01-01T10:00:00",
@@ -168,7 +170,8 @@ public class FieldExtractionWorkflow_Tests
     [Fact]
     public async Task Multi_value_string_field_keeps_json_array_and_rejects_non_array()
     {
-        // #212：多值文本字段——返回 JSON 数组（每元素合法 string）保留；标量 / 含非字符串元素的数组判不合类型存 null。
+        // #212: multi-value text fields keep JSON arrays when every element is a valid string. Scalars and arrays
+        // with non-string elements are treated as type mismatches and stored as null.
         var json = """
         {
           "tags": ["urgent", "legal", "2026"],
@@ -189,14 +192,15 @@ public class FieldExtractionWorkflow_Tests
 
         result["tags"]!.Value.ValueKind.ShouldBe(System.Text.Json.JsonValueKind.Array);
         result["tags"]!.Value.GetArrayLength().ShouldBe(3);
-        result["scalar_tags"].ShouldBeNull();   // 多值字段收到标量 → 不合类型 → null
-        result["bad_tags"].ShouldBeNull();       // 数组含非 string 元素 → null
+        result["scalar_tags"].ShouldBeNull();   // Multi-value field received a scalar: type mismatch -> null.
+        result["bad_tags"].ShouldBeNull();       // Array contains a non-string element -> null.
     }
 
     [Fact]
     public async Task Multi_value_array_exceeding_count_cap_is_nulled()
     {
-        // #212：超过 MaxMultiValueCount 的数组整组判不合法 → 存 null（防注入诱导行膨胀的硬护栏）。
+        // #212: arrays exceeding MaxMultiValueCount are rejected as a whole and stored as null, a hard guardrail
+        // against injection-induced row growth.
         var elements = string.Join(",", Enumerable.Range(0, DocumentExtractedFieldConsts.MaxMultiValueCount + 1)
             .Select(i => $"\"t{i}\""));
         var workflow = CreateWorkflow($$"""{ "tags": [{{elements}}] }""");

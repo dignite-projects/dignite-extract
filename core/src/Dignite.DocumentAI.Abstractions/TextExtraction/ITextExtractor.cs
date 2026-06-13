@@ -5,44 +5,52 @@ using System.Threading.Tasks;
 namespace Dignite.DocumentAI.Abstractions.TextExtraction;
 
 /// <summary>
-/// 文本提取能力端口。纯能力——收文件流与上下文，返回提取结果；
-/// 不知道 Document 聚合、不访问仓储。
-/// 实现：Dignite.DocumentAI.TextExtraction
+/// Text extraction capability port. It is a pure capability: receives a file stream and context,
+/// returns an extraction result, knows nothing about the Document aggregate, and does not access
+/// repositories.
+/// Implementation: Dignite.DocumentAI.TextExtraction.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Markdown-first 契约</b>：实现方<b>必须</b>在
-/// <see cref="TextExtractionResult.Markdown"/> 中返回 Markdown 文本。Markdown 同时被向量化（结构感知切块）、
-/// LLM 分类 / QA / Rerank、业务模块字段抽取消费。
+/// <b>Markdown-first contract</b>: implementations <b>must</b> return Markdown text in
+/// <see cref="TextExtractionResult.Markdown"/>. Markdown is consumed by vectorization
+/// (structure-aware chunking), LLM classification / QA / rerank, and business-module field
+/// extraction.
 /// </para>
 /// <para>
-/// <b>对结构化文档而言</b>（合同 / 报告 / CSV / 带标题的 DOCX / layout-aware OCR 输出），
-/// 标题、表格、列表是 LLM 推理的真信号。
-/// <b>对无结构内容而言</b>（OCR 散段落 / 纯 txt / PP-OCRv4 行级输出），扁平 Markdown 段落与纯文本双换行重组字面相同——
-/// Markdown 是<b>容器命名</b>而非信号增益，保留此路径只是为了下游消费一种格式。
+/// <b>For structured documents</b> (contracts / reports / CSV / titled DOCX / layout-aware OCR
+/// output), headings, tables, and lists are real LLM reasoning signals.
+/// <b>For unstructured content</b> (loose OCR paragraphs / plain txt / PP-OCRv4 line output), flat
+/// Markdown paragraphs are literally equivalent to plain text reassembled with double newlines.
+/// Markdown is a <b>container name</b>, not a signal gain, and this path exists so downstream
+/// consumers always consume one format.
 /// </para>
 /// <para>
-/// 即使源文件没有结构，仍应以扁平 Markdown 段落输出，而<b>不能</b>退回到独立的"plain text"路径或在
-/// <see cref="TextExtractionResult"/> 上引入并行的纯文本字段。下游需要纯文本时，统一通过
-/// <c>Dignite.DocumentAI.Documents.MarkdownStripper</c> 在消费侧投影。
+/// Even when the source file has no structure, output flat Markdown paragraphs instead of falling
+/// back to a separate "plain text" path or adding a parallel plain-text field to
+/// <see cref="TextExtractionResult"/>. Downstream consumers that need plain text should project it on
+/// the consuming side through <c>Dignite.DocumentAI.Documents.MarkdownStripper</c>.
 /// </para>
 /// <para>
-/// <b>out-of-band 信号</b>（坐标 / page metadata / 表单 key-value）与 Markdown 正交——未来扩展应作为
-/// <see cref="TextExtractionResult"/> 上具名可选强类型字段，而非塞回 Markdown 字符串或通用扩展槽。
+/// <b>Out-of-band signals</b> (coordinates / page metadata / form key-value pairs) are orthogonal to
+/// Markdown. Future extensions should add named optional strongly typed fields on
+/// <see cref="TextExtractionResult"/> instead of stuffing them back into the Markdown string or a
+/// generic extension slot.
 /// </para>
 /// </remarks>
 public interface ITextExtractor
 {
     /// <summary>
-    /// 从文件流中提取 Markdown。
+    /// Extracts Markdown from a file stream.
     /// </summary>
-    /// <param name="fileStream">原始文件流。</param>
-    /// <param name="context">业务无关的提取上下文（contentType / 文件名 / 期望语言等）。</param>
-    /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="fileStream">The original file stream.</param>
+    /// <param name="context">Business-agnostic extraction context (contentType / file name / expected language, etc.).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// 包含 <see cref="TextExtractionResult.Markdown"/> 的提取结果。
-    /// 未识别到任何内容时 <see cref="TextExtractionResult.Markdown"/> 为空字符串，
-    /// 但<b>不应</b>返回 <c>null</c>，也<b>不应</b>抛异常代替"无内容"。
+    /// Extraction result containing <see cref="TextExtractionResult.Markdown"/>.
+    /// When no content is recognized, <see cref="TextExtractionResult.Markdown"/> is an empty string;
+    /// implementations <b>must not</b> return <c>null</c> or throw an exception to represent "no
+    /// content".
     /// </returns>
     Task<TextExtractionResult> ExtractAsync(
         Stream fileStream,

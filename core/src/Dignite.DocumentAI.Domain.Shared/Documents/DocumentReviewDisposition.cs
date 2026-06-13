@@ -1,26 +1,32 @@
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 文档人工审核的<b>处置阶段</b>（操作员动作轴）——只记录"操作员对这份文档做了什么"。
-/// 与<b>待审原因</b>（<see cref="DocumentReviewReasons"/>，客观未解决问题）正交：处置轴只由操作员动作写
-/// （确认 / 拒绝），原因轴只由 pipeline / evaluator 写，写入点零交叉。
+/// <b>Disposition stage</b> for manual document review, the operator-action axis. It records only
+/// "what did the operator do to this document". Orthogonal to <b>review reasons</b>
+/// (<see cref="DocumentReviewReasons"/>, objective unresolved problems): the disposition axis is
+/// written only by operator actions (confirm / reject), while the reason axis is written only by
+/// pipelines / evaluators, with no overlapping write points.
 /// <para>
-/// "是否需要操作员关注"由 <c>ReviewReasons != None 且本枚举 != Rejected</c> 派生（见 <see cref="ReviewReasonPolicy"/>），<b>不</b>在本枚举里用一个值表达——
-/// 旧的 <c>PendingReview</c> 已迁为 <see cref="DocumentReviewReasons.UnresolvedClassification"/>（它是"原因"不是"处置"）。
-/// 成员数值与旧 <c>DocumentReviewStatus</c> 对齐（DB 列 int 值不变）：None→NotReviewed(0)、Reviewed→Confirmed(20)、Rejected(30)。
+/// "Whether operator attention is needed" is derived from
+/// <c>ReviewReasons != None</c> and this enum not being Rejected; see
+/// <see cref="ReviewReasonPolicy"/>. It is <b>not</b> represented as a value in this enum. The old
+/// <c>PendingReview</c> moved to <see cref="DocumentReviewReasons.UnresolvedClassification"/> because
+/// it is a reason, not a disposition. Member numeric values align with the old
+/// <c>DocumentReviewStatus</c> so DB int values stay unchanged:
+/// None->NotReviewed(0), Reviewed->Confirmed(20), Rejected(30).
 /// </para>
 /// </summary>
 public enum DocumentReviewDisposition
 {
-    /// <summary>操作员尚未处置（默认）。是否需要关注取决于 <see cref="DocumentReviewReasons"/>。</summary>
+    /// <summary>Operator has not yet acted (default). Whether attention is needed depends on <see cref="DocumentReviewReasons"/>.</summary>
     NotReviewed = 0,
 
-    /// <summary>操作员已确认文档类型（人工分类 / 重分类）。</summary>
+    /// <summary>Operator confirmed the document type (manual classification / reclassification).</summary>
     Confirmed = 20,
 
     /// <summary>
-    /// 操作员拒绝（#237，可恢复：后续 Reclassify 会转回 <see cref="Confirmed"/>）。
-    /// 拒绝必带 <c>Document.RejectionReason</c>。
+    /// Operator rejected the document (#237, recoverable: later Reclassify moves it back to
+    /// <see cref="Confirmed"/>). Rejection must carry <c>Document.RejectionReason</c>.
     /// </summary>
     Rejected = 30
 }

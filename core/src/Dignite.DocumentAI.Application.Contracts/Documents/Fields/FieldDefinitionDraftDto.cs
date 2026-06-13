@@ -1,30 +1,33 @@
 namespace Dignite.DocumentAI.Documents.Fields;
 
 /// <summary>
-/// 「按提示词起草」输出（issue #264）：AI 起草的字段元数据**草稿**。
+/// Output of "draft from prompt" (issue #264): AI-drafted field metadata <b>draft</b>.
 /// <para>
-/// 这是**一次性草稿、非持续真值派生**——所有字段落进前端表单控件后用户仍可逐项核对 / 修改再保存。
-/// <c>Name</c> 仅在 <see cref="DraftFieldDefinitionInput.ForNewField"/> 为 true 时填充（已 sanitize 为白名单 slug）；
-/// 编辑既有字段时恒为空字符串（护栏 1：契约级身份键冻结，不被 AI 覆盖）。
+/// This is a <b>one-time draft, not continuous truth derivation</b>. After fields land in frontend
+/// form controls, users can still review / modify every item before saving. <c>Name</c> is populated
+/// only when <see cref="DraftFieldDefinitionInput.ForNewField"/> is true, already sanitized as a
+/// whitelist slug. When editing an existing field it is always an empty string (guardrail 1:
+/// contract-level identity key is frozen and not overwritten by AI).
 /// </para>
 /// <para>
-/// 任意字段可能为**空 / 默认值**：LLM 不可用 / 超时 / 返回非 JSON 时整体回退为保守草稿
-/// （空 DisplayName + 空 Name + <see cref="FieldDataType.Text"/> + 全 false），前端据空 DisplayName
-/// 判定「起草不可用」、保留用户已填内容并提示手填。
+/// Any field may be <b>empty / default</b>: when the LLM is unavailable, times out, or returns
+/// non-JSON, the whole result falls back to a conservative draft (empty DisplayName + empty Name +
+/// <see cref="FieldDataType.Text"/> + all false). The frontend treats empty DisplayName as "drafting
+/// unavailable", preserves user-entered content, and prompts manual input.
 /// </para>
 /// </summary>
 public class FieldDefinitionDraftDto
 {
     public string DisplayName { get; set; } = string.Empty;
 
-    /// <summary>仅当输入 <see cref="DraftFieldDefinitionInput.ForNewField"/>=true 时填充；编辑场景恒为空。</summary>
+    /// <summary>Populated only when input <see cref="DraftFieldDefinitionInput.ForNewField"/>=true; always empty for edits.</summary>
     public string Name { get; set; } = string.Empty;
 
     public FieldDataType DataType { get; set; } = FieldDataType.Text;
 
-    /// <summary>护栏 3：文档语义里没有「是否必填」信号，AI 只给保守默认 false，由 admin 自行决定。</summary>
+    /// <summary>Guardrail 3: document semantics do not signal whether a field is required, so AI only returns conservative default false and admins decide.</summary>
     public bool IsRequired { get; set; }
 
-    /// <summary>护栏 2：仅 <see cref="FieldDataType.Text"/> 字段可为 true（镜像实体不变量），非文本恒被服务端钳为 false。</summary>
+    /// <summary>Guardrail 2: only <see cref="FieldDataType.Text"/> fields can be true, mirroring the entity invariant; non-text is always clamped to false by the server.</summary>
     public bool AllowMultiple { get; set; }
 }

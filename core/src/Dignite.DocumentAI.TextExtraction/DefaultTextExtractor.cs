@@ -41,10 +41,11 @@ public class DefaultTextExtractor : ITextExtractor, ITransientDependency
             return await ExtractByOcrAsync(fileStream, context, cancellationToken);
         }
 
-        // 用单一 MemoryStream 横跨 Markdown Provider + 可能的 OCR 回退两次读取：
-        // 输入流来自 blob 存储可能不可 seek，且 ElBruno 内部 PdfPig/OpenXml 等
-        // 解析器要求 seekable stream，故必须缓冲。
-        // 已知限制：超大文件（GB 级扫描 PDF）会全量驻留内存，需要时改为临时文件路径。
+        // Use one MemoryStream across the Markdown provider and possible OCR fallback, both of which
+        // may read the stream. Input streams from blob storage may be non-seekable, and parsers inside
+        // ElBruno such as PdfPig/OpenXml require a seekable stream, so buffering is required. Known
+        // limit: very large files, such as GB-scale scanned PDFs, stay fully in memory; switch to a
+        // temporary file path if needed.
         using var seekable = new MemoryStream();
         await fileStream.CopyToAsync(seekable, cancellationToken);
         seekable.Position = 0;
@@ -117,20 +118,22 @@ public class DefaultTextExtractor : ITextExtractor, ITransientDependency
         }
     }
 
-    // OcrResult → TextExtractionResult 的原生 payload 跨契约映射（Ocr 项目不引用 Abstractions；
-    // 扁平字段避免创建两遍相同的包装类，与 Markdown/DetectedLanguage 等字段一样在编排层映射）。
+    // Cross-contract mapping from OcrResult native payload to TextExtractionResult. The Ocr project
+    // does not reference Abstractions; flat fields avoid creating the same wrapper class twice and are
+    // mapped in the orchestration layer like Markdown / DetectedLanguage.
     private NativePayload? MapNativePayload(OcrResult result)
     {
         if (result.NativePayloadContent is not { Length: > 0 } content)
         {
-            // 无 payload（provider 无空间模型）——正常路径，静默。
+            // No payload, usually because the provider has no spatial model. This is a normal path.
             return null;
         }
 
         if (string.IsNullOrEmpty(result.NativePayloadContentType) || string.IsNullOrEmpty(result.NativePayloadSchemaName))
         {
-            // 有内容但缺 ContentType / SchemaName：扁平字段被 provider 半填，归档无法标注 schema。
-            // 丢弃但记 warning——不静默吞，否则空间信号丢失而无任何线索。
+            // Content exists but ContentType / SchemaName is missing: the provider half-filled the
+            // flat fields and archival cannot label the schema. Drop it, but log a warning instead of
+            // swallowing silently, otherwise spatial signals disappear without evidence.
             Logger.LogWarning(
                 "OCR provider {Provider} produced {Bytes} bytes of native payload but left ContentType/SchemaName unset; dropping it.",
                 result.ProviderName, content.Length);

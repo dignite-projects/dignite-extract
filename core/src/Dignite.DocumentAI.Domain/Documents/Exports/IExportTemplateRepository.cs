@@ -7,6 +7,6 @@ namespace Dignite.DocumentAI.Documents.Exports;
 
 public interface IExportTemplateRepository : IRepository<ExportTemplate, Guid>
 {
-    /// <summary>按当前层 + Name 查模板（用于创建判重）。</summary>
+    /// <summary>Finds a template by current layer and Name, used for duplicate checks on creation.</summary>
     Task<ExportTemplate?> FindByNameAsync(string name, CancellationToken cancellationToken = default);
 }

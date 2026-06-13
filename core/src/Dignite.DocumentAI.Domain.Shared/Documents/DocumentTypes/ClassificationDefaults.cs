@@ -1,21 +1,22 @@
 namespace Dignite.DocumentAI.Documents.DocumentTypes;
 
 /// <summary>
-/// 文档分类相关的默认常量。集中维护以避免阈值魔法值散落在多个分类器中。
+/// Default constants related to document classification. Centralized to avoid threshold magic values
+/// scattered across classifiers.
 /// </summary>
 public static class ClassificationDefaults
 {
     /// <summary>
-    /// <c>DocumentType.ConfidenceThreshold</c> 的默认阈值。
-    /// 低于此值（且类型未在白名单中）进入 LowConfidence 路径。
+    /// Default threshold for <c>DocumentType.ConfidenceThreshold</c>.
+    /// Values below this, when the type is not otherwise whitelisted, enter the LowConfidence path.
     /// </summary>
     public const double DefaultConfidenceThreshold = 0.7;
 
     /// <summary>
-    /// 人工确认（manual classification）写入的固定置信度。
-    /// 注意：核心 Domain 项目不依赖 Abstractions，
-    /// <c>DocumentPipelineRunManager.CompleteManualClassificationAsync</c> 中以字面量 1.0 出现；
-    /// 若变更此常量请同步更新该处。
+    /// Fixed confidence written for manual classification.
+    /// Note: the core Domain project does not depend on Abstractions, so
+    /// <c>DocumentPipelineRunManager.CompleteManualClassificationAsync</c> uses literal 1.0. Keep that
+    /// location synchronized if this constant changes.
     /// </summary>
     public const double ManualClassificationConfidence = 1.0;
 }

@@ -13,9 +13,10 @@ using Volo.Abp.EntityFrameworkCore;
 namespace Dignite.DocumentAI.Documents.Pipelines;
 
 /// <summary>
-/// <see cref="IDocumentPipelineRunRepository"/> 的 EF Core 实现（#216：拆于 Document 子集合）。
-/// <c>IMultiTenant</c> 全局过滤器经 <see cref="EfCoreRepository{TDbContext,TEntity,TKey}.GetDbSetAsync"/>
-/// 自动施加，无需手写 TenantId 谓词。
+/// EF Core implementation of <see cref="IDocumentPipelineRunRepository"/> (#216: split from the
+/// Document child collection). The <c>IMultiTenant</c> global filter is applied automatically through
+/// <see cref="EfCoreRepository{TDbContext,TEntity,TKey}.GetDbSetAsync"/>, so no handwritten TenantId
+/// predicate is needed.
 /// </summary>
 public class EfCoreDocumentPipelineRunRepository
     : EfCoreRepository<DocumentAIDbContext, DocumentPipelineRun, Guid>, IDocumentPipelineRunRepository
@@ -50,10 +51,10 @@ public class EfCoreDocumentPipelineRunRepository
 
         var dbContext = await GetDbContextAsync();
 
-        // 按 PipelineCode 取最大 AttemptNumber 的 run。EF Core 8+ 把
-        // GroupBy(...).Select(g => g.OrderByDescending(...).First()) 翻译为 SQL Server ROW_NUMBER() OVER
-        // (PARTITION BY PipelineCode ORDER BY AttemptNumber DESC) WHERE rn = 1，
-        // 只回传"每 code 一行"——不靠"少量行 + 内存 GroupBy"的假设。
+        // Pick the run with the largest AttemptNumber per PipelineCode. EF Core 8+ translates
+        // GroupBy(...).Select(g => g.OrderByDescending(...).First()) to SQL Server ROW_NUMBER() OVER
+        // (PARTITION BY PipelineCode ORDER BY AttemptNumber DESC) WHERE rn = 1, so only one row per
+        // code is returned. This does not rely on a "small row count + in-memory GroupBy" assumption.
         var latest = await dbContext.Set<DocumentPipelineRun>()
             .Where(r => r.DocumentId == documentId && pipelineCodes.Contains(r.PipelineCode))
             .GroupBy(r => r.PipelineCode)
@@ -62,12 +63,15 @@ public class EfCoreDocumentPipelineRunRepository
 
         var result = latest.ToDictionary(r => r.PipelineCode);
 
-        // 合并本 UoW 内尚未 flush 的 change-tracker 实体。DeriveLifecycle 紧跟 Manager 的
-        // UpdateAsync(run)（autoSave:false）/ Insert 调用——run 的 post-change 状态此刻可能只在
-        // tracker、DB 仍是旧值（或新 run 尚未落库）。上面的 GroupBy 在 DB 端按已持久化的 AttemptNumber
-        // 选行，看不到这些未 flush 修改。显式合并 Added/Modified 的 Local entries（取每个 PipelineCode
-        // 下 AttemptNumber 最大者），把"看到未 flush 视图"的责任收敛在 Infrastructure 层——Domain 的
-        // DeriveLifecycleAsync 因此不再需要调用方传入"刚改动的 run"（#216 follow-up #1）。
+        // Merge change-tracker entities that have not been flushed in this UoW. DeriveLifecycle runs
+        // immediately after Manager UpdateAsync(run) (autoSave:false) / Insert calls, so the run's
+        // post-change state may exist only in the tracker while the DB still has the old value, or
+        // the new run has not been persisted yet. The GroupBy above chooses rows in the DB by the
+        // persisted AttemptNumber and cannot see those unflushed changes. Explicitly merge Added /
+        // Modified Local entries, keeping the largest AttemptNumber per PipelineCode, so the
+        // responsibility for seeing the unflushed view stays in Infrastructure. Domain
+        // DeriveLifecycleAsync therefore no longer needs the caller to pass the just-changed run
+        // (#216 follow-up #1).
         foreach (var entry in dbContext.ChangeTracker.Entries<DocumentPipelineRun>())
         {
             if (entry.State is not (EntityState.Added or EntityState.Modified))
@@ -81,9 +85,11 @@ public class EfCoreDocumentPipelineRunRepository
                 continue;
             }
 
-            // unique 索引 (DocumentId, PipelineCode, AttemptNumber) 保证同三元组至多一行：>= 的"相等"分支
-            // 正常态下只会用 tracker 的 Modified 实体覆盖 identity-map 下的同一对象引用（幂等无副作用）；
-            // 真正需要接管的新 run 走 Added 且 AttemptNumber 必然更大。与被删除的旧 in-memory override 语义逐字一致。
+            // The unique index (DocumentId, PipelineCode, AttemptNumber) guarantees at most one row
+            // for the same triple. In normal cases, the equality branch in >= only replaces the same
+            // identity-map object reference with the tracker Modified entity, which is idempotent and
+            // has no side effects. A new run that should take over is Added and necessarily has a
+            // larger AttemptNumber. This matches the removed in-memory override semantics exactly.
             if (!result.TryGetValue(run.PipelineCode, out var existing)
                 || run.AttemptNumber >= existing.AttemptNumber)
             {
@@ -112,15 +118,19 @@ public class EfCoreDocumentPipelineRunRepository
     {
         try
         {
-            // autoSave:true → 立即 SaveChanges，撞键当场抛 DbUpdateException 而非延后到外层 commit。
+            // autoSave:true immediately calls SaveChanges, so key collisions throw DbUpdateException
+            // here instead of being delayed until the outer commit.
             await InsertAsync(run, autoSave: true, GetCancellationToken(cancellationToken));
         }
         catch (DbUpdateException ex) when (IsAttemptNumberCollision(ex, run))
         {
-            // #239：唯一约束冲突识别收敛在持久化层，抓 provider 无关的 DbUpdateException 类型——不嗅探
-            // message / SQL Server 错误码，跨 SqlServer / PostgreSQL / MySQL 一致。唯一现实成因是同一
-            // Failed pipeline 被并发重试：赢家已插入下一 AttemptNumber 并把 run 置 Pending，输家撞键 →
-            // 翻译成 RetryInProgress（"已有进行中的尝试"），与 EnsureRetryableAsync 的并发护栏同语义。
+            // #239: keep unique-constraint collision recognition in the persistence layer and catch
+            // the provider-agnostic DbUpdateException type. Do not sniff messages or SQL Server error
+            // codes, so behavior stays consistent across SQL Server / PostgreSQL / MySQL. The only
+            // realistic cause is concurrent retries for the same Failed pipeline: the winner already
+            // inserted the next AttemptNumber and moved the run to Pending; the loser collides and is
+            // translated to RetryInProgress ("an attempt is already in progress"), matching the
+            // concurrency guard semantics in EnsureRetryableAsync.
             throw new BusinessException(DocumentAIErrorCodes.Pipeline.RetryInProgress, innerException: ex)
                 .WithData("PipelineCode", run.PipelineCode)
                 .WithData("DocumentId", run.DocumentId);
@@ -128,10 +138,13 @@ public class EfCoreDocumentPipelineRunRepository
     }
 
     /// <summary>
-    /// 判断本次 <see cref="DbUpdateException"/> 是否由 <paramref name="run"/> 的插入触发——靠 EF Core
-    /// <see cref="DbUpdateException.Entries"/>（provider 无关）定位失败实体，不依赖任何数据库错误码 / 文本。
-    /// 该插入唯一可能违反的约束就是 <c>(DocumentId, PipelineCode, AttemptNumber)</c> 唯一索引
-    /// （DocumentId FK 必然存在、各列非空已在领域层保证），故命中即视为 AttemptNumber 撞键。
+    /// Determines whether this <see cref="DbUpdateException"/> was triggered by inserting
+    /// <paramref name="run"/>. It uses EF Core <see cref="DbUpdateException.Entries"/> (provider
+    /// agnostic) to locate the failed entity and does not depend on any database error code / text.
+    /// The only constraint this insert can realistically violate is the
+    /// <c>(DocumentId, PipelineCode, AttemptNumber)</c> unique index: the DocumentId FK must exist and
+    /// non-null columns are guaranteed by the domain layer. A match is therefore treated as an
+    /// AttemptNumber collision.
     /// </summary>
     protected virtual bool IsAttemptNumberCollision(DbUpdateException ex, DocumentPipelineRun run)
     {

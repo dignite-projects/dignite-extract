@@ -1,8 +1,10 @@
 namespace Dignite.DocumentAI.Documents.Pipelines;
 
 /// <summary>
-/// 分类流水线产出的 top-K 候选项 JSON payload schema。
-/// 物理存储位置：<see cref="DocumentPipelineRun.ExtraProperties"/>[<see cref="PipelineRunExtraPropertyNames.ClassificationCandidates"/>]。
-/// 通过 <see cref="DocumentPipelineRunDto.Candidates"/> 强类型暴露给 Angular，避免前端按 key 字符串 cast。
+/// JSON payload schema for top-K candidates produced by the classification pipeline.
+/// Physical storage location:
+/// <see cref="DocumentPipelineRun.ExtraProperties"/>[<see cref="PipelineRunExtraPropertyNames.ClassificationCandidates"/>].
+/// Exposed strongly typed to Angular through <see cref="DocumentPipelineRunDto.Candidates"/> so the
+/// frontend does not cast by key string.
 /// </summary>
 public record PipelineRunCandidate(string TypeCode, double ConfidenceScore);

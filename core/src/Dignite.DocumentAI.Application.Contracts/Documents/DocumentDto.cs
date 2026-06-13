@@ -12,63 +12,72 @@ public class DocumentDto : EntityDto<Guid>
     public Guid? TenantId { get; set; }
     public FileOriginDto FileOrigin { get; set; } = default!;
 
-    /// <summary>所属文件柜（#194）。null = 未归类。柜名由前端用柜列表 map 显示。</summary>
+    /// <summary>Owning cabinet (#194). null means uncategorized. The frontend maps cabinet names from the cabinet list.</summary>
     public Guid? CabinetId { get; set; }
 
     public string? DocumentTypeCode { get; set; }
     public DocumentLifecycleStatus LifecycleStatus { get; set; }
     public DocumentReviewDisposition ReviewDisposition { get; set; }
 
-    /// <summary>待审原因集合（#284，<c>[Flags]</c>）。客户端直接渲染原因 badge，不自行推断。</summary>
+    /// <summary>Set of review reasons (#284, <c>[Flags]</c>). Clients render reason badges directly and do not infer them.</summary>
     public DocumentReviewReasons ReviewReasons { get; set; }
 
-    /// <summary>是否需要操作员关注（#284）= <c>ReviewReasons != None 且 ReviewDisposition != Rejected</c>（已拒绝文档保留客观原因但操作员已处置，不再算需关注）。服务端出口以免客户端推断。</summary>
+    /// <summary>Whether operator attention is needed (#284): <c>ReviewReasons != None</c> and <c>ReviewDisposition != Rejected</c>. Rejected documents keep objective reasons, but the operator has already handled them, so they no longer count as needing attention. Exposed by the server to avoid client inference.</summary>
     public bool RequiresReview { get; set; }
 
-    /// <summary>待审原因结构化明细（#284）。详情厚/列表薄——仅单文档详情组装；无未解决原因时为 null。</summary>
+    /// <summary>Structured review-reason details (#284). Detail views are rich while list views are thin, so this is assembled only for single-document details; null when there are no unresolved reasons.</summary>
     public List<ReviewReasonDetailDto>? ReviewReasonDetails { get; set; }
 
-    /// <summary>操作员拒绝理由（#284，仅 <see cref="ReviewDisposition"/>=Rejected 时有值）。</summary>
+    /// <summary>Operator rejection reason (#284), populated only when <see cref="ReviewDisposition"/> is Rejected.</summary>
     public string? RejectionReason { get; set; }
 
     public double ClassificationConfidence { get; set; }
 
     /// <summary>
-    /// 展示标题（文本提取流水线 Run 成功后写入）。
-    /// 迁移之前的历史文档可能为 null，UI 需回退到 <see cref="FileOriginDto.OriginalFileName"/>。
+    /// Display title, written after the text extraction pipeline run succeeds.
+    /// Historical documents created before the migration may be null, so the UI must fall back to
+    /// <see cref="FileOriginDto.OriginalFileName"/>.
     /// </summary>
     public string? Title { get; set; }
 
     /// <summary>
-    /// 文档结构化 Markdown 内容（文本提取流水线 Run 成功后写入）。
-    /// 前端可直接渲染；需要纯文本时由前端 strip 或后端通过 <c>MarkdownStripper.Strip</c> 投影。
+    /// Structured Markdown document content, written after the text extraction pipeline run succeeds.
+    /// The frontend can render it directly; when plain text is needed, the frontend strips it or the
+    /// backend projects it through <c>MarkdownStripper.Strip</c>.
     /// </summary>
     public string? Markdown { get; set; }
 
     /// <summary>
-    /// 文档语言（ISO 639-1 / IETF tag，文本提取阶段检测后写入）。未检测到时为 null。
+    /// Document language (ISO 639-1 / IETF tag), detected and written during text extraction. null
+    /// when not detected.
     /// </summary>
     public string? Language { get; set; }
 
     /// <summary>
-    /// 文本提取是否<b>完整</b>（#268）。<c>true</c> = 已捕获全部内容（默认 / 历史文档亦视为完整）；
-    /// <c>false</c> = 已知有缺失（OCR 输出被截断 / 命中重复守卫被丢弃 / 多页 PDF 有页未能转写）。
-    /// 下游消费方据此自行决定是否接收 / 降级 / 进人工复核——通道层不替下游拦截。
-    /// 注意：这是<b>质量信号</b>，与内部 extraction provenance（provider 名 / 归档 BlobName，刻意不出口）不同。
+    /// Whether text extraction is <b>complete</b> (#268). <c>true</c> means all content was captured
+    /// (the default, and historical documents are also treated as complete); <c>false</c> means
+    /// content is known to be missing, such as truncated OCR output, duplicate-guard drops, or pages
+    /// in a multi-page PDF that could not be transcribed. Downstream consumers decide whether to
+    /// accept, degrade, or send for manual review; the channel layer does not block for them.
+    /// Note: this is a <b>quality signal</b>, distinct from internal extraction provenance such as
+    /// provider name / archived BlobName, which is intentionally not exposed.
     /// </summary>
     public bool ExtractionIsComplete { get; set; } = true;
 
-    /// <summary>提取不完整时的简短诊断说明（<see cref="ExtractionIsComplete"/> 为 false 时）；完整时为 <c>null</c>。</summary>
+    /// <summary>Short diagnostic when extraction is incomplete (<see cref="ExtractionIsComplete"/> is false); <c>null</c> when complete.</summary>
     public string? ExtractionIncompleteReason { get; set; }
 
     /// <summary>
-    /// 类型绑定字段抽取结果（字段架构 v2）。键 = FieldName（与 <see cref="FieldDefinitionDto.Name"/> 同形）。
-    /// 来源层由 <see cref="TenantId"/> 决定（Host 文档 → Host 字段定义；租户文档 → 该租户字段定义）。
-    /// 尚未抽取或无类型绑定字段时为 null。
+    /// Type-bound field extraction results (field architecture v2). Key = FieldName, with the same
+    /// shape as <see cref="FieldDefinitionDto.Name"/>. The source layer is determined by
+    /// <see cref="TenantId"/>: host documents use host field definitions, while tenant documents use
+    /// that tenant's field definitions. null when not yet extracted or when there are no type-bound
+    /// fields.
     /// </summary>
     public Dictionary<string, JsonElement>? ExtractedFields { get; set; }
 
     public DateTime CreationTime { get; set; }
 
-    // 运行记录 → IDocumentPipelineRunAppService.GetListAsync(documentId)（#216 拆为独立聚合根）。
+    // Run records are exposed through IDocumentPipelineRunAppService.GetListAsync(documentId) after
+    // #216 split them into an independent aggregate root.
 }

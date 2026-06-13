@@ -2,18 +2,18 @@ namespace Dignite.DocumentAI.Documents.Pipelines;
 
 public enum PipelineRunStatus
 {
-    /// <summary>已创建尚未开始（入队但尚未拉起）</summary>
+    /// <summary>Created but not started yet (enqueued but not picked up).</summary>
     Pending = 10,
 
-    /// <summary>正在执行</summary>
+    /// <summary>Running.</summary>
     Running = 20,
 
-    /// <summary>成功完成</summary>
+    /// <summary>Completed successfully.</summary>
     Succeeded = 30,
 
-    /// <summary>失败（重试上限内仍失败才最终进入此状态）</summary>
+    /// <summary>Failed; final state only after failures persist through the retry limit.</summary>
     Failed = 90,
 
-    /// <summary>跳过（前置条件未满足，或租户 Feature 关闭）</summary>
+    /// <summary>Skipped because prerequisites were not met or a tenant feature is disabled.</summary>
     Skipped = 95
 }

@@ -23,11 +23,13 @@ public class DocumentTypeToolsTestModule : AbpModule
 }
 
 /// <summary>
-/// <see cref="DocumentTypeTools.ListAsync"/> 薄壳行为：
-/// 委托 <see cref="IDocumentTypeAppService.GetVisibleAsync"/> + <see cref="IFieldDefinitionAppService.GetListAsync"/>
-/// （单次批量、DocumentTypeId 留空——消 per-type N+1）并把结果映射为 <see cref="DocumentTypeListResult"/>
-/// （displayName 经 <c>PromptBoundary</c> 包裹；按 TypeCode 排序截断到
-/// <see cref="DocumentAIMcpConsts.MaxDocumentTypeResults"/>，超限带 truncated/totalCount 截断信号）。
+/// Thin-shell behavior of <see cref="DocumentTypeTools.ListAsync"/>: delegates to
+/// <see cref="IDocumentTypeAppService.GetVisibleAsync"/> plus
+/// <see cref="IFieldDefinitionAppService.GetListAsync"/> in one batch with DocumentTypeId left blank to
+/// eliminate per-type N+1, and maps results to <see cref="DocumentTypeListResult"/>. displayName is
+/// wrapped by <c>PromptBoundary</c>; results are sorted by TypeCode and truncated to
+/// <see cref="DocumentAIMcpConsts.MaxDocumentTypeResults"/>, with truncated/totalCount signals when over
+/// limit.
 /// </summary>
 public class DocumentTypeTools_Tests : DocumentAITestBase<DocumentTypeToolsTestModule>
 {
@@ -55,7 +57,8 @@ public class DocumentTypeTools_Tests : DocumentAITestBase<DocumentTypeToolsTestM
                     DisplayName = "General Contract"
                 }
             });
-        // 批量路径：DocumentTypeId 留空一次取当前层全部字段定义，tool 内存按 DocumentTypeId 分组（消 N+1）。
+        // Batch path: leave DocumentTypeId blank to fetch all current-layer field definitions once, then
+        // group in tool memory by DocumentTypeId, eliminating N+1.
         _fieldDefinitionAppService
             .GetListAsync(Arg.Is<GetFieldDefinitionListInput>(i => i.DocumentTypeId == null && !i.OnlyDeleted))
             .Returns(new List<FieldDefinitionDto>
@@ -90,7 +93,7 @@ public class DocumentTypeTools_Tests : DocumentAITestBase<DocumentTypeToolsTestM
         result.Types.Count.ShouldBe(1);
         var schema = result.Types[0];
         schema.TypeCode.ShouldBe("contract.general");
-        // DisplayName 必须经 PromptBoundary 包裹。
+        // DisplayName must be wrapped by PromptBoundary.
         schema.DisplayName.ShouldBe(PromptBoundary.WrapField("General Contract"));
         schema.Fields.Count.ShouldBe(2);
 
@@ -106,7 +109,7 @@ public class DocumentTypeTools_Tests : DocumentAITestBase<DocumentTypeToolsTestM
         partyField.DataType.ShouldBe("Text");
         partyField.IsRequired.ShouldBeFalse();
 
-        // 消 N+1 守护：字段定义只允许一次批量调用（不再 per-type 循环查询）。
+        // N+1 guard: field definitions are allowed only one batch call, with no per-type query loop.
         await _fieldDefinitionAppService.Received(1).GetListAsync(Arg.Any<GetFieldDefinitionListInput>());
     }
 
@@ -127,7 +130,8 @@ public class DocumentTypeTools_Tests : DocumentAITestBase<DocumentTypeToolsTestM
     [Fact]
     public async Task Within_cap_returns_all_types_without_truncation_signal()
     {
-        // 恰好等于上限：全量返回、无截断信号（上限内行为不变）。
+        // Exactly at the limit: return all results with no truncation signal; within-limit behavior is
+        // unchanged.
         var total = DocumentAIMcpConsts.MaxDocumentTypeResults;
         _documentTypeAppService.GetVisibleAsync().Returns(BuildTypes(total));
         _fieldDefinitionAppService
@@ -145,8 +149,9 @@ public class DocumentTypeTools_Tests : DocumentAITestBase<DocumentTypeToolsTestM
     [Fact]
     public async Task Truncates_types_beyond_cap_and_signals_truncation()
     {
-        // 结果集硬上限（llm-call-anti-patterns 反例 B 要点 3）：租户 admin 可自建任意多类型，
-        // 超限必须截断并以 truncated + totalCount 显式告知 LLM 还有更多。
+        // Hard result-set limit (llm-call-anti-patterns counterexample B point 3): tenant admins can
+        // create arbitrarily many types. Over-limit results must be truncated and explicitly tell the LLM
+        // there are more via truncated + totalCount.
         var total = DocumentAIMcpConsts.MaxDocumentTypeResults + 5;
         _documentTypeAppService.GetVisibleAsync().Returns(BuildTypes(total));
         _fieldDefinitionAppService
@@ -159,10 +164,11 @@ public class DocumentTypeTools_Tests : DocumentAITestBase<DocumentTypeToolsTestM
         result.Types.Count.ShouldBe(DocumentAIMcpConsts.MaxDocumentTypeResults);
         result.TotalCount.ShouldBe(total);
         result.Truncated.ShouldBeTrue();
-        // 截断前按 TypeCode 稳定排序（不依赖 AppService 返回顺序）——保留字典序最前的一段、丢弃尾部。
+        // Stable sort by TypeCode before truncation, independent from AppService return order. Keep the
+        // lexicographically first segment and discard the tail.
         result.Types[0].TypeCode.ShouldBe(TypeCodeOf(0));
         result.Types[^1].TypeCode.ShouldBe(TypeCodeOf(DocumentAIMcpConsts.MaxDocumentTypeResults - 1));
-        // 截断不放大查询数：字段定义仍只允许一次批量调用。
+        // Truncation must not amplify query count: field definitions still allow only one batch call.
         await _fieldDefinitionAppService.Received(1).GetListAsync(
             Arg.Is<GetFieldDefinitionListInput>(i => i.DocumentTypeId == null));
     }
@@ -178,7 +184,8 @@ public class DocumentTypeTools_Tests : DocumentAITestBase<DocumentTypeToolsTestM
                 TypeCode = TypeCodeOf(i),
                 DisplayName = $"Type {i}"
             })
-            // 乱序交给 tool——截断必须建立在 tool 自己的 TypeCode 稳定排序之上。
+            // Feed unordered input into the tool; truncation must be based on the tool's own stable
+            // TypeCode sorting.
             .OrderByDescending(t => t.TypeCode, StringComparer.Ordinal)
             .ToList();
     }

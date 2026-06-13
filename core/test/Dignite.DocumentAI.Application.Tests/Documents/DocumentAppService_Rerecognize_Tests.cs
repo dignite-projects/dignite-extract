@@ -32,10 +32,11 @@ public class DocumentAppServiceRerecognizeTestModule : AbpModule
 }
 
 /// <summary>
-/// <see cref="DocumentAppService.RerecognizeAsync"/>（#263「重新识别」）——在现有 Markdown 上重排
-/// 自动分类 job（级联重抽字段，不重新 OCR）。与 <c>RetryPipelineAsync</c> 的关键差异：
-/// <b>对已 Succeeded 的分类也放行</b>（按需重跑，非失败重试）；仅在 Pending/Running 时以并发护栏拒绝。
-/// 前置：文档未软删、且已产出 Markdown（文本提取成功）。
+/// <see cref="DocumentAppService.RerecognizeAsync"/> (#263 "rerecognize"): requeue the automatic
+/// classification job on existing Markdown, cascading to field re-extraction without rerunning OCR. Key
+/// difference from <c>RetryPipelineAsync</c>: <b>already Succeeded classification is allowed</b> as an
+/// on-demand rerun, not a failed retry; only Pending/Running is rejected as a concurrency guard.
+/// Preconditions: document is not soft-deleted and Markdown has been produced (text extraction succeeded).
 /// </summary>
 public class DocumentAppService_Rerecognize_Tests
     : DocumentAIApplicationTestBase<DocumentAppServiceRerecognizeTestModule>
@@ -58,8 +59,8 @@ public class DocumentAppService_Rerecognize_Tests
     [Fact]
     public async Task RerecognizeAsync_Requeues_Classification_When_Already_Succeeded()
     {
-        // 文档已成功分类（Ready）——这是 RetryPipelineAsync 会拒绝（NotRetryable）的状态，
-        // 而「重新识别」必须放行：让 AI 依最新说明重判。
+        // Document is successfully classified (Ready), a state RetryPipelineAsync would reject
+        // (NotRetryable). Rerecognize must allow it so AI can rejudge using the latest instructions.
         var doc = await CreateExtractedDocumentAsync();
         var classified = await _pipelineRunManager.StartAsync(doc, DocumentAIPipelines.Classification);
         await _pipelineRunManager.CompleteAsync(doc, classified);
@@ -84,7 +85,7 @@ public class DocumentAppService_Rerecognize_Tests
     public async Task RerecognizeAsync_Throws_When_Classification_Running()
     {
         var doc = await CreateExtractedDocumentAsync();
-        // StartAsync 让 run 停在 Running 状态。
+        // StartAsync leaves the run in Running state.
         await _pipelineRunManager.StartAsync(doc, DocumentAIPipelines.Classification);
         StubGet(doc);
 
@@ -102,7 +103,7 @@ public class DocumentAppService_Rerecognize_Tests
     public async Task RerecognizeAsync_Throws_When_Classification_Pending()
     {
         var doc = await CreateExtractedDocumentAsync();
-        // QueueAsync 建 Pending run 但不 Begin——模拟已排队等待执行。
+        // QueueAsync creates a Pending run without Begin, simulating queued and waiting execution.
         await _pipelineRunManager.QueueAsync(doc, DocumentAIPipelines.Classification);
         StubGet(doc);
 
@@ -119,7 +120,7 @@ public class DocumentAppService_Rerecognize_Tests
     [Fact]
     public async Task RerecognizeAsync_Throws_When_No_Markdown()
     {
-        // 文本提取从未产出 Markdown——无从重判分类。
+        // Text extraction never produced Markdown, so there is nothing to rejudge classification from.
         var doc = CreateDocument();
         StubGet(doc);
 
@@ -152,13 +153,13 @@ public class DocumentAppService_Rerecognize_Tests
 
     private void StubGet(Document doc)
     {
-        // RerecognizeAsync 走 GetAsync(includeDetails:false)。
+        // RerecognizeAsync uses GetAsync(includeDetails:false).
         _documentRepository.GetAsync(doc.Id, false, Arg.Any<CancellationToken>())
             .Returns(doc);
     }
 
-    // 经 manager 的公开 CompleteTextExtractionAsync 落 Markdown（SetMarkdown 是 internal，
-    // 测试不直接调），模拟「文本提取成功」前置态。
+    // Persist Markdown through the manager's public CompleteTextExtractionAsync. SetMarkdown is internal
+    // and tests do not call it directly. This simulates the "text extraction succeeded" precondition.
     private async Task<Document> CreateExtractedDocumentAsync()
     {
         var doc = CreateDocument();

@@ -5,8 +5,10 @@ public static class CabinetConsts
     public static int MaxNameLength { get; set; } = 128;
 
     /// <summary>
-    /// <see cref="Cabinet.Description"/> 长度上限。Description 是可选的选柜辅助文本（#273），仅喂入 #265 选柜 prompt
-    /// ——一两句足矣，过长稀释信号且增加 token，故上限远小于文档正文。
+    /// Maximum length for <see cref="Cabinet.Description"/>. Description is optional helper text for
+    /// cabinet selection (#273) and is fed only into the #265 cabinet-selection prompt. One or two
+    /// sentences are enough; longer text dilutes the signal and adds tokens, so the limit is much lower
+    /// than document body length.
     /// </summary>
     public static int MaxDescriptionLength { get; set; } = 512;
 }

@@ -4,15 +4,17 @@ using System.Text.RegularExpressions;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 从 Markdown 中提取一个简洁的展示标题。
-/// 优先级：第一个 ATX 标题（# / ## / ...）→ 第一段非空纯文本；
-/// 全部失败则返回 null，调用方负责降级到文件名等确定性回退。
+/// Extracts a concise display title from Markdown.
+/// Priority: first ATX heading (# / ## / ...), then first non-empty plain-text paragraph.
+/// Returns null when all extraction paths fail, leaving the caller to fall back deterministically to a
+/// file name or similar value.
 /// </summary>
 public static class MarkdownTitleExtractor
 {
     /// <summary>
-    /// 抽取展示标题。<paramref name="maxLength"/> 默认使用 <see cref="DocumentConsts.MaxTitleLength"/>。
-    /// 返回值已 trim、规范化空白，长度不会超过 <paramref name="maxLength"/>；找不到任何可用文本时返回 null。
+    /// Extracts a display title. <paramref name="maxLength"/> defaults to
+    /// <see cref="DocumentConsts.MaxTitleLength"/>. The returned value is trimmed, whitespace-normalized,
+    /// and never longer than <paramref name="maxLength"/>; returns null when no usable text is found.
     /// </summary>
     public static string? ExtractTitle(string? markdown, int? maxLength = null)
     {
@@ -29,7 +31,8 @@ public static class MarkdownTitleExtractor
 
         var lines = markdown.Replace("\r\n", "\n").Split('\n');
 
-        // 1. 优先 ATX 标题（# H1 ~ ###### H6）：取第一个出现的标题，避免漏掉前面没有 H1 但用了 H2/H3 的文档。
+        // 1. Prefer ATX headings (# H1 through ###### H6). Take the first heading so documents that
+        // start with H2/H3 instead of H1 are still covered.
         foreach (var raw in lines)
         {
             var line = raw.Trim();
@@ -50,7 +53,8 @@ public static class MarkdownTitleExtractor
             }
         }
 
-        // 2. 没有标题就退回第一段非空文本（跳过围栏代码块、表格分隔符、列表项符号等噪声）。
+        // 2. Without a heading, fall back to the first non-empty text paragraph, skipping noise such
+        // as fenced code blocks, table separators, and list markers.
         var inFence = false;
         foreach (var raw in lines)
         {
@@ -67,19 +71,19 @@ public static class MarkdownTitleExtractor
                 continue;
             }
 
-            // 跳过表格分隔行 |---|---|
+            // Skip table separator rows such as |---|---|.
             if (Regex.IsMatch(line, @"^\|?[\s:\-\|]+\|?$"))
             {
                 continue;
             }
 
-            // 跳过水平线 ---, ***, ___
+            // Skip horizontal rules such as ---, ***, ___.
             if (Regex.IsMatch(line, @"^([-*_]\s*){3,}$"))
             {
                 continue;
             }
 
-            // 去掉前缀（引用 >、列表项 -/*/+ 或 1.）
+            // Strip prefixes: quote >, list item -/*/+, or numbered 1.
             var stripped = Regex.Replace(line, @"^>\s*", string.Empty);
             stripped = Regex.Replace(stripped, @"^([-*+]|\d+\.)\s+", string.Empty);
 
@@ -96,14 +100,14 @@ public static class MarkdownTitleExtractor
 
     private static string StripInlineMarkdown(string s)
     {
-        // 图片 ![alt](url) → alt
+        // Image ![alt](url) -> alt.
         s = Regex.Replace(s, @"!\[([^\]]*)\]\([^\)]*\)", "$1");
-        // 链接 [text](url) → text
+        // Link [text](url) -> text.
         s = Regex.Replace(s, @"\[([^\]]+)\]\([^\)]*\)", "$1");
-        // 加粗/斜体
+        // Bold / italic.
         s = Regex.Replace(s, @"(\*\*|__)(.+?)\1", "$2");
         s = Regex.Replace(s, @"(?<!\w)([*_])(.+?)\1(?!\w)", "$2");
-        // 行内代码
+        // Inline code.
         s = Regex.Replace(s, @"`([^`]+)`", "$1");
         return s;
     }
@@ -115,7 +119,7 @@ public static class MarkdownTitleExtractor
             return string.Empty;
         }
 
-        // 多空白折叠成单空格
+        // Collapse repeated whitespace to a single space.
         var collapsed = Regex.Replace(text, @"\s+", " ").Trim();
         if (collapsed.Length == 0)
         {

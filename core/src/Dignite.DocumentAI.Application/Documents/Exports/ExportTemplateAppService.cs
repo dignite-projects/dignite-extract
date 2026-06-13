@@ -17,8 +17,9 @@ namespace Dignite.DocumentAI.Documents.Exports;
 [Authorize]
 public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateAppService
 {
-    // 固定导出的系统字段表头（#207 / #287）——LifecycleStatus / ReviewStatus(处置轴) / ReviewReasons(原因轴) / Title
-    // 始终输出，不走模板列配置。ReviewStatus 列名稳定（DB 列名亦为 ReviewStatus），值取 ReviewDisposition。
+    // Fixed exported system field headers (#207 / #287): LifecycleStatus / ReviewStatus (disposition axis) /
+    // ReviewReasons (reason axis) / Title. Always exported and not configured through template columns.
+    // ReviewStatus column name is stable, with DB column name also ReviewStatus, and value taken from ReviewDisposition.
     private static readonly IReadOnlyList<string> SystemFieldHeaders = new[]
     {
         "LifecycleStatus", "ReviewStatus", "ReviewReasons", "Title"
@@ -51,7 +52,7 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
     public virtual async Task<List<ExportTemplateDto>> GetListAsync()
     {
         await CheckPolicyAsync(DocumentAIPermissions.Documents.Templates.Default);
-        // 租户隔离由 ambient IMultiTenant 过滤器施加；Name ASC 排序在内存中保持。
+        // Tenant isolation is enforced by the ambient IMultiTenant filter; Name ASC ordering is kept in memory.
         var list = (await _templateRepository.GetListAsync())
             .OrderBy(t => t.Name)
             .ToList();
@@ -82,7 +83,7 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
     {
         var entity = await GetOwnedTemplateAsync(id);
 
-        // 仅在改名时判重——同名未变不必查（避免误判到自身）。
+        // Check duplicates only when renaming. If the name did not change, no lookup is needed and self-match false positives are avoided.
         if (!string.Equals(entity.Name, input.Name, StringComparison.Ordinal))
         {
             await EnsureTemplateNameAvailableAsync(input.Name);
@@ -108,15 +109,15 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
     {
         var template = await GetOwnedTemplateAsync(input.TemplateId);
 
-        // 租户隔离由 ambient IMultiTenant 过滤器施加（含下方 GetQueryableAsync）。
+        // Tenant isolation is enforced by the ambient IMultiTenant filter, including GetQueryableAsync below.
         var query = await _documentRepository.GetQueryableAsync();
 
-        // 模板类型绑定（#207）：导出始终收窄到模板的 DocumentTypeId。
+        // Template type binding (#207): exports are always narrowed to the template's DocumentTypeId.
         query = query.Where(d => d.DocumentTypeId == template.DocumentTypeId);
 
         if (input.DocumentIds is { Count: > 0 } ids)
         {
-            // 勾选导出：按指定 ID 集合，忽略所有筛选条件。
+            // Checked export: use the specified ID set and ignore all filter conditions.
             query = query.Where(d => ids.Contains(d.Id));
         }
         else
@@ -127,14 +128,14 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
                 query = query.Where(d => d.CabinetId == input.CabinetId.Value);
             if (input.CreationTimeMin.HasValue)
                 query = query.Where(d => d.CreationTime >= input.CreationTimeMin.Value.Date);
-            // 时间上界包含整个 Max 日期（< Max+1天），与日期选择器的直觉一致。
+            // Upper time bound includes the full Max date (< Max + 1 day), matching date picker intuition.
             if (input.CreationTimeMax.HasValue)
                 query = query.Where(d => d.CreationTime < input.CreationTimeMax.Value.Date.AddDays(1));
         }
 
-        // 单次 fetch (Max + 1) 投影到 ExportProjection（非实体类型 → 不 SELECT Markdown、不进 tracker）。
-        // 多取 1 条用于原子判定超限——消除 count + Take 两次查询间并发插入导致的静默截断。
-        // 会计场景漏导凭证比报错更危险，故超限 fail-fast。
+        // Single fetch of (Max + 1) projected to ExportProjection (non-entity type -> does not SELECT Markdown and does not enter tracker).
+        // Fetch one extra row to atomically detect over limit, eliminating silent truncation caused by concurrent inserts between count + Take queries.
+        // In accounting scenarios, missing exported vouchers is more dangerous than an error, so over limit fails fast.
         var limit = ExportTemplateConsts.MaxExportDocumentCount;
         var rows = await AsyncExecuter.ToListAsync(
             query
@@ -145,7 +146,8 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
                     LifecycleStatus = d.LifecycleStatus,
                     ReviewDisposition = d.ReviewDisposition,
                     ReviewReasons = d.ReviewReasons,
-                    // typed child 行随文档一并投影（单查询相关子查询，非逐文档 N+1）；按 FieldDefinitionId 匹配模板列。
+                    // Typed child rows are projected with the document through a correlated subquery in one query, not per-document N+1.
+                    // Match template columns by FieldDefinitionId.
                     ExtractedFields = d.ExtractedFieldValues
                         .Select(f => new ExtractedFieldProjection
                         {
@@ -169,8 +171,9 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
                 .WithData("max", limit);
         }
 
-        // #208：字段类型不在字段值行持久化——按模板列 FieldDefinitionId 一次性 load FieldDefinition 拿 DataType，
-        // 供 FieldValueToString 渲染 typed 列。穿透 soft-delete（列可能引用已归档字段）；有界（= 列数）。
+        // #208: field type is not persisted on field value rows. Load FieldDefinition once by template column FieldDefinitionId
+        // to get DataType for FieldValueToString rendering of typed columns. Traverse soft-delete because columns may reference archived fields.
+        // Bounded by column count.
         var columnFieldIds = template.Columns.Select(c => c.FieldDefinitionId).Distinct().ToList();
         var fieldDataTypes = new Dictionary<Guid, FieldDataType>();
         var fieldDisplayNames = new Dictionary<Guid, string>();
@@ -186,7 +189,7 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
             }
         }
 
-        // 固定系统字段列在前，模板配置的抽取字段列在后（#207）。列标题取字段的 DisplayName。
+        // Fixed system field columns first, then extracted field columns configured by the template (#207). Column headers use field DisplayName.
         var headers = new List<string>(SystemFieldHeaders);
         headers.AddRange(template.Columns.Select(c =>
             fieldDisplayNames.TryGetValue(c.FieldDefinitionId, out var displayName)
@@ -200,8 +203,8 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
                 var cells = new string?[headers.Count];
                 cells[0] = r.LifecycleStatus.ToString();
                 cells[1] = r.ReviewDisposition.ToString();
-                // #287：原因轴——None → 空单元格（无未解决原因），否则 [Flags].ToString()（如 "MissingRequiredFields"）。
-                // 空 vs 非空 比依赖"缺失字段单元格留空"更明确（后者无法区分非必填空 vs 必填缺失）。
+                // #287: reason axis. None -> empty cell (no unresolved reason); otherwise [Flags].ToString(), such as "MissingRequiredFields".
+                // Empty vs non-empty is clearer than relying on "missing field cell left empty", which cannot distinguish optional empty from required missing.
                 cells[2] = r.ReviewReasons == DocumentReviewReasons.None ? null : r.ReviewReasons.ToString();
                 cells[3] = r.Title;
                 for (var i = 0; i < template.Columns.Count; i++)
@@ -227,7 +230,7 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
     {
         var entity = await _templateRepository.GetAsync(id);
 
-        // 跨层防御：只能访问自己所在层。
+        // Cross-layer defense: callers may access only their own layer.
         if (entity.TenantId != CurrentTenant.Id)
         {
             throw new EntityNotFoundException(typeof(ExportTemplate), id);
@@ -246,7 +249,7 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
         }
     }
 
-    /// <summary>断言模板限定的文档类型存在于当前层（#207 必填，按不可变 Id 关联）；不存在则 loud fail。</summary>
+    /// <summary>Asserts that the document type constrained by the template exists in the current layer (#207 required, associated by immutable Id); missing loud-fails.</summary>
     protected virtual async Task EnsureDocumentTypeExistsAsync(Guid documentTypeId)
     {
         var type = await _documentTypeRepository.FindAsync(documentTypeId);
@@ -256,7 +259,7 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
         }
     }
 
-    /// <summary>校验每列引用的 <c>FieldDefinitionId</c> 属于该类型当前层的字段定义（#207）；不属于则 loud fail。</summary>
+    /// <summary>Validates that each column's <c>FieldDefinitionId</c> belongs to a field definition for this type in the current layer (#207); otherwise loud-fails.</summary>
     protected virtual async Task<List<ExportColumn>> MapColumnsAsync(
         IEnumerable<ExportColumnInput> columns, Guid documentTypeId)
     {
@@ -286,8 +289,9 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
             return null;
         }
 
-        // 按 Order 升序渲染该字段全部值行再 join（#212）——单值字段恰好一行（结果即该值，与既有行为一致），
-        // 多值字段（文本）多行用 "; " 连接，不丢值，且确定（不依赖 DB 对 child 子查询未指定的行返回顺序）。
+        // Render all value rows for this field by Order ascending, then join (#212). Single-value fields have exactly one row,
+        // so the result is that value and matches existing behavior. Multi-value text fields join rows with "; ", preserving all values
+        // deterministically without relying on DB row order for child subqueries without explicit ordering.
         var rendered = d.ExtractedFields
             .Where(f => f.FieldDefinitionId == fieldDefinitionId)
             .OrderBy(f => f.Order)
@@ -298,14 +302,16 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
         return rendered.Count > 0 ? string.Join("; ", rendered) : null;
     }
 
-    // 按字段类型渲染类型化列为单元格字符串（InvariantCulture，与 DocumentExtractedField.ToJsonElement 的规范形一致）。
-    // 类型来自 FieldDefinition.DataType（#208：不在字段值行持久化）。未知类型 loud fail——与 SetValue / ToJsonElement /
-    // ApplyFieldValueFilter 一致（绝不静默吐空单元格：新增枚举值漏改本处应在测试 / 运行期响亮报错，而非无声错导）。
+    // Render typed columns to cell strings by field type, using InvariantCulture and matching the canonical shape in DocumentExtractedField.ToJsonElement.
+    // Type comes from FieldDefinition.DataType (#208: not persisted on field value rows). Unknown type loud-fails, consistent with
+    // SetValue / ToJsonElement / ApplyFieldValueFilter. Never silently output an empty cell: if a new enum value misses this branch,
+    // tests / runtime should fail loudly instead of silently exporting wrong data.
     private static string? FieldValueToString(ExtractedFieldProjection f, FieldDataType dataType) => dataType switch
     {
         FieldDataType.Text => f.TextValue,
         FieldDataType.LongText => f.LongTextValue,
-        // Number 以最小形渲染（"0.######"）：整数 1000 → "1000"，小数 10.50 → "10.5"——不带 decimal(38,6) 的 6 位尾零。
+        // Render Number in minimal shape ("0.######"): integer 1000 -> "1000", decimal 10.50 -> "10.5",
+        // without the six trailing zeros from decimal(38,6).
         FieldDataType.Number => f.NumberValue?.ToString("0.######", CultureInfo.InvariantCulture),
         FieldDataType.Boolean => f.BooleanValue == null ? null : (f.BooleanValue.Value ? "true" : "false"),
         FieldDataType.Date => f.DateValue?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),

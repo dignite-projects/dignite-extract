@@ -22,16 +22,18 @@ public class DocumentAIPermissions
             public const string Retry = Default + ".Retry";
         }
 
-        // 存量文档批量重处理（#289）——admin 级操作：配置（分类提示词 / 字段定义）调整后对存量重跑。
-        // 单篇「仅重抽字段」走 ConfirmClassification（操作员级，与「重新识别」对称）；批量入口走这里。
+        // Bulk reprocessing of existing documents (#289): admin-level operation used to rerun
+        // existing documents after configuration changes such as classification prompts / field
+        // definitions. Single-document "field re-extraction only" uses ConfirmClassification
+        // (operator-level, symmetric with "re-recognize"); bulk entry points use this permission set.
         public static class Reprocessing
         {
             public const string Default = Documents.Default + ".Reprocessing";
 
-            /// <summary>批量字段重抽（叶子操作，轻警告）。</summary>
+            /// <summary>Bulk field re-extraction, a leaf operation with light warning.</summary>
             public const string FieldExtraction = Default + ".FieldExtraction";
 
-            /// <summary>批量重新分类（级联 + 破坏性，重警告）。</summary>
+            /// <summary>Bulk reclassification, cascading + destructive, with heavy warning.</summary>
             public const string Reclassification = Default + ".Reclassification";
         }
 
@@ -44,7 +46,7 @@ public class DocumentAIPermissions
         }
     }
 
-    // 文件柜（#194）——人工组织维度，与 Documents 同级权限组。
+    // Cabinets (#194): human organization dimension, sibling permission group to Documents.
     public static class Cabinets
     {
         public const string Default = GroupName + ".Cabinets";
@@ -53,7 +55,7 @@ public class DocumentAIPermissions
         public const string Delete = Default + ".Delete";
     }
 
-    // 文档类型 schema 管理（#217）——admin 级操作，独立于文档 CRUD。
+    // Document type schema management (#217): admin-level operations independent of document CRUD.
     public static class DocumentTypes
     {
         public const string Default = GroupName + ".DocumentTypes";
@@ -62,7 +64,7 @@ public class DocumentAIPermissions
         public const string Delete = Default + ".Delete";
     }
 
-    // 字段定义 schema 管理（#217）——admin 级操作，独立于文档 CRUD。
+    // Field definition schema management (#217): admin-level operations independent of document CRUD.
     public static class FieldDefinitions
     {
         public const string Default = GroupName + ".FieldDefinitions";

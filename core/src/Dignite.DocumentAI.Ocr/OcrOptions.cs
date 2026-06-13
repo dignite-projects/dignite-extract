@@ -4,9 +4,9 @@ namespace Dignite.DocumentAI.Ocr;
 
 public class OcrOptions
 {
-    /// <summary>语言提示列表（BCP 47 格式）。空列表表示自动检测。</summary>
+    /// <summary>Language hint list in BCP 47 format. An empty list means auto-detection.</summary>
     public IList<string> LanguageHints { get; set; } = new List<string>();
 
-    /// <summary>文件 MIME 类型，帮助部分 Provider 优化识别策略。</summary>
+    /// <summary>File MIME type, used by some providers to optimize recognition strategy.</summary>
     public string ContentType { get; set; } = string.Empty;
 }

@@ -277,7 +277,8 @@ export class DocumentListComponent implements OnInit {
           const spinner = this.isProcessingDocument(doc)
             ? '<span class="spinner-border spinner-border-sm me-1" role="status"></span>'
             : '';
-          // #284：双 badge 可叠加——生命周期(可用性轴) + 条件 review badge(审核轴)，互不覆盖。
+          // #284: two badges may stack: lifecycle on the availability axis plus conditional review badge
+          // on the review axis. They do not overwrite each other.
           const lifecycle = `<span class="${this.getStatusBadgeClass(doc.lifecycleStatus)}">${spinner}${escapeHtmlChars(localization.instant(this.getStatusLabel(doc.lifecycleStatus)))}</span>`;
           const review = doc.requiresReview
             ? ` <span class="badge bg-warning text-dark">${escapeHtmlChars(localization.instant(this.reviewBadgeLabel(doc)))}</span>`
@@ -356,8 +357,9 @@ export class DocumentListComponent implements OnInit {
       });
   }
 
-  // 列表只携带 documentTypeCode（出口契约）；映射到当前层可见类型的 displayName 展示，
-  // 跨层 / 已删类型解析不到时回退 code。cabinets() 仍保留供顶部筛选下拉使用。
+  // The list carries only documentTypeCode as the output contract. Map it to the displayName of a type
+  // visible in the current layer; fall back to code when cross-layer or deleted types cannot be resolved.
+  // cabinets() remains available for the top filter dropdown.
   documentTypeDisplayName(code: string | null | undefined): string | null {
     if (!code) return null;
     return this.documentTypes().find(t => t.typeCode === code)?.displayName ?? code;
@@ -436,15 +438,18 @@ export class DocumentListComponent implements OnInit {
     this.refreshListFromFirstPage();
   }
 
-  // #284：只有仍"需关注"(requiresReview，服务端已含 disposition 判据——已拒绝文档不再需关注)
-  // 且"分类未定"(UnresolvedClassification)才显示确认分类按钮；必填缺失走详情页补录。
+  // #284: show the confirm-classification button only when the document still requires attention
+  // (requiresReview, with disposition already considered server-side so rejected documents no longer
+  // require attention) and classification is unresolved. Missing required fields are completed on the
+  // detail page.
   needsConfirmation(doc: DocumentListItemDto): boolean {
     return doc.requiresReview === true &&
       ((doc.reviewReasons ?? DocumentReviewReasons.None) & DocumentReviewReasons.UnresolvedClassification)
         !== DocumentReviewReasons.None;
   }
 
-  // #284：纯可用性轴——去掉旧的 review 混判（双轴正交后两个 badge 各自渲染，不再互斥）。
+  // #284: pure availability axis. Removed the old review-mixed judgment; after the two axes became
+  // orthogonal, the two badges render independently and are no longer mutually exclusive.
   isProcessingDocument(doc: DocumentListItemDto): boolean {
     return doc.lifecycleStatus === DocumentLifecycleStatus.Processing ||
       doc.lifecycleStatus === DocumentLifecycleStatus.Uploaded;
@@ -502,7 +507,8 @@ export class DocumentListComponent implements OnInit {
     }
   }
 
-  // #284：review badge 文案按原因——待分类确认 / 必填待补。客户端只渲染服务端给的 reviewReasons。
+  // #284: review badge text follows the reason: classification confirmation pending or required fields
+  // missing. The client renders only reviewReasons provided by the server.
   reviewBadgeLabel(doc: DocumentListItemDto): string {
     const reasons = doc.reviewReasons ?? DocumentReviewReasons.None;
     if ((reasons & DocumentReviewReasons.UnresolvedClassification) !== DocumentReviewReasons.None) {

@@ -10,7 +10,7 @@ public class ExportTemplateDto : EntityDto<Guid>
     public string Name { get; set; } = default!;
     public ExportFormat Format { get; set; }
 
-    /// <summary>限定的文档类型不可变 Id（#207：内部稳定句柄，TypeCode 可由 admin 重命名故不作引用键）。</summary>
+    /// <summary>Immutable id of the constrained document type (#207: internal stable handle; TypeCode can be renamed by admins and is not used as a reference key).</summary>
     public Guid DocumentTypeId { get; set; }
     public List<ExportColumnDto> Columns { get; set; } = new();
 }

@@ -1,11 +1,12 @@
 namespace Dignite.DocumentAI;
 
 /// <summary>
-/// 错误码字符串：是 i18n 字典匹配 key + 下游 consumer 按 code 分支处理的 wire-level 协议契约。
-/// 必须是 <c>const</c>——任何运行时改动都会让 Localization/DocumentAI/*.json 的映射失效，
-/// 并破坏下游消费方既有的 try/catch (code == "DocumentAI:Xxx") 分支逻辑。
-/// 嵌套静态类仅按聚合分"抽屉"（文件柜式分组）——C# 标识符路径可调整，但**字符串值是冻结契约**，
-/// 与 Localization/DocumentAI/*.json 的 key 一一对应，不得改动。
+/// Error-code strings: wire-level protocol contract used as i18n dictionary keys and by downstream
+/// consumers branching on code. They must be <c>const</c>: any runtime change would break mappings in
+/// Localization/DocumentAI/*.json and downstream try/catch logic such as
+/// (code == "DocumentAI:Xxx"). Nested static classes are only aggregate-based grouping drawers; C#
+/// identifier paths can be adjusted, but <b>string values are frozen contracts</b> and correspond
+/// one-to-one with Localization/DocumentAI/*.json keys.
 /// </summary>
 public static class DocumentAIErrorCodes
 {
@@ -16,9 +17,12 @@ public static class DocumentAIErrorCodes
         public const string Duplicate = "DocumentAI:DocumentDuplicate";
         public const string InRecycleBin = "DocumentAI:DocumentInRecycleBin";
         public const string NotClassified = "DocumentAI:DocumentNotClassified";
-        // #263：「重新识别」（重跑自动分类）的前置——自动分类输入是 Document.Markdown，文本提取尚未产出文本则无从重判。
+        // #263: prerequisite for "re-recognize" (rerun automatic classification). Automatic
+        // classification input is Document.Markdown, so without text extraction output there is
+        // nothing to reclassify.
         public const string NotTextExtracted = "DocumentAI:DocumentNotTextExtracted";
-        // #221：上传 fail-closed 校验失败码（大小超限 / content-type + 扩展名不在白名单）。
+        // #221: upload fail-closed validation failure codes (size exceeded / content-type + extension
+        // not in whitelist).
         public const string FileTooLarge = "DocumentAI:DocumentFileTooLarge";
         public const string UnsupportedFileType = "DocumentAI:DocumentUnsupportedFileType";
     }
@@ -72,7 +76,7 @@ public static class DocumentAIErrorCodes
         public const string DocumentLimitExceeded = "DocumentAI:ExportDocumentLimitExceeded";
     }
 
-    // 文件柜（#194）
+    // Cabinets (#194).
     public static class Cabinet
     {
         public const string InvalidName = "DocumentAI:InvalidCabinetName";

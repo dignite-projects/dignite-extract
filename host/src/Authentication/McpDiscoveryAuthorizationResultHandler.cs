@@ -8,17 +8,22 @@ using ModelContextProtocol.AspNetCore.Authentication;
 namespace Dignite.DocumentAI.Host.Authentication;
 
 /// <summary>
-/// #278：仅对带 <see cref="McpDiscoveryChallengeMarker"/> 的端点（/mcp），把"未认证"的 challenge
-/// 路由到 McpAuth scheme，使 401 携带 <c>WWW-Authenticate: Bearer resource_metadata="..."</c>
-/// 发现指针（RFC 9728）。其余端点一律委托框架默认 handler。
+/// #278: only for endpoints marked with <see cref="McpDiscoveryChallengeMarker"/> (/mcp), route
+/// unauthenticated challenges to the McpAuth scheme so 401 responses carry the
+/// <c>WWW-Authenticate: Bearer resource_metadata="..."</c> discovery pointer (RFC 9728). All other
+/// endpoints are delegated to the framework default handler.
 ///
-/// 为什么不直接把 McpAuth 加进端点授权策略的 AuthenticationSchemes：那会让 PolicyEvaluator
-/// 重新经 McpAuth → OpenIddict authenticate，得到一个未经 ABP dynamic claims 富化的 principal，
-/// 覆盖 UseDynamicClaims 富化过的 ambient User —— 既丢失签发后变更的角色（可能误拒合法 token），
-/// 也绕过"令牌签发后吊销/禁用用户"的实时失效（安全回归）。这里只覆盖 challenge：authenticate
-/// 仍走端点默认策略（RequireAuthenticatedUser，无显式 scheme），复用 ambient 富化 User。
+/// Why not add McpAuth directly to the endpoint authorization policy's AuthenticationSchemes: that
+/// would make PolicyEvaluator authenticate again through McpAuth -> OpenIddict, producing a principal
+/// that has not been enriched by ABP dynamic claims and overwriting the ambient User enriched by
+/// UseDynamicClaims. That would lose role changes made after token issuance, potentially rejecting a
+/// valid token, and would also bypass real-time invalidation for users revoked / disabled after token
+/// issuance, a security regression. This handler only overrides challenge; authentication still uses
+/// the endpoint default policy (RequireAuthenticatedUser, no explicit scheme) and reuses the ambient
+/// enriched User.
 ///
-/// 也不把全局 DefaultChallengeScheme 改成 McpAuth —— 那会破坏管理后台 UI 的 cookie 登录重定向。
+/// Also do not change the global DefaultChallengeScheme to McpAuth because that would break cookie
+/// login redirects for the admin UI.
 /// </summary>
 public class McpDiscoveryAuthorizationResultHandler : IAuthorizationMiddlewareResultHandler
 {
@@ -30,7 +35,8 @@ public class McpDiscoveryAuthorizationResultHandler : IAuthorizationMiddlewareRe
         AuthorizationPolicy policy,
         PolicyAuthorizationResult authorizeResult)
     {
-        // 仅 401（未认证）走 McpAuth challenge 注入发现指针；403（已认证、权限不足）保持框架默认行为。
+        // Only 401 (unauthenticated) uses McpAuth challenge to inject the discovery pointer; 403
+        // (authenticated but insufficient permissions) keeps the framework default behavior.
         if (authorizeResult.Challenged
             && !authorizeResult.Forbidden
             && context.GetEndpoint()?.Metadata.GetMetadata<McpDiscoveryChallengeMarker>() != null)
@@ -44,8 +50,9 @@ public class McpDiscoveryAuthorizationResultHandler : IAuthorizationMiddlewareRe
 }
 
 /// <summary>
-/// 端点标记：声明该端点的未认证 challenge 走 MCP OAuth Protected Resource Metadata 发现链路（#278）。
-/// 由 <see cref="McpDiscoveryAuthorizationResultHandler"/> 识别。
+/// Endpoint marker declaring that unauthenticated challenges for this endpoint use the MCP OAuth
+/// Protected Resource Metadata discovery flow (#278). Recognized by
+/// <see cref="McpDiscoveryAuthorizationResultHandler"/>.
 /// </summary>
 public sealed class McpDiscoveryChallengeMarker
 {

@@ -1,9 +1,9 @@
 namespace Dignite.DocumentAI.Ai;
 
 /// <summary>
-/// Workflow 系统提示词模板，由 <see cref="IPromptProvider"/> 返回。
+/// Workflow system prompt template returned by <see cref="IPromptProvider"/>.
 /// </summary>
 /// <param name="SystemInstructions">
-/// 系统指令主体文本，不含 PromptBoundary 规则（由 Workflow 在使用侧追加）。
+/// Main system instruction text, without PromptBoundary rules. Workflows append those at the use site.
 /// </param>
 public record PromptTemplate(string SystemInstructions);

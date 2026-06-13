@@ -16,8 +16,9 @@ public class DocumentAIPaddleOcrModule : AbpModule
         context.Services.Configure<PaddleOcrOptions>(
             configuration.GetSection("PaddleOcr"));
 
-        // 使用具名 HttpClient，超时从 PaddleOcrOptions.TimeoutSeconds 读取。
-        // PP-StructureV3 在 CPU 上处理多页图片 PDF 可能远超默认 100s，此处延长上限。
+        // Uses a named HttpClient, with timeout read from PaddleOcrOptions.TimeoutSeconds.
+        // PP-StructureV3 may take far longer than the default 100s on multi-page image PDFs on CPU, so
+        // this raises the limit.
         context.Services.AddHttpClient(HttpClientName, (sp, client) =>
         {
             var opts = sp.GetRequiredService<IOptions<PaddleOcrOptions>>().Value;

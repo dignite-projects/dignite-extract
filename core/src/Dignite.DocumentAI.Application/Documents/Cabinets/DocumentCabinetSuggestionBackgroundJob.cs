@@ -14,18 +14,26 @@ using Volo.Abp.Uow;
 namespace Dignite.DocumentAI.Documents.Cabinets;
 
 /// <summary>
-/// 「留空 AI 兜底选柜」后台作业（#265）：文本提取成功（Markdown 就绪）时由 <c>DocumentTextExtractionBackgroundJob</c>
-/// fan-out 一次。独立、一次性、best-effort——守 #194 正交护栏：是 <see cref="Document.CabinetId"/> 的唯一 AI 写入点，
-/// 不建 <c>DocumentPipelineRun</c>、不进 Ready 闸门、不可重试；分类 / 字段抽取 pipeline 仍不读写 CabinetId。
+/// Background job for "blank cabinet AI fallback selection" (#265): fanned out once by
+/// <c>DocumentTextExtractionBackgroundJob</c> after text extraction succeeds and Markdown is ready.
+/// It is independent, one-shot, and best-effort. To preserve the #194 orthogonality guardrail, this is
+/// the only AI write point for <see cref="Document.CabinetId"/>; it does not create a
+/// <c>DocumentPipelineRun</c>, does not participate in the Ready gate, and is not retryable.
+/// Classification / field extraction pipelines still do not read or write CabinetId.
 /// <para>
-/// 仅在 CabinetId 留空时填（人工优先；Begin + Complete 双重门控，后者复检 #257 改派竞态）。三阶段 UoW
-/// （Begin 加载 + 门控 + 取候选 → External 无 UoW 跑 LLM → Complete 复检 + 写回），遵循 background-jobs.md。
+/// It fills CabinetId only when the field is blank (operator choice wins; Begin + Complete double
+/// gating, with Complete rechecking the #257 reassignment race). The three-stage UoW shape follows
+/// background-jobs.md: Begin loads + gates + fetches candidates, External runs the LLM without a UoW,
+/// and Complete rechecks + writes back.
 /// </para>
 /// <para>
-/// <b>Fail-open 吞下一切异常（含取消）</b>：本作业非 PipelineRun、不可重试，<see cref="ExecuteAsync"/> 的 catch
-/// <b>不</b>加 <c>when (ex is not OperationCanceledException)</c> 过滤——否则 provider per-call 超时
-/// （<see cref="TaskCanceledException"/> 派生自 <see cref="OperationCanceledException"/>）会逃逸 → 触发 ABP 重试风暴，
-/// 与「不可重试」契约相悖。停机及时性由 ambient 取消令牌保证（在飞 LLM 调用随之返回），取消异常本身吞掉、留「未归类」。
+/// <b>Fail-open swallows every exception, including cancellation</b>: this job is not a PipelineRun
+/// and is not retryable, so the <see cref="ExecuteAsync"/> catch deliberately has no
+/// <c>when (ex is not OperationCanceledException)</c> filter. Otherwise provider per-call timeouts
+/// (<see cref="TaskCanceledException"/> derives from <see cref="OperationCanceledException"/>) would
+/// escape and trigger an ABP retry storm, violating the "not retryable" contract. Shutdown promptness
+/// is handled by the ambient cancellation token, which in-flight LLM calls observe; the cancellation
+/// exception itself is swallowed, leaving the document uncategorized.
 /// </para>
 /// </summary>
 [BackgroundJobName("DocumentAI.DocumentCabinetSuggestion")]
@@ -38,8 +46,9 @@ public class DocumentCabinetSuggestionBackgroundJob
     private readonly IUnitOfWorkManager _unitOfWorkManager;
     private readonly ICurrentTenant _currentTenant;
     private readonly DocumentAIBehaviorOptions _options;
-    // ABP BackgroundJobExecuter 在调用 ExecuteAsync 前把作业取消令牌（默认 worker 来源是 host 停机令牌）压入 ambient，
-    // 外部慢工作（LLM 调用）据此可在停机时及时取消（与 DocumentTextExtractionBackgroundJob 同源）。
+    // ABP BackgroundJobExecuter pushes the job cancellation token into ambient state before calling
+    // ExecuteAsync. The default worker source is the host shutdown token, so slow external work such
+    // as LLM calls can cancel promptly during shutdown, matching DocumentTextExtractionBackgroundJob.
     private readonly ICancellationTokenProvider _cancellationTokenProvider;
 
     public DocumentCabinetSuggestionBackgroundJob(
@@ -67,7 +76,8 @@ public class DocumentCabinetSuggestionBackgroundJob
             var workItem = await PrepareAsync(args.DocumentId);
             if (workItem == null)
             {
-                // 自门控命中（人工已选 / 无 Markdown / 无候选柜）——静默结束，文档保持「未归类」。
+                // Self-gated out (operator already selected, no Markdown, or no candidate cabinets):
+                // end silently and leave the document uncategorized.
                 return;
             }
 
@@ -77,29 +87,32 @@ public class DocumentCabinetSuggestionBackgroundJob
         }
         catch (Exception ex)
         {
-            // Fail-open：吞下一切（含取消异常）——理由见类注释（不加 OperationCanceledException 过滤，避免 ABP 重试风暴）。
+            // Fail-open: swallow everything, including cancellation. See the class comment for why no
+            // OperationCanceledException filter is used and why this avoids ABP retry storms.
             Logger.LogWarning(ex,
                 "AI cabinet suggestion failed for document {DocumentId}; leaving it uncategorized.",
                 args.DocumentId);
         }
     }
 
-    /// <summary>Begin 段（短 UoW）：加载文档、自门控、取当前层候选柜。门控命中返回 <c>null</c>。</summary>
+    /// <summary>Begin stage (short UoW): load the document, self-gate, and fetch current-layer candidate cabinets. Returns <c>null</c> when gated out.</summary>
     protected virtual async Task<CabinetSuggestionWorkItem?> PrepareAsync(Guid documentId)
     {
         using var uow = _unitOfWorkManager.Begin(requiresNew: true);
 
         var document = await _documentRepository.GetAsync(documentId, includeDetails: false);
 
-        // 护栏 2：人工已选（或上一轮已填）→ 人工优先，AI 不覆盖。
-        // 选柜依据内容（#265）——尚无 Markdown 无从判断。
+        // Guardrail 2: an operator already selected a cabinet, or a previous pass filled one. Human
+        // choice wins and AI must not overwrite it. Cabinet selection is content-based (#265), so
+        // without Markdown there is nothing to classify.
         if (document.CabinetId.HasValue || string.IsNullOrEmpty(document.Markdown))
         {
             await uow.CompleteAsync();
             return null;
         }
 
-        // 候选集按 Document.TenantId 匹配单层（ambient IMultiTenant filter），按柜名稳定排序 + 截断。
+        // Match candidates to the document tenant as a single layer via the ambient IMultiTenant
+        // filter, then use stable name ordering and truncate.
         List<Cabinet> candidates;
         using (_currentTenant.Change(document.TenantId))
         {
@@ -109,7 +122,9 @@ public class DocumentCabinetSuggestionBackgroundJob
                 .Take(_options.MaxCabinetsInSuggestionPrompt)
                 .ToList();
 
-            // 柜数超上限：被裁掉的是字典序靠后的柜（无优先级概念，least-bad），正确柜可能落在截断外——记 warning 供运维可见。
+            // Cabinet count exceeds the prompt cap. Dropped cabinets are lexicographically later
+            // because there is no priority model, so this is the least-bad deterministic choice; the
+            // correct cabinet may be outside the truncated set, so log a warning for operations.
             if (all.Count > _options.MaxCabinetsInSuggestionPrompt)
             {
                 Logger.LogWarning(
@@ -129,8 +144,7 @@ public class DocumentCabinetSuggestionBackgroundJob
         return new CabinetSuggestionWorkItem(document.Id, document.TenantId, document.Markdown, candidates);
     }
 
-    /// <summary>External 段（无 UoW）：LLM 选柜。保持 ambient 租户与候选集组装一致（防御未来 workflow 内二次查询）；
-    /// 传入 ambient 作业取消令牌，停机时可及时取消 LLM 调用。</summary>
+    /// <summary>External stage (no UoW): ask the LLM to choose a cabinet. Keep the ambient tenant aligned with candidate assembly as a defense against future workflow-side queries, and pass the ambient job cancellation token so LLM calls can cancel promptly during shutdown.</summary>
     protected virtual async Task<CabinetSuggestionOutcome> SuggestAsync(CabinetSuggestionWorkItem workItem)
     {
         using (_currentTenant.Change(workItem.TenantId))
@@ -140,10 +154,12 @@ public class DocumentCabinetSuggestionBackgroundJob
         }
     }
 
-    /// <summary>Complete 段（短 UoW）：阈值裁决 + 竞态复检 + 写回 CabinetId。</summary>
+    /// <summary>Complete stage (short UoW): apply the threshold decision, recheck races, and write back CabinetId.</summary>
     protected virtual async Task ApplyAsync(Guid documentId, CabinetSuggestionOutcome outcome)
     {
-        // 弃选（无候选 / LLM 弃选 / 编号越界）或置信度不达标 → 不写，保持「未归类」（宁缺毋滥，#265）。
+        // No choice (no candidates, LLM abstained, or index out of range) or confidence below the
+        // threshold means no write; keep the document uncategorized because #265 prefers abstaining
+        // over a low-quality assignment.
         if (outcome.CabinetId is not { } cabinetId
             || outcome.Confidence < _options.MinCabinetSuggestionConfidence)
         {
@@ -154,14 +170,16 @@ public class DocumentCabinetSuggestionBackgroundJob
 
         var document = await _documentRepository.GetAsync(documentId, includeDetails: false);
 
-        // 护栏 2 复检：LLM 期间操作员可能已手动改派（#257）——人工优先，不覆盖。
+        // Guardrail 2 recheck: an operator may have reassigned the document while the LLM was running
+        // (#257). Human choice wins, so do not overwrite it.
         if (document.CabinetId.HasValue)
         {
             await uow.CompleteAsync();
             return;
         }
 
-        // 复检柜仍在当前层存在（LLM 期间可能被删柜）——不写悬空指向已删柜的 CabinetId。
+        // Recheck that the cabinet still exists in the current layer. It may have been deleted while
+        // the LLM was running, and we must not write a dangling CabinetId.
         using (_currentTenant.Change(document.TenantId))
         {
             var cabinet = await _cabinetRepository.FindAsync(cabinetId);

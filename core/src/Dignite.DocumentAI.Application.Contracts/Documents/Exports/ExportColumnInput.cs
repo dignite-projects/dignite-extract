@@ -4,13 +4,15 @@ using System.ComponentModel.DataAnnotations;
 namespace Dignite.DocumentAI.Documents.Exports;
 
 /// <summary>
-/// 导出模板列入参（#207 收敛为 ExtractedField-only）。提交字段定义不可变 Id，AppService 校验其属于模板的
-/// <c>DocumentTypeId</c> 后持久化。列标题由 <c>FieldDefinition.DisplayName</c> 在导出时动态取得，无需配置。
-/// 系统字段固定导出，不在此配置。
+/// Export template column input (#207 converged to ExtractedField-only). The caller submits the
+/// immutable field definition id; AppService validates that it belongs to the template's
+/// <c>DocumentTypeId</c> before persisting. Column titles are resolved dynamically from
+/// <c>FieldDefinition.DisplayName</c> during export and need no configuration.
+/// System fields are exported fixedly and are not configured here.
 /// </summary>
 public class ExportColumnInput
 {
-    /// <summary>要导出的类型绑定字段定义不可变 Id（必须属于该模板的文档类型）。</summary>
+    /// <summary>Immutable id of the type-bound field definition to export; it must belong to the template's document type.</summary>
     [Required]
     public Guid FieldDefinitionId { get; set; }
 

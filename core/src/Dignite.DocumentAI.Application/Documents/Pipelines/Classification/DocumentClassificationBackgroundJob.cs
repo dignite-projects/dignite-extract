@@ -71,7 +71,8 @@ public class DocumentClassificationBackgroundJob
 
         var document = await DocumentRepository.GetAsync(args.DocumentId, includeDetails: false);
 
-        // 候选集组装：按 Document.TenantId 匹配单层文档类型，不跨层 union；按 Priority DESC + 截断。
+        // Candidate assembly: match document types in the single layer selected by Document.TenantId,
+        // never cross-layer union; order by Priority DESC and truncate.
         List<DocumentType> candidates;
         using (_currentTenant.Change(document.TenantId))
         {
@@ -94,9 +95,10 @@ public class DocumentClassificationBackgroundJob
 
     private async Task<DocumentClassificationOutcome> ClassifyAsync(ClassificationWorkItem workItem)
     {
-        // 防御性深度：LLM 调用本身不查 DB（无跨租户泄漏风险），但保持 ambient tenant 与
-        // FieldExtractionEventHandler 一致——未来若 workflow 内增 telemetry / cache / 二次查询，
-        // 不会因为 ambient context 漂移而绕过隔离。
+        // Defense-in-depth: the LLM call itself does not query the DB, so it has no cross-tenant leak
+        // risk, but keep the ambient tenant aligned with FieldExtractionEventHandler. If telemetry /
+        // cache / secondary queries are added inside the workflow later, ambient context drift will
+        // not bypass isolation.
         using (_currentTenant.Change(workItem.TenantId))
         {
             try
@@ -124,7 +126,8 @@ public class DocumentClassificationBackgroundJob
     {
         using var uow = UnitOfWorkManager.Begin(requiresNew: true);
 
-        // includeFieldValues:true——低置信度路径会清空类型绑定字段（#267 不变量），集合须在场 EF 才删得掉子行。
+        // includeFieldValues:true because the low-confidence path clears type-bound fields (#267
+        // invariant), and EF needs the collection present to delete child rows.
         var (document, run) = await LoadDocumentAndRunAsync(
             workItem.DocumentId, workItem.RunId, DocumentAIPipelines.Classification, includeFieldValues: true);
 
@@ -142,7 +145,8 @@ public class DocumentClassificationBackgroundJob
         DocumentPipelineRun run,
         DocumentClassificationOutcome outcome)
     {
-        // 字段架构 v2：从 DB 查 type definition（按 Document.TenantId 精确匹配单层）
+        // Field architecture v2: look up the type definition from DB, exactly matching the single
+        // layer selected by Document.TenantId.
         DocumentType? typeDef = null;
         if (!string.IsNullOrEmpty(outcome.TypeCode))
         {

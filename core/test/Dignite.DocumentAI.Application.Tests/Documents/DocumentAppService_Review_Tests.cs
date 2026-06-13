@@ -29,8 +29,9 @@ public class DocumentAppServiceReviewTestModule : AbpModule
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
 
-        // #207：DTO 组装走 ResolveReferenceMapsAsync → GetListAsync(谓词) 批量解析 Id→code/name。
-        // 默认 stub 返回空 list（避免 NSubstitute 对 Task<List<T>> 返回 null 触发 NRE）；具体用例可按需覆盖。
+        // #207: DTO assembly goes through ResolveReferenceMapsAsync -> GetListAsync(predicate) to batch
+        // resolve Id to code/name. Default stub returns an empty list to avoid NSubstitute returning null
+        // for Task<List<T>> and causing NRE; individual cases may override as needed.
         var documentTypeRepository = Substitute.For<IDocumentTypeRepository>();
         documentTypeRepository
             .GetListAsync(Arg.Any<Expression<Func<DocumentType, bool>>>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
@@ -46,11 +47,12 @@ public class DocumentAppServiceReviewTestModule : AbpModule
 }
 
 /// <summary>
-/// <see cref="DocumentAppService.RejectReviewAsync"/> 行为（#237：落 ReviewStatus=Rejected，可恢复）+ 审核列表过滤测试。
+/// Behavior tests for <see cref="DocumentAppService.RejectReviewAsync"/> (#237: sets
+/// ReviewStatus=Rejected and is recoverable) plus review-list filtering tests.
 /// <para>
-/// #196 砍掉 OCR 置信度门槛后，进 PendingReview 的唯一来源是分类低置信度 / 无合适类型
-/// （<see cref="DocumentPipelineRunManager.CompleteClassificationWithLowConfidenceAsync"/>）；
-/// 操作员的审核动作只剩 Reclassify（指派类型）或 Reject，不再有"裸放行"(approve)。
+/// After #196 removed the OCR confidence gate, the only source of PendingReview is classification low
+/// confidence / no suitable type (<see cref="DocumentPipelineRunManager.CompleteClassificationWithLowConfidenceAsync"/>).
+/// Operator review actions are now only Reclassify (assign a type) or Reject; there is no bare approve.
 /// </para>
 /// </summary>
 public class DocumentAppService_Review_Tests
@@ -85,8 +87,8 @@ public class DocumentAppService_Review_Tests
     {
         var activePending = await CreatePendingReviewDocumentAsync("needs review");
 
-        // 被拒绝的文档落 ReviewDisposition=Rejected（#284）；它仍保留 UC 原因，但审核队列
-        // （HasReviewReasons）显式排除已拒绝文档，故不出现在队列里。
+        // Rejected document gets ReviewDisposition=Rejected (#284). It still keeps the UC reason, but the
+        // review queue (HasReviewReasons) explicitly excludes rejected documents, so it does not appear.
         var rejected = await CreatePendingReviewDocumentAsync("low confidence");
         rejected.RejectReview("scan unusable");
 
@@ -102,8 +104,9 @@ public class DocumentAppService_Review_Tests
     [Fact]
     public async Task RejectedDocuments_Are_Queryable_By_Rejected_ReviewStatus()
     {
-        // #237：拒绝可恢复 + 留痕——reject 把 ReviewStatus 落到 Rejected（权威信号），
-        // 操作员 / 下游据此显式查询被拒文档；LifecycleStatus 仍是 Failed 的"宏观不可用"外观。
+        // #237: rejection is recoverable and leaves trace. reject sets ReviewStatus to Rejected as the
+        // authoritative signal, and operators / downstream consumers explicitly query rejected documents
+        // from it. LifecycleStatus remains Failed as the broad "unavailable" appearance.
         var rejected = await CreatePendingReviewDocumentAsync("low confidence");
         rejected.RejectReview("scan unusable");
 
@@ -118,7 +121,8 @@ public class DocumentAppService_Review_Tests
     [Fact]
     public async Task GetAsync_With_Missing_Required_Field_Exposes_Review_Reason_Detail()
     {
-        // #284：详情 DTO 出口审核明细——必填缺失原因(non-blocking) + 缺失字段 DisplayName，服务端算/客户端纯渲染。
+        // #284: detail DTO outputs review details: non-blocking missing-required-fields reason plus
+        // missing field DisplayName. Server computes, client only renders.
         var typeId = Guid.NewGuid();
         var doc = CreateDocument();
         typeof(Document)
@@ -128,10 +132,10 @@ public class DocumentAppService_Review_Tests
         doc.SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: true);
         StubGet(doc);
 
-        // 该类型有一个必填字段 "amount"(DisplayName "金额")，文档未抽到 → 缺失。
+        // This type has one required field "amount", and the document did not extract it, so it is missing.
         var amountDef = new FieldDefinition(
             Guid.NewGuid(), tenantId: null, documentTypeId: typeId,
-            name: "amount", displayName: "金额", prompt: null,
+            name: "amount", displayName: "Amount", prompt: null,
             dataType: FieldDataType.Number, displayOrder: 0, isRequired: true);
         GetRequiredService<IFieldDefinitionRepository>()
             .GetListAsync(typeId, Arg.Any<CancellationToken>())
@@ -144,19 +148,22 @@ public class DocumentAppService_Review_Tests
         dto.ReviewReasonDetails.ShouldNotBeNull();
         var detail = dto.ReviewReasonDetails.ShouldHaveSingleItem();
         detail.Reason.ShouldBe(DocumentReviewReasons.MissingRequiredFields);
-        detail.IsBlocking.ShouldBeFalse();   // MRF 是 non-blocking
+        detail.IsBlocking.ShouldBeFalse();   // MRF is non-blocking
         detail.MissingFieldNames.ShouldNotBeNull();
-        detail.MissingFieldNames.ShouldContain("金额");
+        detail.MissingFieldNames.ShouldContain("Amount");
     }
 
     [Fact]
     public async Task GetAsync_For_Rejected_Document_Does_Not_Report_RequiresReview()
     {
-        // #284 review-fix：拒绝可恢复故保留客观原因(UC)，但出口 RequiresReview 必为 false、明细置空——
-        // 统一判据 RequiresAttention(reasons, disposition) 排除 Rejected，避免"已拒绝 + 待审"自相矛盾、计数虚高。
+        // #284 review-fix: rejection is recoverable, so keep the objective reason (UC), but output
+        // RequiresReview must be false and details cleared. Unified rule RequiresAttention(reasons,
+        // disposition) excludes Rejected, avoiding contradictory "rejected + pending review" state and
+        // inflated counts.
         var rejected = await CreatePendingReviewDocumentAsync("low confidence");
         rejected.RejectReview("scan unusable");
-        // 拒绝刻意不动 ReviewReasons：UC 原因仍在，仅 disposition 转 Rejected。
+        // Rejection deliberately does not touch ReviewReasons: the UC reason remains, and only disposition
+        // changes to Rejected.
         rejected.ReviewReasons.ShouldBe(DocumentReviewReasons.UnresolvedClassification);
         rejected.ReviewDisposition.ShouldBe(DocumentReviewDisposition.Rejected);
         StubGet(rejected);
@@ -170,9 +177,10 @@ public class DocumentAppService_Review_Tests
     [Fact]
     public void ConfirmClassification_Clears_Stale_RejectionReason()
     {
-        // #284 review-fix：操作员对已拒绝文档 Reclassify 指派类型 → ConfirmClassification 把处置转回 Confirmed，
-        // 陈旧 RejectionReason 必须清空（仅 Rejected 时该有值）。ConfirmClassification 为 internal，反射调用
-        //（与 GetAsync_With_Missing_Required_Field 的 ApplyAutomaticClassificationResult 同手法）。
+        // #284 review-fix: when an operator Reclassifies a rejected document and assigns a type,
+        // ConfirmClassification changes disposition back to Confirmed, and stale RejectionReason must be
+        // cleared because it is valid only for Rejected. ConfirmClassification is internal, so invoke it
+        // by reflection, same as ApplyAutomaticClassificationResult in GetAsync_With_Missing_Required_Field.
         var doc = CreateDocument();
         doc.RejectReview("scan unusable");
         doc.RejectionReason.ShouldBe("scan unusable");
@@ -189,9 +197,11 @@ public class DocumentAppService_Review_Tests
     [Fact]
     public async Task GetAsync_With_Confirmed_Type_But_Missing_Required_Field_Still_Requires_Review()
     {
-        // #284 review-fix：操作员已确认类型(Confirmed)但字段重抽仍缺必填 → MRF 置位、disposition=Confirmed。
-        // 统一判据 disposition!=Rejected 对 Confirmed 也成立 → RequiresReview 仍 true（与 NotReviewed 不同的处置态分支，
-        // 钉死"误写成 disposition==NotReviewed"的回归）。
+        // #284 review-fix: operator already confirmed type (Confirmed), but field re-extraction still
+        // misses required fields, so MRF is set and disposition=Confirmed.
+        // Unified rule disposition!=Rejected also applies to Confirmed, so RequiresReview remains true.
+        // This locks a disposition branch distinct from NotReviewed and prevents regression to
+        // disposition==NotReviewed.
         var typeId = Guid.NewGuid();
         var doc = CreateDocument();
         typeof(Document)
@@ -204,7 +214,7 @@ public class DocumentAppService_Review_Tests
 
         var amountDef = new FieldDefinition(
             Guid.NewGuid(), tenantId: null, documentTypeId: typeId,
-            name: "amount", displayName: "金额", prompt: null,
+            name: "amount", displayName: "Amount", prompt: null,
             dataType: FieldDataType.Number, displayOrder: 0, isRequired: true);
         GetRequiredService<IFieldDefinitionRepository>()
             .GetListAsync(typeId, Arg.Any<CancellationToken>())
@@ -220,8 +230,11 @@ public class DocumentAppService_Review_Tests
     [Fact]
     public async Task GetAsync_With_MRF_Flag_But_No_Missing_Names_Skips_Detail_But_Keeps_RequiresReview()
     {
-        // #284 fix #4：MRF 位置位但缺失字段名解析为空（in-flight schema 漂移：曾缺的必填被软删 / 翻非必填）→
-        // 跳过空壳明细、明细返回 null，但 RequiresReview 仍 true（MRF flag 由抽取阶段权威维护，不因明细暂空翻转）。
+        // #284 fix #4: MRF bit is set but missing field name resolution is empty due to in-flight schema
+        // drift, such as a previously missing required field being soft-deleted or changed to non-required.
+        // Skip empty-shell details and return null details, but RequiresReview remains true. The MRF flag
+        // is maintained authoritatively by extraction and does not flip because details are temporarily
+        // empty.
         var typeId = Guid.NewGuid();
         var doc = CreateDocument();
         typeof(Document)
@@ -231,7 +244,8 @@ public class DocumentAppService_Review_Tests
         doc.SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: true);
         StubGet(doc);
 
-        // 该类型当前无必填字段（全非必填 / 已软删）→ 缺失字段名集为空。
+        // This type currently has no required fields, all non-required or soft-deleted, so the missing
+        // field name set is empty.
         GetRequiredService<IFieldDefinitionRepository>()
             .GetListAsync(typeId, Arg.Any<CancellationToken>())
             .Returns(new List<FieldDefinition>());
@@ -245,7 +259,8 @@ public class DocumentAppService_Review_Tests
     [Fact]
     public async Task RejectReviewAsync_With_Empty_Reason_Throws_Validation()
     {
-        // #284：拒绝理由必填（RejectReviewInput.Reason [Required]）——空理由必须被 AppService 校验拦截。
+        // #284: rejection reason is required (RejectReviewInput.Reason [Required]), so empty reason must
+        // be blocked by AppService validation.
         var doc = await CreatePendingReviewDocumentAsync("needs review");
         StubGet(doc);
 
@@ -274,8 +289,9 @@ public class DocumentAppService_Review_Tests
     }
 
     /// <summary>
-    /// 造一个进入 PendingReview 的文档：text-extraction 成功 → classification 低置信度
-    /// （#196 后这是 PendingReview 的唯一产生路径）。DocumentTypeCode 保持 null。
+    /// Creates a document entering PendingReview: text-extraction succeeds, then classification has low
+    /// confidence. After #196 this is the only path producing PendingReview. DocumentTypeCode remains
+    /// null.
     /// </summary>
     private async Task<Document> CreatePendingReviewDocumentAsync(string reason)
     {
@@ -289,9 +305,10 @@ public class DocumentAppService_Review_Tests
 
     private IQueryable<Document> ApplyFilterForTest(IQueryable<Document> query, GetDocumentListInput input)
     {
-        // #216：DocumentPipelineRunManager 依赖 IDocumentPipelineRunRepository（AppService 自 follow-up #6 起
-        // 不再直接依赖——retry 状态机判定下沉到 manager.EnsureRetryableAsync）；本测试只反射调 ApplyFilter
-        // （纯 LINQ 函数，不触发 manager / repo 实际调用），传 Substitute 即可。
+        // #216: DocumentPipelineRunManager depends on IDocumentPipelineRunRepository. AppService no longer
+        // depends on it directly since follow-up #6, because retry state-machine judgment moved down to
+        // manager.EnsureRetryableAsync. This test only invokes ApplyFilter by reflection, a pure LINQ
+        // function that does not actually call manager / repo, so a Substitute is enough.
         var runRepoSubstitute = Substitute.For<Pipelines.IDocumentPipelineRunRepository>();
         var service = new DocumentAppService(
             Substitute.For<IDocumentRepository>(),
@@ -310,7 +327,8 @@ public class DocumentAppService_Review_Tests
         var method = typeof(DocumentAppService).GetMethod(
             "ApplyFilter",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
-        // #207：ApplyFilter 现签名 (query, input, documentTypeId?)；这些用例只过滤 ReviewStatus，类型传 null。
+        // #207: ApplyFilter signature is now (query, input, documentTypeId?). These cases filter only
+        // ReviewStatus, so pass null for type.
         return (IQueryable<Document>)method.Invoke(service, [query, input, null])!;
     }
 }

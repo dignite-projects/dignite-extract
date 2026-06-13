@@ -8,15 +8,15 @@ using Xunit;
 namespace Dignite.DocumentAI.Application.Tests.Documents;
 
 /// <summary>
-/// 验证 <see cref="Dignite.DocumentAI.DocumentPipelineRunToDocumentPipelineRunDtoMapper"/>
-/// 把 <c>ExtraProperties["Candidates"]</c> 上的两种形态都正确投影成强类型
+/// Verifies that <see cref="Dignite.DocumentAI.DocumentPipelineRunToDocumentPipelineRunDtoMapper"/>
+/// correctly projects both shapes of <c>ExtraProperties["Candidates"]</c> into strongly typed
 /// <see cref="DocumentPipelineRunDto.Candidates"/>：
-///   (a) 同一 UoW 内尚未持久化往返时 — 写入的原始 <see cref="PipelineRunCandidate"/> 列表；
-///   (b) EF Core / ABP 持久化读回时 — <see cref="JsonElement"/>。
+///   (a) the original written <see cref="PipelineRunCandidate"/> list before persistence round-trip in the same UoW;
+///   (b) <see cref="JsonElement"/> when read back through EF Core / ABP persistence.
 ///
-/// 这条 mapping 是 Angular / .NET HttpApi.Client 拿到强类型 candidates 的核心保障，
-/// 一旦 mapper 内 ExtraProperties → Candidates 的 wrapper 被去掉，前端会回退到字符串 key cast，
-/// drift 风险立刻回来。
+/// This mapping is the core guarantee that Angular / .NET HttpApi.Client receive strongly typed candidates.
+/// If the ExtraProperties-to-Candidates wrapper is removed from the mapper, the frontend falls back to
+/// string-key casts and drift risk returns immediately.
 /// </summary>
 public class DocumentPipelineRunDtoMapper_Tests
 {
@@ -86,10 +86,10 @@ public class DocumentPipelineRunDtoMapper_Tests
     }
 
     /// <summary>
-    /// 模拟 HttpApi.Client 在 .NET 客户端的反序列化路径：
-    /// 服务端 STJ 序列化 DTO -> JSON -> 客户端 STJ 反序列化回 DTO -> Candidates 仍是强类型。
-    /// Candidates 必须是 <c>{ get; set; }</c> 才能被 STJ 直接 set；改成 get-only computed
-    /// property 时这条测试会立刻 fail（参 review 反例）。
+    /// Simulates the HttpApi.Client deserialization path in .NET clients:
+    /// server STJ serializes DTO -> JSON -> client STJ deserializes back to DTO -> Candidates remain strongly typed.
+    /// Candidates must be <c>{ get; set; }</c> so STJ can set it directly; if changed to a get-only computed
+    /// property, this test fails immediately; see the review counterexample.
     /// </summary>
     [Fact]
     public void Candidates_Survives_StjRoundtrip_For_DotNetHttpApiClient()
@@ -110,9 +110,10 @@ public class DocumentPipelineRunDtoMapper_Tests
         roundtripped.Candidates[0].ConfidenceScore.ShouldBe(0.64);
     }
 
-    // 显式 subclass 访问 protected 无参构造器，避免 reflection 黑魔法。
-    // 这里**不**调 ABP 的工厂路径（PipelineRunManager.QueueAsync 需要完整 DI + UoW），
-    // 因为本测试只覆盖 mapper 的字段反序列化，与聚合根工厂语义无关。
+    // Explicit subclass accesses the protected parameterless constructor, avoiding reflection tricks.
+    // This deliberately does not call ABP's factory path because PipelineRunManager.QueueAsync requires
+    // full DI + UoW. This test covers only mapper field deserialization and is unrelated to aggregate-root
+    // factory semantics.
     private static DocumentPipelineRun CreateClassificationRun() => new TestDocumentPipelineRun();
 
     private sealed class TestDocumentPipelineRun : DocumentPipelineRun;

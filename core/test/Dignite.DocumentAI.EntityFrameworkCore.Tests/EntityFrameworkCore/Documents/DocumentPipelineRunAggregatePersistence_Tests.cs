@@ -38,7 +38,8 @@ public class DocumentPipelineRunAggregatePersistence_Tests
 
         await WithUnitOfWorkAsync(async () =>
         {
-            // #216：PipelineRun 拆为独立聚合根后 GetAsync 不再 eager-load runs；Manager.QueueAsync 经 runRepo InsertAsync。
+            // #216: after PipelineRun was split into an independent aggregate root, GetAsync no longer
+            // eager-loads runs; Manager.QueueAsync inserts through runRepo.
             var document = await _documentRepository.GetAsync(documentId, includeDetails: false);
             var run = await _pipelineRunManager.QueueAsync(document, DocumentAIPipelines.Classification);
             runId = run.Id;
@@ -48,7 +49,8 @@ public class DocumentPipelineRunAggregatePersistence_Tests
 
         await WithUnitOfWorkAsync(async () =>
         {
-            // 通过 runRepo 直接查（不再经 Document 聚合根）——验证独立聚合根持久化路径生效。
+            // Query directly through runRepo, no longer through the Document aggregate root, verifying the
+            // independent aggregate-root persistence path.
             var persistedRun = await _runRepository.FindAsync(runId);
             persistedRun.ShouldNotBeNull();
             persistedRun.DocumentId.ShouldBe(documentId);
@@ -69,10 +71,12 @@ public class DocumentPipelineRunAggregatePersistence_Tests
 
         await WithUnitOfWorkAsync(async () =>
         {
-            // 同一 UoW 内 Insert 一个 run 但 autoSave:false——故意不 flush。DB 端 GroupBy 查询查不到这条未落库的行
-            // （DB 里根本没有它），EF identity map 也无从物化它。唯有 GetLatestRunsByCodesAsync 合并 change-tracker
-            // 的 Added entries 才能感知它。给 #216 follow-up #1 的 ChangeTracker 合并上锁：删掉仓储里那段合并
-            // foreach，本测试即红（DeriveLifecycle 会回退到看不见同 UoW 内未 flush run 的 stale-view bug）。
+            // Insert a run in the same UoW with autoSave:false and intentionally do not flush it. DB-side GroupBy
+            // cannot see the uncommitted row because it is not in the database, and the EF identity map cannot
+            // materialize it from the query. Only GetLatestRunsByCodesAsync can see it by merging Added entries
+            // from the change tracker. This locks #216 follow-up #1: removing that merge foreach in the repository
+            // makes this test fail, because DeriveLifecycle falls back to the stale-view bug that cannot see
+            // unflushed runs in the same UoW.
             var run = new DocumentPipelineRun(
                 _guidGenerator.Create(),
                 documentId,
@@ -94,9 +98,10 @@ public class DocumentPipelineRunAggregatePersistence_Tests
     [Fact]
     public async Task InsertNewAttempt_Translates_Unique_Collision_To_RetryInProgress()
     {
-        // #239：撞 (DocumentId, PipelineCode, AttemptNumber) 唯一索引时，仓储抓 provider 无关的
-        // DbUpdateException 类型（不嗅探 message / 错误码）→ 翻译成 RetryInProgress。此处用真实 SQLite
-        // 的 UNIQUE 约束触发冲突，验证翻译路径端到端生效，且不依赖任何 SQL Server 专属错误文本。
+        // #239: when (DocumentId, PipelineCode, AttemptNumber) hits the unique index, the repository catches the
+        // provider-independent DbUpdateException type, without sniffing messages or error codes, and translates it
+        // to RetryInProgress. This uses a real SQLite UNIQUE constraint to trigger the conflict, verifying the
+        // translation path end to end without relying on any SQL Server-specific error text.
         var documentId = _guidGenerator.Create();
 
         await WithUnitOfWorkAsync(async () =>
@@ -113,7 +118,7 @@ public class DocumentPipelineRunAggregatePersistence_Tests
         {
             await WithUnitOfWorkAsync(async () =>
             {
-                // 同 (doc, pipeline, attempt) 的另一条 run（新 Id）——并发重试的 loser 视角。
+                // Another run with the same (doc, pipeline, attempt) but a new Id: the loser side of concurrent retry.
                 await _runRepository.InsertNewAttemptAsync(NewRun(documentId, attemptNumber: 1));
             });
         });

@@ -41,7 +41,8 @@ export class DocumentUploadComponent implements OnInit {
   private readonly permissionService = inject(PermissionService);
   private readonly destroyRef = inject(DestroyRef);
 
-  // 选柜需要 Cabinets.Default 权限（getList 后端 [Authorize]）；无权限则不显示下拉，上传为未归类。
+  // Cabinet selection requires Cabinets.Default permission because backend getList is [Authorize].
+  // Without permission, hide the dropdown and upload as unclassified.
   readonly canViewCabinets = this.permissionService.getGrantedPolicy(
     DOCUMENT_AI_PERMISSIONS.Cabinets.Default,
   );

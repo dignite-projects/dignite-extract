@@ -1,18 +1,19 @@
 namespace Dignite.DocumentAI.Documents.Pipelines.FieldExtraction;
 
 /// <summary>
-/// <see cref="FieldExtractionService.ExtractAsync"/> 的结果——供调用方（事件 handler / 后台作业）
-/// 记可观测日志。抽取本身的 ETO 发布 / 字段持久化已在引擎内完成，调用方无需据此再写库。
+/// Result of <see cref="FieldExtractionService.ExtractAsync"/>, used by callers (event handler /
+/// background job) for observability logs. The extraction engine already handles ETO publication /
+/// field persistence, so callers do not write to the DB based on this result.
 /// </summary>
 public enum FieldExtractionOutcome
 {
-    /// <summary>前置守卫不满足（文档缺失 / 跨租户 / 未分类 / stale / 飞行期间被 reclassify）——未写未发。</summary>
+    /// <summary>Prerequisite guard failed (missing document / cross-tenant / unclassified / stale / reclassified in flight); nothing written or published.</summary>
     Skipped,
 
-    /// <summary>目标类型无字段定义——清空残留字段行并发空 <c>FieldsExtractedEto</c>。</summary>
+    /// <summary>Target type has no field definitions; clears residual field rows and publishes an empty <c>FieldsExtractedEto</c>.</summary>
     Cleared,
 
-    /// <summary>正常抽取——整组写入字段值并发 <c>FieldsExtractedEto</c>。</summary>
+    /// <summary>Normal extraction; writes the full field-value group and publishes <c>FieldsExtractedEto</c>.</summary>
     Extracted
 }
 

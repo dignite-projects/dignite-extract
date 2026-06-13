@@ -4,9 +4,11 @@ using System.Collections.Generic;
 namespace Dignite.DocumentAI.Documents.Exports;
 
 /// <summary>
-/// 导出执行入参。<see cref="DocumentIds"/> 非空集合时按勾选 ID 导出（忽略所有筛选字段）；
-/// 否则按筛选条件匹配当前层文档（受单次文档数上限约束）。
-/// 文档类型不在此指定——模板必然类型绑定（<c>ExportTemplate.DocumentTypeId</c>），导出始终收窄到模板的类型。
+/// Export execution input. When <see cref="DocumentIds"/> is non-empty, exports by selected IDs and
+/// ignores all filter fields; otherwise matches current-layer documents by filters, subject to the
+/// per-export document count limit.
+/// Document type is not specified here: templates are always type-bound
+/// (<c>ExportTemplate.DocumentTypeId</c>), and exports are always narrowed to the template's type.
 /// </summary>
 public class ExportDocumentsInput
 {

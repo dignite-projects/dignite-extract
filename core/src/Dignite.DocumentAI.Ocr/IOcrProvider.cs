@@ -5,37 +5,44 @@ using System.Threading.Tasks;
 namespace Dignite.DocumentAI.Ocr;
 
 /// <summary>
-/// OCR 服务 Provider 接口——OCR Provider 实现侧的最小契约层。
-/// 第三方接入 DocumentAI 文本提取流水线只需引用 <c>Dignite.DocumentAI.Ocr</c>
-/// （拿到 <see cref="IOcrProvider"/> + <see cref="OcrOptions"/> + <see cref="OcrResult"/>），
-/// 无需引用 <c>Dignite.DocumentAI.TextExtraction</c>（orchestrator）或
-/// <c>Dignite.DocumentAI.Abstractions</c>（顶层 ITextExtractor 契约）。
+/// OCR service provider interface: the minimal contract layer for OCR provider implementations.
+/// Third-party integrations for the DocumentAI text extraction pipeline only need to reference
+/// <c>Dignite.DocumentAI.Ocr</c> to obtain <see cref="IOcrProvider"/> + <see cref="OcrOptions"/> +
+/// <see cref="OcrResult"/>. They do not need to reference <c>Dignite.DocumentAI.TextExtraction</c>
+/// (the orchestrator) or <c>Dignite.DocumentAI.Abstractions</c> (the top-level ITextExtractor
+/// contract).
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Markdown-first 契约</b>：实现方<b>必须</b>填充 <see cref="OcrResult.Markdown"/>。
-/// 若底层服务输出本身就是 layout-aware Markdown（如 PaddleOCR PP-StructureV3、Azure DI `prebuilt-layout`），
-/// 直接透传——这种情况下标题、表格、列表是 LLM 理解的真信号。
-/// 若底层服务只返回纯文本（如 PaddleOCR PP-OCRv4），Provider <b>自己</b>负责把段落包成扁平 Markdown
-/// （例如 <c>string.Join("\n\n", paragraphs)</c>）；<b>不得</b>把翻译职责留给上游 orchestrator。
+/// <b>Markdown-first contract</b>: implementations <b>must</b> populate
+/// <see cref="OcrResult.Markdown"/>. If the underlying service output is already layout-aware
+/// Markdown, such as PaddleOCR PP-StructureV3 or Azure DI <c>prebuilt-layout</c>, pass it through
+/// directly; in that case headings, tables, and lists are real LLM-understanding signals. If the
+/// underlying service returns only plain text, such as PaddleOCR PP-OCRv4, the provider itself must
+/// wrap paragraphs as flat Markdown, for example <c>string.Join("\n\n", paragraphs)</c>. Do not leave
+/// that translation responsibility to the upstream orchestrator.
 /// </para>
 /// <para>
-/// 此扁平包装是<b>为下游统一消费一种格式</b>，对无结构 OCR 输出而言<b>不带来额外信号增益</b>——
-/// 不要把它叙述成"扁平段落也是 Markdown 信号"。诚实的视角：Markdown 是文本载荷的统一容器名，
-/// 结构化内容才让标记真正"说话"。
+/// This flat wrapping exists <b>so downstream consumers handle one format</b>. For unstructured OCR
+/// output it <b>does not add signal gain</b>. Do not describe it as "flat paragraphs are also Markdown
+/// signal"; the honest view is that Markdown is the unified container name for the text payload, and
+/// structured content is what makes markup actually carry meaning.
 /// </para>
 /// <para>
-/// <b>out-of-band 信号</b>（每页坐标 / bbox / 印章位置 / 表单 key-value）与本契约的 Markdown 字段正交。
-/// 当前 <see cref="OcrResult"/> 故意只暴露 4 个文本相关字段。未来若 page-aware citations 等需求落地，
-/// 应作为 <see cref="OcrResult"/> 上具名可选强类型字段加入，<b>禁止</b>通过通用 Dictionary 扩展槽。
+/// <b>Out-of-band signals</b> (per-page coordinates / bbox / stamp locations / form key-value pairs)
+/// are orthogonal to this contract's Markdown field. <see cref="OcrResult"/> deliberately exposes
+/// only text-related fields today. If requirements such as page-aware citations land later, add named
+/// optional strongly typed fields to <see cref="OcrResult"/>. Generic Dictionary extension slots are
+/// forbidden.
 /// </para>
 /// </remarks>
 public interface IOcrProvider
 {
     /// <param name="cancellationToken">
-    /// 文本提取后台作业经 ABP 后台作业取消令牌（host 关闭 / 作业取消）一路传入。
-    /// OCR 调用通常是长耗时外部 HTTP（本地 sidecar / 云 LRO 轮询），实现方<b>必须</b>把它
-    /// 透传给底层 HTTP / SDK 调用，以便作业 / host 关闭时能及时中止。
+    /// Passed through from the text extraction background job via the ABP background job cancellation
+    /// token (host shutdown / job cancellation). OCR calls are usually long-running external HTTP
+    /// work, such as a local sidecar or cloud LRO polling, so implementations <b>must</b> forward this
+    /// token to the underlying HTTP / SDK calls so job or host shutdown can abort promptly.
     /// </param>
     Task<OcrResult> RecognizeAsync(Stream fileStream, OcrOptions options, CancellationToken cancellationToken = default);
 }

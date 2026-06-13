@@ -3,20 +3,23 @@ using System.Text.RegularExpressions;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 语言标签（ISO 639-1 / IETF tag，如 <c>en</c> / <c>zh-Hans</c> / <c>ja</c>）白名单校验器。
+/// Whitelist validator for language tags (ISO 639-1 / IETF tags, such as <c>en</c> /
+/// <c>zh-Hans</c> / <c>ja</c>).
 /// <para>
-/// <c>Document.Language</c> 在 MCP 出口的资源元数据 header 以<b>裸值</b>透出（不经
-/// <see cref="Ai.PromptBoundary"/> 包裹），并会被插值进内部 LLM system prompt 的语言子句——
-/// 与 <c>DocumentTypeConsts.TypeCodePattern</c> 同源的"白名单即注入防线"：仅放行
-/// <see cref="Pattern"/>，不匹配的候选一律按"未检测到语言"丢弃（不截断修补）。
+/// <c>Document.Language</c> is exposed as a <b>raw value</b> in MCP resource metadata headers, without
+/// <see cref="Ai.PromptBoundary"/> wrapping, and is interpolated into the language clause of internal
+/// LLM system prompts. Like <c>DocumentTypeConsts.TypeCodePattern</c>, the whitelist is the injection
+/// defense: only <see cref="Pattern"/> passes, and non-matching candidates are discarded as "language
+/// not detected" instead of being truncated or repaired.
 /// </para>
 /// </summary>
 public static class LanguageTagValidator
 {
     /// <summary>
-    /// 合法语言标签白名单（ASCII 字母 / 数字 / 连字符，1~16 字符，上限与
-    /// <see cref="DocumentConsts.MaxLanguageLength"/> 默认值对齐）。
-    /// 编译期 <c>const</c>——安全边界不可被运行时配置放大（同 <see cref="DocumentConsts.MaxSearchResultCount"/> 例）。
+    /// Legal language-tag whitelist: ASCII letters / digits / hyphen, 1 to 16 characters, with the
+    /// upper bound aligned with the default <see cref="DocumentConsts.MaxLanguageLength"/>. Compile-time
+    /// <c>const</c>: this safety boundary must not be widened by runtime configuration, matching the
+    /// <see cref="DocumentConsts.MaxSearchResultCount"/> pattern.
     /// </summary>
     public const string Pattern = "^[A-Za-z0-9-]{1,16}$";
 
@@ -25,9 +28,9 @@ public static class LanguageTagValidator
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
-    /// 先 Trim 再按 <see cref="Pattern"/> 白名单校验。
-    /// null / 空白 / 不匹配（含空格 / 标点 / 控制字符 / 超长）→ 返回 <c>null</c>，
-    /// 调用方据此按"未检测到语言"处理。
+    /// Trims first, then validates against the <see cref="Pattern"/> whitelist.
+    /// null / blank / non-matching values, including spaces / punctuation / control characters /
+    /// overlength values, return <c>null</c>. Callers treat that as "language not detected".
     /// </summary>
     public static string? Normalize(string? candidate)
     {

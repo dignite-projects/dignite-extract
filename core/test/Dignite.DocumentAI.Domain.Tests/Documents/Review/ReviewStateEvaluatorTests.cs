@@ -6,8 +6,9 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// #284：审核判定纯函数单测——<see cref="ReviewStateEvaluator"/>（必填缺失维度）+
-/// <see cref="ReviewReasonPolicy"/>（阻断性）。不依赖 DB / DI，直接构造。
+/// #284: pure-function unit tests for review judgment: <see cref="ReviewStateEvaluator"/> for the missing
+/// required-fields dimension plus <see cref="ReviewReasonPolicy"/> for blocking behavior. No DB / DI;
+/// constructed directly.
 /// </summary>
 public class ReviewStateEvaluatorTests
 {
@@ -45,7 +46,7 @@ public class ReviewStateEvaluatorTests
             .ShouldBeTrue();
     }
 
-    // 只有 UnresolvedClassification 是 blocking（阻断 Ready）；MissingRequiredFields 是 non-blocking。
+    // Only UnresolvedClassification is blocking and prevents Ready; MissingRequiredFields is non-blocking.
     [Theory]
     [InlineData(DocumentReviewReasons.None, false)]
     [InlineData(DocumentReviewReasons.UnresolvedClassification, true)]
@@ -56,8 +57,10 @@ public class ReviewStateEvaluatorTests
         ReviewReasonPolicy.HasBlocking(reasons).ShouldBe(expected);
     }
 
-    // #284 review-fix：操作员"需关注"统一判据 = 有未解决原因 且 未被拒绝（Rejected 抑制需关注——操作员已处置）。
-    // 钉死四象限 + (MissingRequiredFields, Confirmed)→true：防止把判据误写成 disposition==NotReviewed。
+    // #284 review-fix: unified operator "requires attention" rule = has unresolved reason and is not
+    // rejected. Rejected suppresses attention because the operator has already handled it.
+    // Lock down the four quadrants plus (MissingRequiredFields, Confirmed) -> true, preventing the rule
+    // from being mistakenly written as disposition==NotReviewed.
     [Theory]
     [InlineData(DocumentReviewReasons.None, DocumentReviewDisposition.NotReviewed, false)]
     [InlineData(DocumentReviewReasons.None, DocumentReviewDisposition.Confirmed, false)]

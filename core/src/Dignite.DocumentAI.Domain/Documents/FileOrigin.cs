@@ -5,26 +5,26 @@ using Volo.Abp.Domain.Values;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 文件来源信息。写入后不可修改，是系统信任的锚点。
+/// File origin information. Immutable after write and treated as a system-trusted anchor.
 /// </summary>
 public class FileOrigin : ValueObject
 {
-    /// <summary>BlobStore 中的 Key，写入后不可修改</summary>
+    /// <summary>Key in BlobStore, immutable after write.</summary>
     public string BlobName { get; private set; } = default!;
 
-    /// <summary>上传操作人名称快照（冗余存储，防止用户删除后丢失信息）</summary>
+    /// <summary>Snapshot of uploader display name, redundantly stored to preserve information after user deletion.</summary>
     public string UploadedByUserName { get; private set; } = default!;
 
-    /// <summary>原始文件名</summary>
+    /// <summary>Original file name.</summary>
     public string? OriginalFileName { get; private set; }
 
-    /// <summary>文件 MIME 类型</summary>
+    /// <summary>File MIME type.</summary>
     public string ContentType { get; private set; } = default!;
 
-    /// <summary>文件内容 SHA-256 哈希（十六进制小写，长度 64）。用于每租户范围内的字节级去重。</summary>
+    /// <summary>SHA-256 hash of file content in lowercase hex, length 64. Used for byte-level deduplication within each tenant.</summary>
     public string ContentHash { get; private set; } = default!;
 
-    /// <summary>文件大小（字节）</summary>
+    /// <summary>File size in bytes.</summary>
     public long FileSize { get; private set; }
 
     protected FileOrigin() { }

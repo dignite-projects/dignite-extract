@@ -101,17 +101,19 @@ export class FieldDefinitionListComponent implements OnInit {
   readonly canManage = this.permissionService.getGrantedPolicy(
     `${DOCUMENT_AI_PERMISSIONS.FieldDefinitions.Create} || ${DOCUMENT_AI_PERMISSIONS.FieldDefinitions.Update} || ${DOCUMENT_AI_PERMISSIONS.FieldDefinitions.Delete}`,
   );
-  // 批量字段重抽入口（#289）——admin 级、独立于字段 CRUD 权限。
+  // Bulk field re-extraction entry point (#289): admin-level and independent from field CRUD
+  // permissions.
   readonly canReextractFields = this.permissionService.getGrantedPolicy(
     DOCUMENT_AI_PERMISSIONS.Documents.Reprocessing.FieldExtraction,
   );
-  // null/false = 关闭重抽模态。
+  // null/false means the re-extraction modal is closed.
   showReextract = signal(false);
   readonly dataTypeOptions = fieldDataTypeOptions;
   readonly FieldDataType = FieldDataType;
 
-  // 路由按不可变 DocumentTypeId 绑定（#207）；header 徽标主显示用户友好的 DisplayName（#261），
-  // TypeCode 降为 hover 提示——二者均由当前层可见类型按 Id 即时解析（穿透重命名）。
+  // Route binding uses immutable DocumentTypeId (#207). The header badge primarily shows the
+  // user-friendly DisplayName (#261), while TypeCode is demoted to hover text. Both are resolved by id
+  // from types visible in the current layer, so renames are pierced.
   documentTypeId = '';
   documentTypeDisplayName = signal('');
   documentTypeCode = signal('');
@@ -123,15 +125,19 @@ export class FieldDefinitionListComponent implements OnInit {
   editing = signal<FieldDefinitionDto | 'create' | null>(null);
   isSubmitting = signal(false);
   isSuggesting = signal(false);
-  // #264：「按提示词起草」进行中 / 刚完成一次起草（驱动 spinner 与「请核对草稿」提示）。
+  // #264: "draft from prompt" is in progress / just completed once. Drives the spinner and "review the
+  // draft" notice.
   isDrafting = signal(false);
   justDrafted = signal(false);
 
   private slugHandle?: SlugSuggestionHandle;
   private tableQuery: Partial<ABP.PageQueryParams> = {};
 
-  // #264：取消在飞起草请求的信号。关闭弹窗时 emit，避免迟到的草稿覆盖重新打开的（无关字段）表单。
-  // 组件级 destroyRef 不随弹窗关闭触发（弹窗只是 editing=null，组件不销毁），故需要独立的 per-modal 取消闸门。
+  // #264: signal that cancels in-flight draft requests. Emit when closing the modal so a late draft does
+  // not overwrite a reopened form for an unrelated field.
+  // The component-level destroyRef does not fire when the modal closes, because the modal only sets
+  // editing=null and the component is not destroyed. Therefore a separate per-modal cancellation gate is
+  // needed.
   private readonly draftCancelled$ = new Subject<void>();
 
   readonly form = this.fb.nonNullable.group({
@@ -140,17 +146,19 @@ export class FieldDefinitionListComponent implements OnInit {
       [Validators.required, Validators.maxLength(MAX_NAME_LENGTH), Validators.pattern(NAME_PATTERN)],
     ],
     displayName: ['', [Validators.required, Validators.maxLength(MAX_DISPLAY_NAME_LENGTH)]],
-    // 抽取指令选填（实测反馈）：去掉 Validators.required，仅保留长度上限；留空时后端 NormalizePrompt 收敛为 null。
+    // Extraction instruction is optional based on measured feedback: remove Validators.required and keep
+    // only the length cap. Backend NormalizePrompt converges blank values to null.
     prompt: ['', [Validators.maxLength(MAX_PROMPT_LENGTH)]],
     dataType: [FieldDataType.Text, [Validators.required]],
     displayOrder: [0, [Validators.required]],
     isRequired: [false],
-    // #212：多值仅文本有效（镜像后端 FieldDefinition.ValidateMultiValue 不变量）。
-    // 非文本时由 applyAllowMultiplePolicy 强制置 false 并 disable，提交前 getRawValue 仍带回 false。
+    // #212: multiple values are valid only for text, mirroring the backend
+    // FieldDefinition.ValidateMultiValue invariant. For non-text fields, applyAllowMultiplePolicy forces
+    // false and disables the control; getRawValue still returns false before submit.
     allowMultiple: [false],
   });
 
-  // 驱动模板：dataType === Text 时才允许勾选"多值"。
+  // Drives the template: allow checking "multiple values" only when dataType === Text.
   readonly isTextType = signal(true);
 
   constructor() {
@@ -230,15 +238,19 @@ export class FieldDefinitionListComponent implements OnInit {
       destroyRef: this.destroyRef,
       onPending: pending => this.isSuggesting.set(pending),
     });
-    // #212：dataType 变化时实时套用"多值仅文本"策略（镜像后端不变量，避免提交非法组合被后端 loud fail）。
+    // #212: apply the "multiple values only for text" policy whenever dataType changes, mirroring the
+    // backend invariant and preventing illegal combinations from failing loudly on submit.
     this.form.controls.dataType.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(dataType => this.applyAllowMultiplePolicy(dataType));
     this.load();
   }
 
-  // 非文本字段强制 allowMultiple=false 且禁用勾选框；切回文本时重新启用（保留当前值）。
-  // 仅文本 + 多值是后端实体层允许的组合（FieldDefinition.MultiValueRequiresStringType），客户端镜像该约束做 UX 防呆。
+  // Non-text fields force allowMultiple=false and disable the checkbox. Switching back to text re-enables
+  // it while preserving the current value.
+  // Text plus multiple values is the only combination allowed by the backend entity layer
+  // (FieldDefinition.MultiValueRequiresStringType), and the client mirrors that constraint for UX
+  // guardrails.
   private applyAllowMultiplePolicy(dataType: FieldDataType): void {
     const isText = dataType === FieldDataType.Text;
     this.isTextType.set(isText);
@@ -251,7 +263,8 @@ export class FieldDefinitionListComponent implements OnInit {
     }
   }
 
-  // header 徽标展示用：按不可变 Id 在当前层可见类型里解析当前类型，主显示 DisplayName、TypeCode 作 hover 提示（穿透重命名）。
+  // For the header badge: resolve the current type by immutable id from types visible in the current
+  // layer. DisplayName is primary, and TypeCode is hover text, piercing renames.
   private resolveDocumentType(): void {
     this.documentTypeService.getVisible()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -264,7 +277,8 @@ export class FieldDefinitionListComponent implements OnInit {
       });
   }
 
-  // LLM 不可用 / 未翻译时的本地回退：取与现有字段名不冲突的最小 field_{n}。
+  // Local fallback when the LLM is unavailable or does not translate: choose the smallest field_{n} that
+  // does not conflict with existing field names.
   private nextFieldSlug(): string {
     const existing = new Set(this.allFields().map(f => f.name));
     let i = 1;
@@ -337,8 +351,8 @@ export class FieldDefinitionListComponent implements OnInit {
     });
     this.form.controls.name.enable();
     this.applyAllowMultiplePolicy(FieldDataType.Text);
-    // 必须在 form.reset()/enable() 之后调用：二者触发的 valueChanges 会误标"手动编辑"，
-    // reset() 清掉该标记并复位建议状态（含 spinner）。
+    // Must be called after form.reset()/enable(): both trigger valueChanges that can be misread as
+    // "manual edit". reset() clears that marker and resets suggestion state, including the spinner.
     this.slugHandle?.reset();
     this.justDrafted.set(false);
     this.isDrafting.set(false);
@@ -346,8 +360,8 @@ export class FieldDefinitionListComponent implements OnInit {
   }
 
   openEdit(field: FieldDefinitionDto): void {
-    // 先 disable 再 reset：让 slug 自动建议在编辑态 reset 期间识别为非自动接管，
-    // 不会把既有 name 当"过期键"清空（见 wireSlugSuggestion 注释）。
+    // Disable before reset so slug auto-suggestion sees edit-mode reset as not automatically managed and
+    // does not clear the existing name as a stale key. See wireSlugSuggestion comments.
     this.form.controls.name.disable();
     this.form.reset({
       name: field.name,
@@ -366,15 +380,19 @@ export class FieldDefinitionListComponent implements OnInit {
     this.editing.set(field);
   }
 
-  // #264：按提示词起草字段元数据。提示词为主输入，一次 LLM 调用起草其余字段，整组覆盖后用户可逐项核对 / 修改。
+  // #264: draft field metadata from the prompt. The prompt is the primary input; one LLM call drafts the
+  // remaining fields, applies them as a group, and lets the user review or modify each item.
   draft(): void {
     const prompt = (this.form.controls.prompt.value ?? '').trim();
     if (!prompt || this.isDrafting()) return;
-    // forNewField 控制后端是否额外建议机器键 Name：编辑既有字段时 Name 是契约级冻结身份键，不被起草覆盖（护栏 1）。
+    // forNewField controls whether the backend also suggests the machine key Name. When editing an
+    // existing field, Name is a contract-level frozen identity key and is not overwritten by drafting
+    // (guardrail 1).
     const forNewField = this.editing() === 'create';
     this.isDrafting.set(true);
     this.draftService.draft({ prompt, forNewField }, undefined)
-      // takeUntil(draftCancelled$)：关闭弹窗即取消，迟到响应不写入新表单（#264 review #1）。
+      // takeUntil(draftCancelled$): cancel when the modal closes, so late responses do not write into a
+      // new form (#264 review #1).
       .pipe(takeUntil(this.draftCancelled$), takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: draft => {
@@ -383,18 +401,23 @@ export class FieldDefinitionListComponent implements OnInit {
         },
         error: () => {
           this.isDrafting.set(false);
-          // 本次未产出草稿——复位「请核对草稿」横幅，避免与「无法起草」提示同屏矛盾（#264 review2 #1，对齐空草稿分支）。
+          // No draft was produced this time. Reset the "review draft" banner to avoid contradicting the
+          // "draft unavailable" hint on the same screen (#264 review2 #1, aligned with the empty-draft
+          // branch).
           this.justDrafted.set(false);
           this.toaster.warn('::FieldDefinition:DraftUnavailable', '::Warning');
         },
       });
   }
 
-  // 整组覆盖对应控件（issue #264 确认的落入方式）。emitEvent:false 避免触发 displayName→slug 接线把刚起草的 name 清空。
+  // Apply the corresponding controls as a group, the landing behavior confirmed in issue #264.
+  // emitEvent:false avoids triggering the displayName-to-slug wiring and clearing the just-drafted name.
   private applyDraft(draft: FieldDefinitionDraftDto, forNewField: boolean): void {
-    // 后端起草失败 / 超时回退保守空草稿——DisplayName 为空即判定不可用：保留用户已填内容，仅提示手填，不覆盖。
+    // Backend draft failure or timeout falls back to a conservative empty draft. Empty DisplayName means
+    // unavailable: keep user-entered content, show a manual-entry hint, and do not overwrite.
     if (!draft.displayName) {
-      // 复位「请核对草稿」横幅：本次未产出草稿，避免上一次成功的横幅与「无法起草」提示自相矛盾（#264 review #6）。
+      // Reset the "review draft" banner: this run produced no draft, avoiding a contradiction between a
+      // previous success banner and the "draft unavailable" hint (#264 review #6).
       this.justDrafted.set(false);
       this.toaster.info('::FieldDefinition:DraftUnavailable', '::Info');
       return;
@@ -403,16 +426,20 @@ export class FieldDefinitionListComponent implements OnInit {
     this.form.controls.displayName.setValue(draft.displayName, { emitEvent: false });
     this.form.controls.dataType.setValue(dataType, { emitEvent: false });
     this.form.controls.isRequired.setValue(draft.isRequired ?? false, { emitEvent: false });
-    // setValue(dataType) 用了 emitEvent:false，valueChanges 不触发，需手动套用「多值仅文本」策略（启/禁用勾选框）。
+    // setValue(dataType) used emitEvent:false, so valueChanges does not fire; manually apply the
+    // "multiple values only for text" policy to enable/disable the checkbox.
     this.applyAllowMultiplePolicy(dataType);
     this.form.controls.allowMultiple.setValue(
       dataType === FieldDataType.Text && (draft.allowMultiple ?? false),
       { emitEvent: false },
     );
     if (forNewField) {
-      // 新建：整组覆盖机器键——用建议值，缺失（如纯 CJK 未翻译 sanitize 成空）时回退本地占位 field_{n}，
-      // 绝不残留基于「上一个显示名」的过期键（#264 review #2）；并标记手动保留，后续 displayName 失焦不再用 slug 覆盖
-      // 这个已起草/已核对的键（用户仍可手改 name）。
+      // Create mode: overwrite the machine key as part of the group. Use the suggested value, or fall
+      // back to local placeholder field_{n} when missing, such as when pure CJK sanitizes to empty after
+      // no translation.
+      // Never leave behind a stale key based on the previous display name (#264 review #2). Mark it as
+      // manually retained so later displayName blur does not overwrite this drafted/reviewed key with a
+      // slug; the user may still edit name manually.
       this.form.controls.name.setValue(draft.name || this.nextFieldSlug(), { emitEvent: false });
       this.slugHandle?.markManual();
     }
@@ -420,17 +447,22 @@ export class FieldDefinitionListComponent implements OnInit {
     this.justDrafted.set(true);
   }
 
-  // 显示名失焦 → 触发 slug 自动建议（实测反馈：从停顿防抖改为失焦触发）。
+  // Display-name blur triggers slug auto-suggestion. Measured feedback changed this from pause debounce
+  // to blur trigger.
   onDisplayNameBlur(): void {
-    // 起草在飞时不触发失焦 slug 路径：否则两条 LLM 响应竞争写 name，最后落地者随机（#264 review #2）。
-    // 起草本身会整组覆盖并 markManual name，无需失焦路径再补。
+    // Do not trigger the blur slug path while drafting is in flight; otherwise two LLM responses compete
+    // to write name, and the last landing response is random (#264 review #2).
+    // Drafting itself applies the group and markManual name, so the blur path does not need to supplement it.
     if (this.isDrafting()) return;
     this.slugHandle?.notifyDisplayNameBlur();
   }
 
-  // 遮罩关闭防误触：只有当 mousedown 与 click 都发生在遮罩本身（而非对话框内）时才关闭。
-  // 否则在输入框里拖选文本、松手落在遮罩区时，浏览器会在遮罩上触发 click（mousedown/mouseup 的最近公共祖先），
-  // 误关弹窗并丢失已填内容。记录 mousedown 起点是判定"这一次点击是否真的从遮罩发起"的唯一可靠方式。
+  // Backdrop close guard: close only when both mousedown and click occur on the backdrop itself, not
+  // inside the dialog.
+  // Otherwise, dragging selected text inside an input and releasing over the backdrop can make the
+  // browser fire click on the backdrop, the nearest common ancestor of mousedown/mouseup, closing the
+  // modal and losing entered content. Recording the mousedown origin is the only reliable way to know
+  // whether this click truly started from the backdrop.
   private backdropMouseDownOnSelf = false;
 
   onBackdropMouseDown(event: MouseEvent): void {
@@ -445,7 +477,8 @@ export class FieldDefinitionListComponent implements OnInit {
   }
 
   closeModal(): void {
-    // 取消任何在飞起草请求 + 清 spinner，避免迟到草稿污染下次打开的表单、或留下永久禁用的起草按钮（#264 review #1）。
+    // Cancel any in-flight draft request and clear the spinner, preventing late drafts from contaminating
+    // the next opened form or leaving the draft button permanently disabled (#264 review #1).
     this.draftCancelled$.next();
     this.isDrafting.set(false);
     this.justDrafted.set(false);
@@ -472,7 +505,8 @@ export class FieldDefinitionListComponent implements OnInit {
         dataType: raw.dataType,
         displayOrder: raw.displayOrder,
         isRequired: raw.isRequired,
-        // 非文本时 control 被 disable，但 getRawValue 仍带回（已被策略置 false）。
+        // For non-text fields the control is disabled, but getRawValue still carries it back after the
+        // policy has set it to false.
         allowMultiple: raw.allowMultiple,
       };
       this.service.create(input)

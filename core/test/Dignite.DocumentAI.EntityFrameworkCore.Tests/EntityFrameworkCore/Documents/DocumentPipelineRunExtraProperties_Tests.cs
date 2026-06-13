@@ -34,8 +34,8 @@ public class DocumentPipelineRunExtraProperties_Tests
         var documentId = _guidGenerator.Create();
         Guid runId = default;
 
-        // #216：PipelineRun 拆为独立聚合根后 FK 强制 Document 先持久化才能 Insert run。
-        // 分两个 UoW：先插 Document，再起 run。
+        // #216: after PipelineRun was split into an independent aggregate root, FK constraints require the
+        // Document to be persisted before inserting a run. Use two UoWs: insert Document first, then start run.
         await WithUnitOfWorkAsync(async () =>
         {
             await _documentRepository.InsertAsync(CreateDocument(documentId), autoSave: true);
@@ -54,12 +54,13 @@ public class DocumentPipelineRunExtraProperties_Tests
                     new("contract.general", 0.64),
                     new("invoice.standard", 0.31)
                 });
-            // Manager.StartAsync 已 _runRepo.InsertAsync；UoW commit 时一并 flush 含 SetProperty 后的 ExtraProperties。
+            // Manager.StartAsync has already called _runRepo.InsertAsync; the UoW commit flushes ExtraProperties
+            // after SetProperty together with the run.
         });
 
         await WithUnitOfWorkAsync(async () =>
         {
-            // 通过 runRepo 按 Id 加载（独立聚合根读路径）。
+            // Load by Id through runRepo, the independent aggregate-root read path.
             var run = await _runRepository.FindAsync(runId);
 
             run.ShouldNotBeNull();

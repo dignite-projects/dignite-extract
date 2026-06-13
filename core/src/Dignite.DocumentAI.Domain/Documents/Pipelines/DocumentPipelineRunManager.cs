@@ -12,33 +12,36 @@ using Volo.Abp.Domain.Services;
 namespace Dignite.DocumentAI.Documents.Pipelines;
 
 /// <summary>
-/// 流水线执行记录的统一入口。
-/// 负责创建 Run、驱动状态流转、在每次状态变化后重新派生 Document.LifecycleStatus。
-/// 所有向 Document 写入流水线结果的代码都必须通过此服务。
+/// Unified entry point for pipeline execution records.
+/// Creates runs, drives state transitions, and re-derives Document.LifecycleStatus after every state change.
+/// All code that writes pipeline results to Document must go through this service.
 /// <para>
-/// 设计选择：本 manager <b>不查 DocumentType</b>——typeCode 校验责任在 AppService（调用方负责
-/// 通过 <c>IDocumentTypeRepository.FindByTypeCodeAsync</c> 加载 <see cref="DocumentType"/>
-/// 并传给本 manager）。这避免热路径重复查 DB（BackgroundJob 已 load 一次，manager 再查一次浪费），
-/// 并让 Domain 层 manager 不耦合上层数据访问关心。
+/// Design choice: this manager <b>does not query DocumentType</b>. typeCode validation belongs to AppService, and callers are responsible for
+/// loading <see cref="DocumentType"/> through <c>IDocumentTypeRepository.FindByTypeCodeAsync</c>
+/// and passing it to this manager. This avoids repeated DB reads on hot paths (BackgroundJob already loaded it once; reloading in the manager would be wasteful)
+/// and keeps the Domain-layer manager decoupled from upper-layer data access concerns.
 /// </para>
 /// <para>
-/// #216 起 <see cref="DocumentPipelineRun"/> 是独立聚合根：状态流转通过 <see cref="IDocumentPipelineRunRepository"/>
-/// 持久化；<see cref="DeriveLifecycleAsync"/> 查仓储算最新 run。EF Core 默认 LINQ 查 DB 看不到本 UoW 内尚未
-/// flush 的 Insert/Modify，故 <see cref="IDocumentPipelineRunRepository.GetLatestRunsByCodesAsync"/> 在仓储内
-/// 合并 change-tracker 的 Local entries 补上 post-change 视图——派生逻辑因此无需调用方传入"刚改动的 run"。
+/// Since #216, <see cref="DocumentPipelineRun"/> is an independent aggregate root. State transitions are persisted through
+/// <see cref="IDocumentPipelineRunRepository"/>, and <see cref="DeriveLifecycleAsync"/> queries the repository to compute latest runs.
+/// EF Core LINQ queries hit the DB and do not see Insert/Modify entries that have not yet been flushed in the current UoW, so
+/// <see cref="IDocumentPipelineRunRepository.GetLatestRunsByCodesAsync"/> merges change-tracker Local entries inside the repository
+/// to produce a post-change view. The derivation logic therefore does not need callers to pass in "the run that was just changed".
 /// </para>
 /// <para>
-/// <b>AttemptNumber 并发安全</b>（#216 D2 / #239）：拆分前 Document 主行 UPDATE 提供隐式行级锁；拆分后无此互斥。
-/// 防御靠 DB 层 <b>unique index</b> <c>(DocumentId, PipelineCode, AttemptNumber)</c> 硬约束——它是数据完整性的
-/// 唯一保证，且 <b>完全 DB 无关</b>（SqlServer / PostgreSQL / MySQL 一致）。<see cref="QueueAsync"/> 经
-/// <see cref="IDocumentPipelineRunRepository.InsertNewAttemptAsync"/> 插入：撞键的唯一现实成因是同一 Failed
-/// pipeline 被并发重试（操作员双击 / 两操作员 / 客户端 timeout-重发），由仓储把 provider 无关的
-/// <c>DbUpdateException</c> 翻译成 <c>RetryInProgress</c>（此刻赢家的新 run 正是 Pending）。HTTP 同步路径
-/// （<c>RetryPipelineAsync</c>）因此拿到友好 BusinessException 而非裸 500。
+/// <b>AttemptNumber concurrency safety</b> (#216 D2 / #239): before the split, UPDATE on the Document main row provided an implicit row lock;
+/// after the split, that mutual exclusion is gone. Defense relies on the DB-level <b>unique index</b>
+/// <c>(DocumentId, PipelineCode, AttemptNumber)</c> as the hard constraint. It is the only data-integrity guarantee and is
+/// <b>fully DB-agnostic</b> (consistent across SqlServer / PostgreSQL / MySQL). <see cref="QueueAsync"/> inserts through
+/// <see cref="IDocumentPipelineRunRepository.InsertNewAttemptAsync"/>. The only realistic cause of a key collision is concurrent retry of the same Failed
+/// pipeline (operator double-click, two operators, or client timeout resend). The repository translates the provider-agnostic
+/// <c>DbUpdateException</c> into <c>RetryInProgress</c>; at that moment, the winner's new run is Pending. The HTTP synchronous path
+/// (<c>RetryPipelineAsync</c>) therefore receives a friendly BusinessException instead of a raw 500.
 /// <para>
-/// #239 起移除了"捕获撞键 → 重读重算 → 重试"的应用层兜底循环：它非但非必要（完整性已由 unique index 兜住），
-/// 还会让并发双击重试在赢家落库后算出更大的 AttemptNumber、再插一条 run + 再入队一个 job，制造重复 pipeline 重跑。
-/// 撞键直接失败（loser 拿 RetryInProgress、只产生一条 run）是更优结果。
+/// Since #239, the application-layer fallback loop "catch key collision -> reread/recompute -> retry" was removed. It was unnecessary
+/// because integrity is already protected by the unique index, and it allowed concurrent double-click retry to compute a larger AttemptNumber
+/// after the winner committed, insert another run, and enqueue another job, creating duplicate pipeline reruns.
+/// Failing immediately on key collision, with the loser receiving RetryInProgress and only one run being created, is the better result.
 /// </para>
 /// </para>
 /// </summary>
@@ -68,9 +71,9 @@ public class DocumentPipelineRunManager : DomainService
 
         run.MarkPending(Clock.Now);
 
-        // 撞 (DocumentId, PipelineCode, AttemptNumber) 唯一索引 → 仓储翻译成 RetryInProgress（见类注释）。
-        // 唯一约束冲突的识别收敛在 EF Core 层（抓 provider 无关的 DbUpdateException 类型，不嗅探 message /
-        // SQL Server 错误码），Domain 层不再引用 EF Core / SqlClient，跨库一致（#239）。
+        // Collision on the (DocumentId, PipelineCode, AttemptNumber) unique index -> repository translates to RetryInProgress (see class comments).
+        // Unique-constraint collision recognition is centralized in the EF Core layer by catching the provider-agnostic DbUpdateException type,
+        // without sniffing messages / SQL Server error codes. The Domain layer no longer references EF Core / SqlClient, preserving cross-DB consistency (#239).
         await _runRepo.InsertNewAttemptAsync(run);
         await DeriveLifecycleAsync(document);
         return run;
@@ -105,14 +108,14 @@ public class DocumentPipelineRunManager : DomainService
     }
 
     /// <summary>
-    /// 记录文本提取结果、写入语言 + provenance 元数据并完成 Run。
-    /// <paramref name="markdown"/> 是流水线唯一的文本载荷（数字版与 OCR 路径都已统一输出 Markdown）；
-    /// 下游需要纯文本时通过 <see cref="MarkdownStripper.Strip"/> 投影。
+    /// Records text extraction results, writes language + provenance metadata, and completes the run.
+    /// <paramref name="markdown"/> is the pipeline's only text payload; digital-native and OCR paths both output Markdown.
+    /// Downstream consumers that need plain text project through <see cref="MarkdownStripper.Strip"/>.
     /// <para>
-    /// #210：<paramref name="language"/>（终结 write-never 死字段）与
-    /// <paramref name="extractionMetadata"/>（provenance：provider 名 + 原生 payload 归档 manifest，
-    /// 原始 payload 已由调用方在 External 段归档进 blob）与 Markdown / Title 同事务原子写入。
-    /// 参数可空且有默认值——既有调用方无需改动。
+    /// #210: <paramref name="language"/> (ending the write-never dead field) and
+    /// <paramref name="extractionMetadata"/> (provenance: provider name + native payload archive manifest;
+    /// the caller already archived the raw payload into blob storage during the External phase) are written atomically in the same transaction as Markdown / Title.
+    /// Parameters are nullable and have default values so existing callers do not need changes.
     /// </para>
     /// </summary>
     public virtual Task CompleteTextExtractionAsync(
@@ -131,12 +134,12 @@ public class DocumentPipelineRunManager : DomainService
     }
 
     /// <summary>
-    /// 记录分类结果并完成 Run（高置信度路径）。
-    /// 此路径清除 <see cref="DocumentReviewReasons.UnresolvedClassification"/>（分类已定）；
-    /// AI 的分类理由仅在低置信度路径（<see cref="CompleteClassificationWithLowConfidenceAsync"/>）写入。
+    /// Records classification results and completes the run (high-confidence path).
+    /// This path clears <see cref="DocumentReviewReasons.UnresolvedClassification"/> because classification is resolved.
+    /// AI classification reason is only written on the low-confidence path (<see cref="CompleteClassificationWithLowConfidenceAsync"/>).
     /// <para>
-    /// 调用方负责传入已加载的 <paramref name="typeDef"/>（来自 <c>IDocumentTypeRepository.FindByTypeCodeAsync</c>），
-    /// manager 不再查 DB；调用方必须确保 <c>typeDef.TenantId == document.TenantId</c>（单层精确匹配）。
+    /// The caller must pass a loaded <paramref name="typeDef"/> from <c>IDocumentTypeRepository.FindByTypeCodeAsync</c>.
+    /// The manager no longer queries the DB; the caller must ensure <c>typeDef.TenantId == document.TenantId</c> for exact single-layer matching.
     /// </para>
     /// </summary>
     public virtual Task CompleteClassificationAsync(
@@ -151,11 +154,11 @@ public class DocumentPipelineRunManager : DomainService
     }
 
     /// <summary>
-    /// 分类置信度不足：完成 Run 并将文档标记为待人工审核。
-    /// AI 的分类理由（reason）#284 起不再持久化，仅记日志；
-    /// Run.StatusMessage 保持 null（<see cref="DocumentPipelineRun.MarkSucceeded"/> 不写 StatusMessage），
-    /// 避免与技术错误信息混淆。
-    /// 待审信号由 <see cref="DocumentReviewReasons.UnresolvedClassification"/> 表达，不再记录在 Run 上。
+    /// Insufficient classification confidence: completes the run and marks the document for manual review.
+    /// Since #284, the AI classification reason is no longer persisted and is only logged.
+    /// Run.StatusMessage remains null because <see cref="DocumentPipelineRun.MarkSucceeded"/> does not write StatusMessage,
+    /// avoiding confusion with technical error messages.
+    /// The review signal is expressed by <see cref="DocumentReviewReasons.UnresolvedClassification"/> and is no longer recorded on the run.
     /// </summary>
     public virtual Task CompleteClassificationWithLowConfidenceAsync(
         Document document,
@@ -163,8 +166,8 @@ public class DocumentPipelineRunManager : DomainService
         string? reason = null,
         IReadOnlyList<PipelineRunCandidate>? candidates = null)
     {
-        // #284：分类理由不再持久化到 Document（ClassificationReason 已删）；仅记日志便于排查。
-        // 操作员所需"为什么没分类"由 run 候选类型（ClassificationCandidates）+ 前端通用文案承载。
+        // #284: classification reason is no longer persisted to Document (ClassificationReason was removed); log it only for troubleshooting.
+        // The operator-facing "why was it not classified" explanation comes from run candidate types (ClassificationCandidates) + generic frontend copy.
         if (!string.IsNullOrWhiteSpace(reason))
         {
             Logger.LogInformation(
@@ -185,12 +188,12 @@ public class DocumentPipelineRunManager : DomainService
     }
 
     /// <summary>
-    /// 人工确认文档类型：写入分类结果、标记已审核、完成 Run。置信度固定为 1.0。
-    /// 人工覆盖信号由 <see cref="Document.ReviewDisposition"/> = Confirmed 表达。
-    /// 该字面量与 Domain.Shared 层 <c>ClassificationDefaults.ManualClassificationConfidence</c>
-    /// 同步维护（Domain 不依赖 Abstractions，故此处硬编码）。
+    /// Operator confirms document type: writes classification result, marks it reviewed, and completes the run. Confidence is fixed at 1.0.
+    /// The manual override signal is expressed by <see cref="Document.ReviewDisposition"/> = Confirmed.
+    /// This literal is maintained in sync with <c>ClassificationDefaults.ManualClassificationConfidence</c> in Domain.Shared.
+    /// Domain does not depend on Abstractions, so it is hard-coded here.
     /// <para>
-    /// 调用方负责传入已加载的 <paramref name="typeDef"/>；manager 不再查 DB。
+    /// The caller is responsible for passing the loaded <paramref name="typeDef"/>; the manager no longer queries the DB.
     /// </para>
     /// </summary>
     public virtual Task CompleteManualClassificationAsync(
@@ -210,13 +213,14 @@ public class DocumentPipelineRunManager : DomainService
     }
 
     /// <summary>
-    /// 取该 pipeline 最近一次 run 并校验其可重试性——仅 <see cref="PipelineRunStatus.Failed"/> 可重试。
-    /// 不存在任何 run → <c>Pipeline.NeverRan</c>；Pending/Running → <c>Pipeline.RetryInProgress</c>（并发护栏）；
-    /// Succeeded/Skipped → <c>Pipeline.NotRetryable</c>。校验通过返回该 failed run，调用方据其
-    /// <see cref="DocumentPipelineRun.AttemptNumber"/> 记审计日志后再 <see cref="QueueAsync"/> 触发重试。
+    /// Gets the latest run for this pipeline and validates retryability. Only <see cref="PipelineRunStatus.Failed"/> is retryable.
+    /// No run -> <c>Pipeline.NeverRan</c>; Pending/Running -> <c>Pipeline.RetryInProgress</c> as the concurrency guard;
+    /// Succeeded/Skipped -> <c>Pipeline.NotRetryable</c>. When validation passes, returns the failed run so the caller can log
+    /// <see cref="DocumentPipelineRun.AttemptNumber"/> for audit before calling <see cref="QueueAsync"/> to trigger retry.
     /// <para>
-    /// retry 状态机判定是 run 聚合的 domain 关注点，集中在 manager（已持有 <see cref="IDocumentPipelineRunRepository"/>），
-    /// 让 AppService 不直接查 run 仓储（#216 follow-up #6）。PipelineCode 合法性是输入层校验，留在调用方。
+    /// Retry state-machine decisions are domain concerns of the run aggregate and are centralized in the manager, which already owns
+    /// <see cref="IDocumentPipelineRunRepository"/>. This keeps AppService from directly querying the run repository (#216 follow-up #6).
+    /// PipelineCode validity is input-layer validation and remains with the caller.
     /// </para>
     /// </summary>
     public virtual async Task<DocumentPipelineRun> EnsureRetryableAsync(Guid documentId, string pipelineCode)
@@ -245,10 +249,10 @@ public class DocumentPipelineRunManager : DomainService
     }
 
     /// <summary>
-    /// 校验该 pipeline 当前没有正在进行的 run——Pending/Running 抛 <c>RetryInProgress</c>（并发护栏）。
-    /// 与 <see cref="EnsureRetryableAsync"/> 的本质区别：Succeeded / Skipped / Failed / 从未运行**均放行**。
-    /// 用于「按需重跑」（如 #263「重新识别」重排自动分类），而非「失败重试」——调用方据此安全地
-    /// <see cref="QueueAsync"/> 一个新 attempt（AttemptNumber 自增，不与历史已终结的 run 撞唯一索引）。
+    /// Validates that this pipeline currently has no in-progress run. Pending/Running throw <c>RetryInProgress</c> as the concurrency guard.
+    /// The key difference from <see cref="EnsureRetryableAsync"/>: Succeeded / Skipped / Failed / never ran all pass.
+    /// Used for "rerun on demand" such as #263 "re-recognize" automatic classification, not for "retry failure".
+    /// The caller can then safely <see cref="QueueAsync"/> a new attempt with an incremented AttemptNumber that does not collide with historical terminal runs.
     /// </summary>
     public virtual async Task EnsureNotInProgressAsync(Guid documentId, string pipelineCode)
     {
@@ -281,11 +285,12 @@ public class DocumentPipelineRunManager : DomainService
     }
 
     /// <summary>
-    /// 根据所有关键流水线的最新 Run 派生 Document.LifecycleStatus。
+    /// Derives Document.LifecycleStatus from the latest runs of all key pipelines.
     /// <para>
-    /// 最新 run 由 <see cref="IDocumentPipelineRunRepository.GetLatestRunsByCodesAsync"/> 提供，该仓储已
-    /// 合并本 UoW 内尚未 flush 的 change-tracker 实体（EFCore 实现 peek Local entries；in-memory fake 因
-    /// 持有 run 引用天然可见）。故此处直接消费仓储结果即是 post-change 视图，无需调用方再传入"刚改动的 run"。
+    /// Latest runs are provided by <see cref="IDocumentPipelineRunRepository.GetLatestRunsByCodesAsync"/>. That repository already
+    /// merges change-tracker entities not yet flushed in the current UoW (the EF Core implementation peeks Local entries; the in-memory fake
+    /// naturally sees them because it holds run references). Therefore consuming repository results here gives the post-change view directly,
+    /// without requiring callers to pass "the run that was just changed".
     /// </para>
     /// </summary>
     protected virtual async Task DeriveLifecycleAsync(Document document)
@@ -317,9 +322,9 @@ public class DocumentPipelineRunManager : DomainService
             }
         }
 
-        // #284：Ready 闸门判据从"有已确认类型"升级为"无 blocking 待审原因"。等价性：低置信度路径
-        // 同步 set UnresolvedClassification(blocking) + 清 DocumentTypeId，故 !HasValue ⟺ UC set；
-        // 收益是闸门可扩展——未来加 blocking 原因零成本，non-blocking(如必填缺失)天然不挡 Ready。
+        // #284: Ready gate changed from "has confirmed type" to "has no blocking review reasons". Equivalence:
+        // the low-confidence path sets UnresolvedClassification (blocking) and clears DocumentTypeId together, so !HasValue <=> UC set.
+        // Benefit: the gate is extensible. Future blocking reasons cost nothing, and non-blocking reasons such as missing required fields naturally do not block Ready.
         if (derivedStatus != DocumentLifecycleStatus.Failed &&
             allSucceeded &&
             !ReviewReasonPolicy.HasBlocking(document.ReviewReasons))

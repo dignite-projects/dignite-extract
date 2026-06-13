@@ -5,7 +5,7 @@ namespace Dignite.DocumentAI.Documents;
 
 public class ConfirmClassificationInput
 {
-    /// <summary>确认分类的目标文档类型不可变 Id（#207：内部稳定句柄，TypeCode 可由 admin 重命名故不作引用键）。</summary>
+    /// <summary>Immutable target document type id for the confirmed classification (#207: an internal stable handle; TypeCode can be renamed by admins and is not used as a reference key).</summary>
     [Required]
     public Guid DocumentTypeId { get; set; }
 }

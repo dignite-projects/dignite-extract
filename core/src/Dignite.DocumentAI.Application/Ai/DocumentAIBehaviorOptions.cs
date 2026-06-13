@@ -13,46 +13,58 @@ namespace Dignite.DocumentAI.Ai;
 public class DocumentAIBehaviorOptions
 {
     /// <summary>
-    /// 分类提示词中最多包含的候选类型数量，超出时按 Priority 降序截断。
+    /// Maximum number of candidate types included in the classification prompt. Extra candidates are
+    /// truncated after sorting by descending Priority.
     /// </summary>
     public int MaxDocumentTypesInClassificationPrompt { get; set; } = 50;
 
     /// <summary>
-    /// 分类提示词中文档 Markdown 的最大字符数，超出时按 UTF-16 码元截断前部（不切断代理对）。
-    /// <b>仅作用于分类路径</b>（<c>DocumentClassificationWorkflow</c>）——字段抽取（<c>FieldExtractionWorkflow</c>）
-    /// 有意喂入<b>完整</b> Markdown 不截断，因为类型绑定字段可能出现在文档任何位置，尾部截断会静默漏抽。
+    /// Maximum number of document Markdown characters included in the classification prompt. When
+    /// exceeded, the leading prefix is truncated by UTF-16 code units without splitting surrogate
+    /// pairs. This applies <b>only to the classification path</b>
+    /// (<c>DocumentClassificationWorkflow</c>). Field extraction (<c>FieldExtractionWorkflow</c>)
+    /// intentionally feeds the <b>full</b> Markdown without truncation because type-bound fields can
+    /// appear anywhere in the document, and tail truncation would silently miss extraction.
     /// </summary>
     public int MaxTextLengthPerExtraction { get; set; } = 8000;
 
     /// <summary>
-    /// AI 交互默认语言。<b>仅作用于分类路径</b>（DocumentClassificationWorkflow，强制分类
-    /// 输出/reason 用此语言）。其余 LLM 路径按各自设计的语言策略，<b>不</b>消费此选项：
+    /// Default language for AI interactions. This applies <b>only to the classification path</b>
+    /// (DocumentClassificationWorkflow, forcing classification output / reason to this language).
+    /// Other LLM paths use their own designed language strategy and <b>do not</b> consume this option:
     /// <list type="bullet">
-    ///   <item>分类：强制此语言（DefaultLanguage）</item>
-    ///   <item>标题：跟随文档语言（prompt 内置 "respond in the same language as the document"）</item>
-    ///   <item>字段值：保留文档原文</item>
-    ///   <item>Slug：强制英译（URL 友好）</item>
+    ///   <item>Classification: force this language (DefaultLanguage).</item>
+    ///   <item>Title: follow the document language; the prompt says "respond in the same language as the document".</item>
+    ///   <item>Field values: preserve the document's original wording.</item>
+    ///   <item>Slug: force English translation for URL-friendliness.</item>
     /// </list>
-    /// 这套「按路径分化」是预期设计，不是 bug——新增 LLM 路径前先确认其语言策略归属。
+    /// This path-specific split is intentional design, not a bug. Confirm the language strategy before
+    /// adding a new LLM path.
     /// </summary>
     public string DefaultLanguage { get; set; } = "ja";
 
     /// <summary>
-    /// Title 生成时送入 LLM 的 Markdown 最大字符数。
-    /// 超出时截断尾部（文档开头通常已包含标题、摘要等关键信息）。
+    /// Maximum Markdown characters sent to the LLM for title generation.
+    /// The tail is truncated when exceeded because the beginning of a document usually contains the
+    /// title, summary, and other key information.
     /// </summary>
     public int MaxTitleGenerationMarkdownLength { get; set; } = 4000;
 
     /// <summary>
-    /// 「留空 AI 兜底选柜」（#265）提示词中最多包含的候选文件柜数量，超出时截断。
-    /// 镜像 <see cref="MaxDocumentTypesInClassificationPrompt"/>——柜选择与分类同属「从受限候选集挑一个」。
+    /// Maximum number of candidate cabinets included in the "blank cabinet AI fallback" (#265)
+    /// prompt. Extra candidates are truncated. Mirrors
+    /// <see cref="MaxDocumentTypesInClassificationPrompt"/> because cabinet selection and
+    /// classification are both "choose one from a bounded candidate set" tasks.
     /// </summary>
     public int MaxCabinetsInSuggestionPrompt { get; set; } = 50;
 
     /// <summary>
-    /// 「留空 AI 兜底选柜」（#265）的弃选阈值：LLM 置信度低于此值时<b>不</b>写入 CabinetId，文档保持「未归类」。
-    /// 柜是人工组织维度，宁可留空交由操作员后续改派（#257），也不强塞一个把握不大的柜。
-    /// 文档 Markdown 截断复用 <see cref="MaxTextLengthPerExtraction"/>（选柜与分类一样只需文档前段语义）。
+    /// Abstention threshold for "blank cabinet AI fallback" (#265): when the LLM confidence is below
+    /// this value, <b>do not</b> write CabinetId and keep the document uncategorized. Cabinets are a
+    /// human organization dimension, so it is better to leave the value blank for later operator
+    /// reassignment (#257) than to force a low-confidence cabinet. Markdown truncation reuses
+    /// <see cref="MaxTextLengthPerExtraction"/> because cabinet selection, like classification, only
+    /// needs the leading document semantics.
     /// </summary>
     public double MinCabinetSuggestionConfidence { get; set; } = 0.6;
 }

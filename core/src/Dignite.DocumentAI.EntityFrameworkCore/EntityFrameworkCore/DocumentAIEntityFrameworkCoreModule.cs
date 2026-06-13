@@ -24,7 +24,7 @@ public class DocumentAIEntityFrameworkCoreModule : AbpModule
             options.AddRepository<FieldDefinition, EfCoreFieldDefinitionRepository>();
             options.AddRepository<Cabinet, EfCoreCabinetRepository>();
             options.AddRepository<ExportTemplate, EfCoreExportTemplateRepository>();
-            // #216：PipelineRun 升级独立聚合根
+            // #216: PipelineRun was promoted to an independent aggregate root.
             options.AddRepository<DocumentPipelineRun, EfCoreDocumentPipelineRunRepository>();
         });
     }

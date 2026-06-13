@@ -1,19 +1,23 @@
 namespace Dignite.DocumentAI.Mcp;
 
 /// <summary>
-/// MCP 出口适配器的传输层常量。与 <c>DocumentConsts.MaxSearchResultCount</c> 同源纪律
-/// （.claude/rules/llm-call-anti-patterns.md 反例 B 要点 3）：LLM 触发路径的结果集硬上限
-/// 一律编译期 <c>const</c>——安全边界不可被运行时配置放大。
+/// Transport-layer constants for the MCP outbound adapter. Same discipline as
+/// <c>DocumentConsts.MaxSearchResultCount</c> (.claude/rules/llm-call-anti-patterns.md
+/// counterexample B point 3): hard result-set caps on LLM-triggered paths are always compile-time
+/// <c>const</c> values, so the safety boundary cannot be widened by runtime configuration.
 /// </summary>
 public static class DocumentAIMcpConsts
 {
     /// <summary>
-    /// 文档类型枚举（<c>list_document_types</c> tool 与 <c>resources/list</c>）单次返回的类型数硬上限。
-    /// 租户 admin 可自建任意多文档类型——无上限枚举会炸 LLM context / 形成费用攻击面。
-    /// 取 100（<c>DocumentConsts.MaxSearchResultCount</c> 的 2 倍）：类型是 schema 级元数据，
-    /// 单条体积远小于文档检索行（无 Markdown / 字段值载荷），而正常部署的类型数在几十以内——
-    /// 100 覆盖正常发现场景，同时把病态规模（数千类型）挡在边界外。
-    /// 截断按 TypeCode 稳定排序后进行；tool 出口以 <c>truncated</c> + <c>totalCount</c> 显式告知 LLM 还有更多。
+    /// Hard cap on the number of document types returned in one document type enumeration
+    /// (<c>list_document_types</c> tool and <c>resources/list</c>). Tenant admins can create any number
+    /// of document types; unbounded enumeration can blow up LLM context and create a cost-attack
+    /// surface. 100 is twice <c>DocumentConsts.MaxSearchResultCount</c>: types are schema-level
+    /// metadata, each item is much smaller than a document search row because there is no Markdown /
+    /// field-value payload, and normal deployments have at most dozens of types. 100 covers normal
+    /// discovery while keeping pathological scale (thousands of types) outside the boundary.
+    /// Truncation happens after stable TypeCode ordering; tool outbound payloads explicitly tell the
+    /// LLM more exist via <c>truncated</c> + <c>totalCount</c>.
     /// </summary>
     public const int MaxDocumentTypeResults = 100;
 }

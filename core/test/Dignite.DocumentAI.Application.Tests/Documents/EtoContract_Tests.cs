@@ -7,16 +7,18 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 出口 ETO 契约测试（issue #188）。
+/// Exit ETO contract tests (issue #188).
 /// <para>
-/// 验证 #188 引入的 <c>init</c>-only / <c>required</c> 改造没有破坏 System.Text.Json round-trip——
-/// ABP 内置 transactional outbox 把 ETO 序列化为 JSON 写入 <c>AbpEventOutbox.EventData</c>，
-/// 后台 worker 读出来再反序列化分发给 handler。如果 round-trip 失败，整个出口契约失效。
+/// Verifies that the <c>init</c>-only / <c>required</c> changes introduced by #188 did not break the
+/// System.Text.Json round-trip. ABP's built-in transactional outbox serializes ETOs to JSON and writes them
+/// to <c>AbpEventOutbox.EventData</c>; a background worker reads and deserializes them before dispatching to
+/// handlers. If round-trip fails, the whole exit contract is invalid.
 /// </para>
 /// <para>
-/// 不是测 ABP outbox 本身（那是 framework 行为），而是测**我们的 ETO 形状**与 System.Text.Json
-/// 的兼容性。<see cref="System.Text.Json"/> 在 .NET 5+ 支持 <c>init</c>-only setter；
-/// <c>required</c> 关键字只影响编译期对象初始化器检查，不影响反序列化（反射可以 set）。
+/// This does not test ABP outbox itself, which is framework behavior. It tests compatibility between our
+/// ETO shape and System.Text.Json. <see cref="System.Text.Json"/> supports <c>init</c>-only setters on .NET 5+;
+/// the <c>required</c> keyword only affects compile-time object-initializer checks and does not block
+/// deserialization, because reflection can set it.
 /// </para>
 /// </summary>
 public class EtoContract_Tests
@@ -166,9 +168,9 @@ public class EtoContract_Tests
     [Fact]
     public void EventTime_Missing_From_Json_Throws_On_Deserialize()
     {
-        // 验证 `required` 关键字在 System.Text.Json (.NET 7+) 反序列化时的 fail-fast 行为：
-        // JSON 缺 EventTime 字段 → 抛 JsonException，下游 worker 不会拿到 default(DateTime) 的事件，
-        // 触发 outbox retry 或 inbox dead-letter，比静默吞噬强得多。
+        // Verify fail-fast behavior for the `required` keyword during System.Text.Json (.NET 7+) deserialization:
+        // JSON without EventTime throws JsonException, so downstream workers do not receive a default(DateTime)
+        // event. This triggers outbox retry or inbox dead-letter instead of silently swallowing bad data.
         var jsonWithoutEventTime = """
             {
               "DocumentId": "00000000-0000-0000-0000-000000000001",

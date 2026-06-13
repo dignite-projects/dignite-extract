@@ -5,8 +5,9 @@ using Xunit;
 namespace Dignite.DocumentAI.Mcp.Documents;
 
 /// <summary>
-/// #210：MCP 出口（检索 tool 的 <see cref="DocumentSearchResultItem"/>）<b>完全不透出</b>原生 payload /
-/// provenance 元数据——AI 客户端用不到，且内部归档 BlobName 是存储 key。纯反射断言，无需 ABP 宿主。
+/// #210: MCP output from the search tool's <see cref="DocumentSearchResultItem"/> must <b>never expose</b>
+/// native payload / provenance metadata. AI clients do not need it, and internal archive BlobName is a
+/// storage key. Pure reflection assertion; no ABP host required.
 /// </summary>
 public class DocumentSearchResultItemExposure_Tests
 {
@@ -21,7 +22,7 @@ public class DocumentSearchResultItemExposure_Tests
         propertyNames.ShouldNotContain("ProviderSteps");
         propertyNames.ShouldNotContain("HasNativePayload");
 
-        // 任何含 "NativePayload" / "BlobName" 的字段都不应出现在 MCP 投影里。
+        // No field containing "NativePayload" / "BlobName" should appear in the MCP projection.
         propertyNames.ShouldAllBe(n =>
             !n.Contains("NativePayload") && !n.Contains("BlobName"));
     }

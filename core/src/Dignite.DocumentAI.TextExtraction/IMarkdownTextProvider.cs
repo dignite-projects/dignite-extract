@@ -6,23 +6,25 @@ using Dignite.DocumentAI.Abstractions.TextExtraction;
 namespace Dignite.DocumentAI.TextExtraction;
 
 /// <summary>
-/// 数字版文档（PDF/Word/HTML/纯文本/CSV/RTF/EPUB 等）→ Markdown Provider 抽象。
-/// 处理具备数字文本层的文件，与处理图像/扫描件的 <c>IOcrProvider</c> 互补。
-/// 消费者固定为 <c>DefaultTextExtractor</c>，实现方由独立 Provider 模块
-/// （如 <c>Dignite.DocumentAI.TextExtraction.ElBrunoMarkItDown</c>）提供，
-/// Host 侧通过 <c>DependsOn</c> 选择启用一个实现。
+/// Provider abstraction for digital documents (PDF / Word / HTML / plain text / CSV / RTF / EPUB,
+/// etc.) to Markdown. Handles files with a digital text layer and complements <c>IOcrProvider</c>,
+/// which handles images / scans. The consumer is fixed to <c>DefaultTextExtractor</c>; implementations
+/// are provided by independent provider modules, such as
+/// <c>Dignite.DocumentAI.TextExtraction.ElBrunoMarkItDown</c>. The host selects one implementation
+/// through <c>DependsOn</c>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Markdown-first 契约</b>：实现方<b>必须</b>把抽取结果填充到
-/// <see cref="TextExtractionResult.Markdown"/>，而<b>不能</b>退回 plain text 或新增并行纯文本字段——
-/// 任何"plain text fallback"都属于设计违规。
+/// <b>Markdown-first contract</b>: implementations <b>must</b> populate extraction output into
+/// <see cref="TextExtractionResult.Markdown"/> and <b>must not</b> fall back to plain text or add a
+/// parallel plain-text field. Any "plain text fallback" is a design violation.
 /// </para>
 /// <para>
-/// <b>对结构化文档而言</b>（带标题的 DOCX / 排版整齐的 PDF / CSV 表格），Markdown 标题、表格、列表是
-/// 后续向量化切块（结构感知）与 LLM 理解的真信号——全力利用。
-/// <b>对无结构内容而言</b>（裸 txt / 单段 RTF），Markdown 是<b>容器命名</b>而非信号增益，
-/// 保留此契约只是为了下游消费一种格式。
+/// <b>For structured documents</b> (titled DOCX / well-laid-out PDF / CSV table), Markdown headings,
+/// tables, and lists are real signals for downstream vectorization chunking (structure-aware) and LLM
+/// understanding, so use them fully. <b>For unstructured content</b> (bare txt / single-paragraph
+/// RTF), Markdown is a <b>container name</b>, not a signal gain; the contract is kept only so
+/// downstream consumers handle one format.
 /// </para>
 /// </remarks>
 public interface IMarkdownTextProvider

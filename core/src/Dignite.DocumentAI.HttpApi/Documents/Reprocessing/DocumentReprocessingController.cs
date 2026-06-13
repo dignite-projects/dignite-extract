@@ -5,8 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Dignite.DocumentAI.HttpApi.Documents.Reprocessing;
 
-// 手写 controller 显式暴露 IDocumentReprocessingAppService（#216：host Auto API 只覆盖 host assembly，
-// Application assembly 的 AppService 靠 HttpApi 显式 controller 转发，否则前端调用落 404）。
+// Handwritten controller that explicitly exposes IDocumentReprocessingAppService. #216: host Auto API
+// only covers the host assembly, so AppServices from the Application assembly rely on explicit HttpApi
+// controller forwarding; otherwise frontend calls hit 404.
 [Area("document-ai")]
 [Route("api/document-ai/document-reprocessing")]
 public class DocumentReprocessingController : DocumentAIController, IDocumentReprocessingAppService
@@ -33,7 +34,8 @@ public class DocumentReprocessingController : DocumentAIController, IDocumentRep
     }
 
     // POST /api/document-ai/document-reprocessing/reclassification/preview
-    // 用 POST 承载范围对象（含枚举 + 可空类型 + 开关），避免 query string 表达复杂入参。
+    // Uses POST to carry the scope object, including enums, nullable values, and switches, avoiding
+    // complex query-string input.
     [HttpPost("reclassification/preview")]
     public virtual Task<ReclassificationPreviewDto> PreviewReclassificationAsync([FromBody] ReclassificationScopeInput input)
     {

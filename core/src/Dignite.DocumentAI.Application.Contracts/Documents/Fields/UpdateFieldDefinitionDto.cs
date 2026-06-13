@@ -5,7 +5,7 @@ namespace Dignite.DocumentAI.Documents.Fields;
 
 public class UpdateFieldDefinitionDto
 {
-    /// <summary>字段机器名（#207 起允许重命名；regex 白名单由实体校验，同层同类型唯一性由 AppService 校验）。</summary>
+    /// <summary>Field machine name. Renames are allowed since #207; regex allowlisting is enforced by the entity, and same-layer same-type uniqueness is enforced by AppService.</summary>
     [Required]
     [DynamicStringLength(typeof(FieldDefinitionConsts), nameof(FieldDefinitionConsts.MaxNameLength))]
     public string Name { get; set; } = default!;
@@ -14,7 +14,7 @@ public class UpdateFieldDefinitionDto
     [DynamicStringLength(typeof(FieldDefinitionConsts), nameof(FieldDefinitionConsts.MaxDisplayNameLength))]
     public string DisplayName { get; set; } = default!;
 
-    /// <summary>抽取指令——<b>选填</b>。留空时 LLM 仅靠 <see cref="Name"/> + <see cref="DataType"/> 推断该抽什么。</summary>
+    /// <summary>Extraction instruction, <b>optional</b>. When blank, the LLM infers what to extract from <see cref="Name"/> and <see cref="DataType"/> only.</summary>
     [DynamicStringLength(typeof(FieldDefinitionConsts), nameof(FieldDefinitionConsts.MaxPromptLength))]
     public string? Prompt { get; set; }
 
@@ -24,6 +24,6 @@ public class UpdateFieldDefinitionDto
 
     public bool IsRequired { get; set; }
 
-    /// <summary>是否允许多值（#212）——仅 <see cref="FieldDataType.Text"/> 字段可为 true。multi→single 收窄对已有值字段由 AppService 拒绝。</summary>
+    /// <summary>Whether multiple values are allowed (#212). Only <see cref="FieldDataType.Text"/> fields may be true. AppService rejects narrowing multi-value fields to single-value when existing values are present.</summary>
     public bool AllowMultiple { get; set; }
 }

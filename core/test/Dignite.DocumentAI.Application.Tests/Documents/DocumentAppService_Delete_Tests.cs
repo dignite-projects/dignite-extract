@@ -51,9 +51,10 @@ public class DocumentAppService_Delete_Tests
         _documentTypeRepository = GetRequiredService<IDocumentTypeRepository>();
         _cabinetRepository = GetRequiredService<ICabinetRepository>();
 
-        // UploadAsync 的前置 fail-fast 检查（当前层至少有一个 DocumentType）—— 测试默认走"已配置"路径，
-        // 让 cabinet / 文件校验 / 重复 / 回收站检查能跑到。fail-fast 走 GetCountAsync()（#241，非 GetListAsync）；
-        // 专门测试"未配置 → NoDocumentTypesConfigured"在对应 fact 里把 count 覆盖为 0。
+        // UploadAsync precondition fail-fast check: current layer must have at least one DocumentType.
+        // Tests default to the "configured" path so cabinet / file validation / duplicate / recycle-bin
+        // checks can run. fail-fast uses GetCountAsync() (#241, not GetListAsync). The dedicated
+        // "not configured -> NoDocumentTypesConfigured" fact overrides count to 0.
         _documentTypeRepository.GetCountAsync(Arg.Any<CancellationToken>()).Returns(1L);
     }
 
@@ -113,8 +114,9 @@ public class DocumentAppService_Delete_Tests
     [Fact]
     public async Task UploadAsync_Throws_NoDocumentTypesConfigured_When_Current_Scope_Has_No_Types()
     {
-        // 覆盖 fail-fast：删除 Host 启动期 seed 后，新部署 / 新租户首次上传必须先建至少一个 DocumentType。
-        // 不做这个检查的话，文档会上传成功 → 分类候选集为空 → 永远卡 PendingReview。
+        // Cover fail-fast: after removing Host startup seed, a fresh deployment / tenant's first upload
+        // must create at least one DocumentType first. Without this check, upload succeeds, classification
+        // candidates are empty, and the document gets stuck in PendingReview forever.
         _documentTypeRepository.GetCountAsync(Arg.Any<CancellationToken>()).Returns(0L);
 
         var exception = await Should.ThrowAsync<BusinessException>(async () =>
@@ -172,7 +174,8 @@ public class DocumentAppService_Delete_Tests
 
         await _appService.UploadAsync(input);
 
-        // 上传时人工归属：Document 以传入的 CabinetId 落库（已校验当前层柜存在 + Cabinets 权限）。
+        // Manual assignment on upload: Document is persisted with the provided CabinetId after validating
+        // current-layer cabinet existence and Cabinets permission.
         await _documentRepository.Received(1).InsertAsync(
             Arg.Is<Document>(d => d.CabinetId == cabinet.Id),
             Arg.Any<bool>(),
@@ -182,8 +185,9 @@ public class DocumentAppService_Delete_Tests
     [Fact]
     public async Task UploadAsync_Throws_InvalidCabinetId_When_Cabinet_Not_In_Current_Layer()
     {
-        // 不 setup FindAsync → mock 默认返回 null（柜不存在 / 跨层被 ambient tenant filter 滤掉）。
-        // 经过 CheckPolicyAsync(Cabinets.Default)（测试环境 AlwaysAllow）后落到 fail-closed 拒绝。
+        // No FindAsync setup means mock default returns null, representing missing cabinet or cross-layer
+        // filtering by the ambient tenant filter. After CheckPolicyAsync(Cabinets.Default), AlwaysAllow in
+        // test environment, this reaches fail-closed rejection.
         var input = CreateUploadInput([4, 5, 6]);
         input.CabinetId = Guid.NewGuid();
 
@@ -196,7 +200,7 @@ public class DocumentAppService_Delete_Tests
     [Fact]
     public async Task UploadAsync_Throws_UnsupportedFileType_When_ContentType_Not_Allowed()
     {
-        // #221：扩展名合法但 content-type 不在白名单 → fail-closed，不落 blob、不入队。
+        // #221: valid extension but content-type outside allowlist means fail-closed: no blob, no queue.
         var input = CreateUploadInput([1, 2, 3], fileName: "A.pdf", contentType: "application/zip");
 
         var exception = await Should.ThrowAsync<BusinessException>(async () =>
@@ -212,7 +216,8 @@ public class DocumentAppService_Delete_Tests
     [Fact]
     public async Task UploadAsync_Throws_UnsupportedFileType_When_Extension_Not_Allowed()
     {
-        // #221：content-type 合法但扩展名不在白名单（决定 blob 后缀 + DefaultTextExtractor dispatch）→ fail-closed。
+        // #221: valid content-type but extension outside allowlist, which decides blob suffix and
+        // DefaultTextExtractor dispatch, means fail-closed.
         var input = CreateUploadInput([1, 2, 3], fileName: "A.exe", contentType: "application/pdf");
 
         var exception = await Should.ThrowAsync<BusinessException>(async () =>
@@ -224,7 +229,8 @@ public class DocumentAppService_Delete_Tests
     [Fact]
     public async Task UploadAsync_Throws_FileTooLarge_When_Declared_ContentLength_Exceeds_Limit()
     {
-        // #221：客户端声明的 ContentLength 超限 → 廉价快速拒绝（不读流）。
+        // #221: client-declared ContentLength over limit is rejected cheaply and quickly without reading
+        // the stream.
         var input = new UploadDocumentInput
         {
             File = new RemoteStreamContent(
@@ -244,8 +250,9 @@ public class DocumentAppService_Delete_Tests
     [Fact]
     public async Task UploadAsync_Throws_FileTooLarge_When_Streamed_Bytes_Exceed_Limit_Despite_Underreported_Length()
     {
-        // #221：声明的 ContentLength 少报（不可信），但流式拷贝按实际字节数施加的硬上限仍兜住——
-        // 不依赖客户端声明，也不把超大 body 全量缓冲。临时下调 static 上限（finally 复原，类内串行执行）。
+        // #221: declared ContentLength underreports and is untrusted, but streamed copy still enforces the
+        // hard limit by actual byte count. Do not rely on client declarations or fully buffer oversized
+        // bodies. Temporarily lower the static limit and restore it in finally; this class runs serially.
         var original = DocumentConsts.MaxUploadFileBytes;
         try
         {
@@ -256,7 +263,7 @@ public class DocumentAppService_Delete_Tests
                     new MemoryStream(new byte[10]),
                     "A.pdf",
                     "application/pdf",
-                    readOnlyLength: 3, // 少报，绕过廉价 ContentLength 检查
+                    readOnlyLength: 3, // underreported to bypass the cheap ContentLength check
                     disposeStream: true)
             };
 

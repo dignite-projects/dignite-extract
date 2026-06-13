@@ -83,7 +83,7 @@ export class DocumentDetailComponent implements OnInit {
   private readonly permissionService = inject(PermissionService);
   private readonly localization = inject(LocalizationService);
   private readonly destroyRef = inject(DestroyRef);
-  // 原文件 blob 加载 / sanitize / revoke 生命周期（#277），与 file-preview 页共用同一 service。
+  // Original-file blob load / sanitize / revoke lifecycle (#277), shared with the file-preview page.
   protected readonly fileBlob = inject(DocumentFileBlobService);
 
   readonly canDelete = this.permissionService.getGrantedPolicy(
@@ -97,11 +97,13 @@ export class DocumentDetailComponent implements OnInit {
   );
 
   document = signal<DocumentDto | null>(null);
-  // #216：PipelineRun 已拆为独立聚合根，从 DocumentDto.pipelineRuns 移除——
-  // 改为独立 signal，loadDocument 时通过 DocumentPipelineRunService 单独拉取。
+  // #216: PipelineRun was split into an independent aggregate root and removed from
+  // DocumentDto.pipelineRuns. It is now an independent signal loaded separately through
+  // DocumentPipelineRunService in loadDocument.
   pipelineRuns = signal<DocumentPipelineRunDto[]>([]);
   isLoading = signal(true);
-  // 左栏 3-Tab（#274）：默认 Markdown 预览；切到 'file' 才触发原文件 blob 懒加载。
+  // Left column three-tab area (#274): Markdown preview by default; switching to 'file' triggers lazy
+  // loading of the original-file blob.
   activeTab = signal<'preview' | 'source' | 'file'>('preview');
   retryingPipeline = signal<string | null>(null);
   isRerecognizing = signal(false);
@@ -109,13 +111,16 @@ export class DocumentDetailComponent implements OnInit {
   isSavingFields = signal(false);
   fieldDefinitions = signal<FieldDefinitionDto[]>([]);
   extractedFieldFormFields = signal<FormFieldConfig[]>([]);
-  // 文档所属文件柜候选：cabinetId → name 映射展示 + 改派下拉候选（#257）；需 Cabinets.Default 才加载。
+  // Candidate cabinets for the document: cabinetId-to-name display mapping plus reassignment dropdown
+  // options (#257). Loaded only with Cabinets.Default permission.
   cabinets = signal<CabinetDto[]>([]);
-  // 文件柜改派（#257）编辑态：进入编辑显示下拉；selectedCabinetId 空串 = 未归类。
+  // Cabinet reassignment (#257) edit state: entering edit shows the dropdown; empty selectedCabinetId
+  // means unclassified.
   isEditingCabinet = signal(false);
   isSavingCabinet = signal(false);
   selectedCabinetId = signal<string>('');
-  // 当前层可见文档类型（typeCode → displayName 映射）；随字段定义加载时一并填充。
+  // Document types visible in the current layer, used for typeCode-to-displayName mapping. Populated
+  // together with field definition loading.
   documentTypes = signal<DocumentTypeDto[]>([]);
 
   readonly DocumentLifecycleStatus = DocumentLifecycleStatus;
@@ -126,7 +131,8 @@ export class DocumentDetailComponent implements OnInit {
   pipelineRows = computed<PipelineRow[]>(() => {
     if (!this.document()) return [];
 
-    // #216：runs 来源从 doc.pipelineRuns 改为独立 pipelineRuns signal（DocumentPipelineRunService）。
+    // #216: run source changed from doc.pipelineRuns to the independent pipelineRuns signal
+    // (DocumentPipelineRunService).
     const allRuns = this.pipelineRuns();
     const known: PipelineRow[] = KNOWN_PIPELINE_CODES.map(code => this.toPipelineRow(
       code,
@@ -176,10 +182,12 @@ export class DocumentDetailComponent implements OnInit {
     return this.getElapsedMs(run) === null ? null : this.formatElapsed(run);
   }
 
-  // #284：需要操作员关注（任一未解决待审原因）= 服务端给的 requiresReview，客户端不自推断。
+  // #284: operator attention required, for any unresolved review reason, equals server-provided
+  // requiresReview. The client does not infer it locally.
   needsReview = computed(() => this.document()?.requiresReview ?? false);
 
-  // #284：纯可用性轴——双轴正交后审核横幅与"处理中"横幅各自独立判断（模板 @if needsReview 优先于 isProcessing）。
+  // #284: pure availability axis. After the two axes became orthogonal, the review banner and processing
+  // banner are judged independently; the template's @if needsReview takes precedence over isProcessing.
   isProcessing = computed(() => {
     const status = this.document()?.lifecycleStatus;
     return status === DocumentLifecycleStatus.Uploaded ||
@@ -190,15 +198,18 @@ export class DocumentDetailComponent implements OnInit {
     this.document()?.lifecycleStatus === DocumentLifecycleStatus.Ready
   );
 
-  // 关键流水线（文本提取 / 分类）有进行中的 run（Pending/Running）时为 true。
+  // True when any critical pipeline, text extraction or classification, has an in-progress run
+  // (Pending/Running).
   pipelineInProgress = computed(() =>
     this.pipelineRows().some(r => r.isKnown && r.inProgress)
   );
 
-  // #263「重新识别」可用性：已提取文本 + 有 ConfirmClassification 权限（同 canEditFields）+
-  // 当前无进行中的关键流水线、且不在加载中——避免对正在(重)处理的文档叠加重排。
-  // 用 pipelineInProgress 而非 !isProcessing()：后者在 needsReview() 时恒 false，会让待审核文档
-  // 在重排进行中仍露出按钮（评审 #5）。POST 在途由按钮 [disabled]="isRerecognizing()" 兜住。
+  // #263 "rerecognize" availability: extracted text exists, ConfirmClassification permission is present
+  // (same as canEditFields), no critical pipeline is currently running, and the page is not loading. This
+  // avoids stacking reclassification onto a document already being processed or reprocessed.
+  // Use pipelineInProgress instead of !isProcessing(): the latter is always false when needsReview() is
+  // true, which would still expose the button on a pending-review document while reclassification is in
+  // progress (review #5). The in-flight POST is covered by button [disabled]="isRerecognizing()".
   canRerecognize = computed(() =>
     this.canEditFields &&
     !!this.document()?.markdown &&
@@ -208,8 +219,9 @@ export class DocumentDetailComponent implements OnInit {
 
   isReextracting = signal(false);
 
-  // #289「仅重抽字段」可用性：与「重新识别」同前置，外加**已分类**（有 documentTypeCode）——
-  // 字段抽取挂在类型下，未分类无从抽取（后端 NotClassified 守卫的前置镜像）。
+  // #289 "field re-extraction only" availability: same prerequisites as "rerecognize", plus already
+  // classified with documentTypeCode. Field extraction is attached to a type, so unclassified documents
+  // have nothing to extract from; this mirrors the backend NotClassified guard.
   canReextractFields = computed(() =>
     this.canEditFields &&
     !!this.document()?.documentTypeCode &&
@@ -226,35 +238,42 @@ export class DocumentDetailComponent implements OnInit {
     isPdfContentType(this.document()?.fileOrigin?.contentType)
   );
 
-  // Markdown 源文本中间 computed（#274 review）：document() 变更但 markdown 未变时（改字段 /
-  // 文件柜等），返回相同字符串 → 下游 renderedMarkdown 凭值相等性短路，避免重复 marked.parse。
+  // Intermediate computed for Markdown source (#274 review): when document() changes but markdown does
+  // not, such as field or cabinet changes, return the same string so downstream renderedMarkdown can
+  // short-circuit by value equality and avoid repeated marked.parse calls.
   private markdownSource = computed(() => this.document()?.markdown ?? '');
 
-  // Markdown 预览（#274）：marked 渲染为 HTML 字符串，模板 [innerHTML] 绑定时由 Angular 内置
-  // DomSanitizer 自动消毒（剥离 <script> / on* / javascript:）。绝不 bypassSecurityTrustHtml——
-  // Markdown 是攻击者可影响内容（VLM OCR 可被图内文字 prompt-inject），消毒器必须全程开。
+  // Markdown preview (#274): marked renders to an HTML string. When the template binds [innerHTML],
+  // Angular's built-in DomSanitizer sanitizes it automatically by stripping <script>, on*, and
+  // javascript:. Never bypassSecurityTrustHtml: Markdown is attacker-influenced content because VLM OCR
+  // can be prompt-injected by text inside an image, so the sanitizer must stay on end to end.
   renderedMarkdown = computed<string>(() => {
     const md = this.markdownSource();
     return md ? (marked.parse(md, { gfm: true, async: false }) as string) : '';
   });
 
-  // 文档所属文件柜名（cabinetId → name）；未归类或解析不到（无权限 / 已删柜）返回 null。
+  // Owning cabinet name for the document, cabinetId to name. Returns null when unclassified or
+  // unresolved because of missing permission or deleted cabinet.
   cabinetName = computed<string | null>(() => {
     const id = this.document()?.cabinetId;
     if (!id) return null;
     return this.cabinets().find(c => c.id === id)?.name ?? null;
   });
 
-  // 文档类型 displayName（typeCode → displayName）；未分类返回 null，跨层 / 已删类型回退 code。
+  // Document type displayName, mapped from typeCode. Returns null when unclassified, and falls back to
+  // code for cross-layer or deleted types.
   documentTypeDisplayName = computed<string | null>(() => {
     const code = this.document()?.documentTypeCode;
     if (!code) return null;
     return this.documentTypes().find(t => t.typeCode === code)?.displayName ?? code;
   });
 
-  // Type-bound extracted fields (field architecture v2)。只展示「当前活跃字段定义」对应的值：
-  // 后端出口 ExtractedFields 穿透 soft-delete 仍含已删字段定义的历史值（给下游"数据不丢"，#206/#207），
-  // 但操作员 UI 不再显示它们——与列表动态列（亦只用活跃定义）一致。label 用 displayName，按 displayOrder 排序。
+  // Type-bound extracted fields (field architecture v2). Show only values corresponding to currently
+  // active field definitions:
+  // The backend ExtractedFields output pierces soft-delete and still includes historical values for
+  // deleted field definitions, preserving data for downstream consumers (#206/#207). The operator UI no
+  // longer shows them, matching the list's dynamic columns which also use only active definitions. Labels
+  // use displayName and sorting uses displayOrder.
   extractedFieldEntries = computed<{ key: string; label: string; value: string }[]>(() => {
     const fields = this.document()?.extractedFields;
     if (!fields) return [];
@@ -271,19 +290,23 @@ export class DocumentDetailComponent implements OnInit {
       }));
   });
 
-  // 字段卡片显示条件：已有抽取值（只读展示），或可编辑且该类型有字段定义（支持补全空字段）。
+  // Field card display condition: existing extracted values for read-only display, or editable with field
+  // definitions on this type so empty fields can be completed.
   showFieldsCard = computed(() =>
     this.extractedFieldEntries().length > 0 ||
     (this.canEditFields && this.fieldDefinitions().length > 0)
   );
 
   private documentId!: string;
-  // 「下载文件」点击时 blob 尚未加载 → 置位，待 blob 就绪后触发一次下载（见 downloadFile + 构造器 effect）。
+  // If the blob has not loaded when Download File is clicked, set this flag and trigger one download
+  // after the blob is ready. See downloadFile plus the constructor effect.
   private pendingDownload = false;
 
   constructor() {
-    // 挂起的下载收尾：blob 到位 → 触发一次下载；blob 失败 → 提示。pendingDownload 是普通布尔，
-    // effect 仅在 fileBlob 信号变化时重跑（下载点击会先改信号触发加载），逻辑天然只命中一次。
+    // Pending download completion: when the blob arrives, trigger one download; when blob loading fails,
+    // show a hint. pendingDownload is a plain boolean, and this effect reruns only when fileBlob signals
+    // change. The download click first changes signals by triggering loading, so the logic naturally hits
+    // only once.
     effect(() => {
       const url = this.fileBlob.blobUrl();
       const failed = this.fileBlob.hasError();
@@ -309,7 +332,8 @@ export class DocumentDetailComponent implements OnInit {
 
   private loadDocument(): void {
     this.isLoading.set(true);
-    // doc + runs 互相独立（#216 后），并行拉一次；fieldDefinitions 依赖 doc.documentTypeCode 仍串行。
+    // doc and runs are independent after #216, so load them once in parallel; fieldDefinitions still
+    // depend on doc.documentTypeCode and remain sequential.
     forkJoin({
       doc: this.documentService.get(this.documentId),
       runs: this.documentPipelineRunService.getList(this.documentId),
@@ -320,19 +344,24 @@ export class DocumentDetailComponent implements OnInit {
           this.document.set(doc);
           this.pipelineRuns.set(runs);
           this.isLoading.set(false);
-          // 原文件 blob 懒加载（#274）：默认不在加载文档时拉取，仅「原文件」Tab 才下载（见 selectTab）。
-          // 若用户已在该 Tab，reload（Refresh / rerecognize）后调一次 ensureFilePreview——blob 已缓存
-          // 则早退、上次失败则复位错误重试，避免「Refresh 对卡住的预览无效」（#274 review）。
+          // Original-file blob lazy loading (#274): do not fetch while loading the document by default;
+          // download only when the Original File tab is selected. See selectTab.
+          // If the user is already on that tab, call ensureFilePreview once after reload
+          // (Refresh / rerecognize). It returns early when the blob is cached and resets a previous error
+          // for retry, preventing Refresh from being ineffective on a stuck preview (#274 review).
           if (this.activeTab() === 'file') {
             this.ensureFilePreview();
           }
-          // 字段定义用于：① 抽取字段展示用 displayName（所有查看者）；② 可编辑时补全空字段。
-          // 后端 GetListAsync 自 #223 起对 Documents.Default 即放开，故只要有类型就加载，不再门控编辑权限。
+          // Field definitions are used for: 1. displayName in extracted-field display for all viewers;
+          // 2. completing empty fields when editable. Backend GetListAsync has been open to
+          // Documents.Default since #223, so load whenever a type exists and no longer gate on edit
+          // permission.
           this.fieldDefinitions.set([]);
           if (doc.documentTypeCode) {
             this.loadFieldDefinitions(doc.documentTypeCode);
           }
-          // 文件柜名映射：仅当有 Cabinets.Default 权限且尚未加载时拉取（无权限则文件柜行不显示）。
+          // Cabinet name mapping: fetch only when Cabinets.Default is granted and not already loaded. If
+          // there is no permission, the cabinet row is hidden.
           if (this.canViewCabinets && this.cabinets().length === 0) {
             this.loadCabinets();
           }
@@ -343,12 +372,14 @@ export class DocumentDetailComponent implements OnInit {
       });
   }
 
-  // doc.documentTypeCode 是 Document 出口契约的当前 code 投影（#207）；字段定义 API 按不可变
-  // DocumentTypeId 关联，故先在当前层可见类型里把 code 解析为 id 再查。
+  // doc.documentTypeCode is the current code projection in the Document output contract (#207). The
+  // field definition API associates by immutable DocumentTypeId, so first resolve code to id from types
+  // visible in the current layer, then query.
   private loadFieldDefinitions(typeCode: string): void {
     this.documentTypeService.getVisible()
       .pipe(
-        // 一次 getVisible 两用：存 documentTypes 供文档类型 displayName 映射；再解析 typeId 查字段定义。
+        // One getVisible call serves two purposes: store documentTypes for document type displayName
+        // mapping, then resolve typeId for field definition lookup.
         tap(types => this.documentTypes.set(types)),
         switchMap(types => {
           const documentTypeId = types.find(t => t.typeCode === typeCode)?.id;
@@ -365,7 +396,8 @@ export class DocumentDetailComponent implements OnInit {
       });
   }
 
-  // 文件柜候选（名映射展示 + 改派下拉，#257）；仅 Cabinets.Default 权限时调用。
+  // Cabinet candidates for name mapping display plus reassignment dropdown (#257). Called only with
+  // Cabinets.Default permission.
   private loadCabinets(): void {
     this.cabinetService.getList()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -375,7 +407,8 @@ export class DocumentDetailComponent implements OnInit {
       });
   }
 
-  // 文件柜改派（#257）——进入编辑态，预选当前柜（空串 = 未归类）。
+  // Cabinet reassignment (#257): enter edit mode and preselect the current cabinet; empty string means
+  // unclassified.
   startEditCabinet(): void {
     this.selectedCabinetId.set(this.document()?.cabinetId ?? '');
     this.isEditingCabinet.set(true);
@@ -389,7 +422,8 @@ export class DocumentDetailComponent implements OnInit {
     const doc = this.document();
     if (!doc) return;
     this.isSavingCabinet.set(true);
-    // 空串 → null（移出文件柜 / 未归类）。后端校验柜存在性 + 当前层归属。
+    // Empty string becomes null, meaning removed from cabinet / unclassified. Backend validates cabinet
+    // existence and current-layer ownership.
     const cabinetId = this.selectedCabinetId() || null;
     this.documentService.updateCabinet(doc.id!, { cabinetId })
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -407,15 +441,16 @@ export class DocumentDetailComponent implements OnInit {
       });
   }
 
-  // 进入「原文件」Tab 的统一入口（#274 review）：先复位上次的预览错误（给 <img> 重建一次重试、
-  // 让上次下载失败可重拉），再确保 blob 就绪（service 自身防重复请求 + 组件销毁时 revoke）。
-  // 修复 imageError 卡死 + Refresh 无效。
+  // Unified entry point for the Original File tab (#274 review): reset the previous preview error first
+  // so <img> rebuilds and retries, and failed downloads can refetch. Then ensure the blob is ready; the
+  // service prevents duplicate requests and revokes on component destroy.
+  // Fixes imageError getting stuck and Refresh being ineffective.
   private ensureFilePreview(): void {
     this.fileBlob.resetError();
     this.fileBlob.ensureLoaded(this.documentId);
   }
 
-  // Tab 切换（#274）：切到「原文件」时确保原文件预览就绪。
+  // Tab switch (#274): when switching to Original File, ensure the original-file preview is ready.
   selectTab(tab: 'preview' | 'source' | 'file'): void {
     this.activeTab.set(tab);
     if (tab === 'file') {
@@ -423,9 +458,11 @@ export class DocumentDetailComponent implements OnInit {
     }
   }
 
-  // 「下载文件」（footer）：直接触发浏览器下载原文件，免去先开预览页再下载。
-  // blob 已缓存（看过「原文件」Tab 或此前下载过）则秒触发；未缓存则置 pendingDownload 复用
-  // service 拉取（自身防重复请求），blob 到位 / 失败由构造器 effect 收尾。
+  // Download File footer action: trigger browser download of the original file directly, avoiding an
+  // extra trip through the preview page.
+  // If the blob is cached, from viewing Original File or a previous download, trigger immediately. If not
+  // cached, set pendingDownload and reuse the service fetch, which prevents duplicate requests. Blob
+  // arrival or failure is completed by the constructor effect.
   downloadFile(): void {
     if (this.fileBlob.blobUrl()) {
       this.fileBlob.download(this.downloadFileName());
@@ -439,7 +476,8 @@ export class DocumentDetailComponent implements OnInit {
     return this.document()?.fileOrigin?.originalFileName || this.document()?.title || 'document';
   }
 
-  // <img> 渲染失败（blob 已下载但解码失败）——并入统一预览错误信号。
+  // <img> render failure, where the blob downloaded but decode failed, is folded into the unified preview
+  // error signal.
   onPreviewError(): void {
     this.fileBlob.markError();
   }
@@ -467,8 +505,10 @@ export class DocumentDetailComponent implements OnInit {
       });
   }
 
-  // #263「重新识别」：让 AI 在现有 Markdown 上重跑自动分类 → 级联重抽字段（不重新 OCR）。
-  // 覆盖性操作（覆盖当前类型 + 人工改过的字段值），先确认；成功后 reload 反映 Processing 态。
+  // #263 "rerecognize": rerun AI automatic classification on the existing Markdown, cascading to field
+  // re-extraction without rerunning OCR.
+  // This is an overwriting operation, replacing current type and manually edited field values, so confirm
+  // first. Reload after success to reflect Processing state.
   rerecognize(): void {
     const doc = this.document();
     if (!doc || this.isRerecognizing()) return;
@@ -494,8 +534,10 @@ export class DocumentDetailComponent implements OnInit {
       });
   }
 
-  // #289「仅重抽字段」：在现有分类上只重跑 field-extraction pipeline（不重排分类、不重 OCR）。
-  // 安全叶子操作，仅覆盖字段值（含人工校正）——先确认；生命周期中性，不打回已 Ready 文档。
+  // #289 "field re-extraction only": rerun only the field-extraction pipeline on the existing
+  // classification, without reclassification or OCR.
+  // Safe leaf operation that overwrites only field values, including manual corrections. Confirm first.
+  // Lifecycle-neutral: does not move already Ready documents backward.
   reextractFields(): void {
     const doc = this.document();
     if (!doc || this.isReextracting()) return;
@@ -531,7 +573,8 @@ export class DocumentDetailComponent implements OnInit {
     }
   }
 
-  // #284：header badge 只表生命周期（可用性轴）；审核态由横幅 + 详情区 reviewReasonDetails 表达，不重复。
+  // #284: header badge shows only lifecycle on the availability axis. Review state is expressed by the
+  // banner plus detail-area reviewReasonDetails and is not duplicated.
   getDocumentStatusBadgeClass(doc: DocumentDto): string {
     return this.getStatusBadgeClass(doc.lifecycleStatus);
   }
@@ -550,7 +593,7 @@ export class DocumentDetailComponent implements OnInit {
     return this.getStatusLabel(doc.lifecycleStatus);
   }
 
-  // #284：待审原因 → 本地化 key（详情区 reviewReasonDetails 明细渲染用）。
+  // #284: review reason to localization key, used for detail-area reviewReasonDetails rendering.
   reviewReasonLabel(reason: DocumentReviewReasons | undefined): string {
     switch (reason) {
       case DocumentReviewReasons.UnresolvedClassification:
@@ -672,7 +715,8 @@ export class DocumentDetailComponent implements OnInit {
       const config: FormFieldConfig = {
         key: def.name ?? '',
         label: `${def.displayName} (${def.name})`,
-        // 多值字段（#212，仅文本）用 textarea 每行一个值；单值按 DataType 选输入类型。
+        // Multi-value fields (#212, text only) use a textarea with one value per line; single-value fields
+        // choose input type by DataType.
         type: def.allowMultiple ? 'textarea' : this.toFormFieldType(def.dataType),
         value: this.toFormInitialValue(def, values[def.name ?? '']),
         required: def.isRequired,
@@ -702,7 +746,8 @@ export class DocumentDetailComponent implements OnInit {
 
   private toFormFieldType(dataType: FieldDataType | undefined): FormFieldConfig['type'] {
     switch (dataType) {
-      // 长文本（摘要 / 描述等）用多行编辑框；toFormInitialValue 的 default 分支已把它当字符串原样回填。
+      // Long text, such as summaries or descriptions, uses a multiline editor. The default branch of
+      // toFormInitialValue already fills it back as a string unchanged.
       case FieldDataType.LongText:
         return 'textarea';
       case FieldDataType.Number:
@@ -719,7 +764,8 @@ export class DocumentDetailComponent implements OnInit {
   }
 
   private toFormInitialValue(def: FieldDefinitionDto, value: unknown): unknown {
-    // 多值字段（#212）：出口数组 → textarea 每行一个值。非数组（含 null/未抽取）→ 空。
+    // Multi-value fields (#212): output array becomes one textarea line per value. Non-arrays, including
+    // null or unextracted values, become empty.
     if (def.allowMultiple) {
       return Array.isArray(value) ? value.map(v => String(v)).join('\n') : '';
     }
@@ -746,9 +792,11 @@ export class DocumentDetailComponent implements OnInit {
       (typeof value === 'string' && value.trim() === '');
   }
 
-  // 按字段 DataType 转成对应 JSON 类型。Date/DateTime/Text 一律存字符串。
+  // Convert to the corresponding JSON type by field DataType. Date/DateTime/Text are always stored as
+  // strings.
   private coerceValue(def: FieldDefinitionDto, value: unknown): unknown {
-    // 多值字段（#212）：textarea 每行一个值 → 去空白 + 去空行 → string[]（与后端 UpdateExtractedFieldsAsync 收数组对称）。
+    // Multi-value fields (#212): textarea one value per line, trimmed and with empty lines removed,
+    // becomes string[], symmetric with backend UpdateExtractedFieldsAsync receiving arrays.
     if (def.allowMultiple) {
       return String(value ?? '')
         .split(/\r?\n/)

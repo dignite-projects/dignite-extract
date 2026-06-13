@@ -14,17 +14,20 @@ using Xunit;
 namespace Dignite.DocumentAI.EntityFrameworkCore.Documents;
 
 /// <summary>
-/// 出口 DTO 的 <c>ExtractedFields</c> wire-format 由 App / Mapper 层从 <see cref="DocumentExtractedField"/> typed child 行
-/// 即时组装（Issue #206 + #207）。本测试走真实 EF（SQLite）验证读路径的两个机制：
+/// The exit DTO wire format for <c>ExtractedFields</c> is assembled just in time by the App / Mapper layer from
+/// typed <see cref="DocumentExtractedField"/> child rows (Issue #206 + #207). This test uses real EF (SQLite) to
+/// verify two read-path mechanisms:
 /// <list type="bullet">
-///   <item><c>WithDetailsAsync(选择器)</c>——<c>GetListAsync</c> 用来 eager-load child 行的 ABP 仓储 API：一次 JOIN
-///   取回，不依赖 lazy loading（lazy 在测试 / 生产都未启用，此测试通过即证明组装不触发 N+1 / lazy）；</item>
-///   <item><see cref="DocumentExtractedField.ToJsonElement"/>——把各 DataType 的类型化列重建为规范 JSON，与写入侧
-///   <c>SetValue</c> 往返一致。</item>
+///   <item><c>WithDetailsAsync(selector)</c>: the ABP repository API used by <c>GetListAsync</c> to eager-load
+///   child rows. One JOIN fetches them without lazy loading; lazy loading is disabled in both tests and
+///   production, so this passing test proves assembly does not trigger N+1 or lazy loading.</item>
+///   <item><see cref="DocumentExtractedField.ToJsonElement"/>: rebuilds each DataType's typed column into
+///   canonical JSON, round-tripping consistently with write-side <c>SetValue</c>.</item>
 /// </list>
-/// #207：child 行内部按 <see cref="DocumentExtractedField.FieldDefinitionId"/> 索引（不再存字段名），出口字典 key
-/// （字段名）由 App 层 join 当前 <c>FieldDefinition</c> 解析——name 解析的接线由 Application.Tests 覆盖；本测试只验证
-/// typed-column 往返，故按 FieldDefinitionId 键值断言。
+/// #207: child rows are indexed internally by <see cref="DocumentExtractedField.FieldDefinitionId"/>, no longer
+/// by field name. Exit dictionary keys, field names, are resolved by the App-layer join to the current
+/// <c>FieldDefinition</c>. Name-resolution wiring is covered by Application.Tests; this test only verifies the
+/// typed-column round-trip, so assertions use FieldDefinitionId keys.
 /// </summary>
 public class DocumentReadAssembly_Tests : DocumentAIEntityFrameworkCoreTestBase
 {
@@ -46,8 +49,9 @@ public class DocumentReadAssembly_Tests : DocumentAIEntityFrameworkCoreTestBase
     [Fact]
     public async Task WithDetails_eager_loads_child_rows_and_round_trips_every_FieldDataType()
     {
-        // 穷尽性绊线（#208）：遍历所有 FieldDataType。加新枚举值若不在 SampleFor 补样本，建样本时即抛错（红）；
-        // 补样本后往返会跑过 SetValue + ToJsonElement，那两处漏处理新类型也会抛（红）——守住实体的两处 typed-column switch。
+        // Exhaustiveness tripwire (#208): iterate every FieldDataType. Adding a new enum value without a SampleFor
+        // sample throws while building samples. After a sample is added, round-trip passes through SetValue and
+        // ToJsonElement, so missing handling in either typed-column switch also fails.
         var dataTypes = Enum.GetValues<FieldDataType>();
         var samples = dataTypes.ToDictionary(dt => dt, SampleFor);
 
@@ -60,10 +64,12 @@ public class DocumentReadAssembly_Tests : DocumentAIEntityFrameworkCoreTestBase
             var query = await _documentRepository.WithDetailsAsync(d => d.ExtractedFieldValues);
             var doc = (await query.Where(d => d.Id == id).ToListAsync()).Single();
 
-            // #208：字段类型由 FieldDefinition 决定（不在字段值行持久化）；读路径 join 取 DataType 后重建 JSON。
+            // #208: field type is decided by FieldDefinition and is not persisted in field-value rows; the read
+            // path joins DataType and rebuilds JSON.
             var types = (await _fieldDefinitionRepository.GetListAsync()).ToDictionary(f => f.Id, f => f.DataType);
 
-            // typed-column → 规范 JSON 往返（key 用 FieldDefinitionId；字段名解析是 App 层 join，不在此层断言）。
+            // typed-column -> canonical JSON round-trip. Keys use FieldDefinitionId; field-name resolution is an
+            // App-layer join and is not asserted at this layer.
             var fields = doc.ExtractedFieldValues.ToDictionary(
                 f => f.FieldDefinitionId, f => f.ToJsonElement(types[f.FieldDefinitionId]));
 
@@ -86,14 +92,16 @@ public class DocumentReadAssembly_Tests : DocumentAIEntityFrameworkCoreTestBase
             var query = await _documentRepository.WithDetailsAsync(d => d.ExtractedFieldValues);
             var doc = (await query.Where(d => d.Id == id).ToListAsync()).Single();
 
-            // 空集合 → App 层组装出 null（与旧 JSON 列"未抽取时 null"语义一致）。
+            // Empty collection -> App layer assembles null, matching the old JSON column semantics where
+            // unextracted fields were null.
             doc.ExtractedFieldValues.ShouldBeEmpty();
         });
     }
 
     private async Task InsertAsync(Guid id, params DocumentFieldValue[] fields)
     {
-        // FK RESTRICT 真实生效（#207）：先 seed 父 DocumentType + FieldDefinition 行（字段名仅占位，本测试按 FieldDefinitionId 断言）。
+        // FK RESTRICT is truly enforced (#207): seed parent DocumentType + FieldDefinition rows first. Field names
+        // are placeholders because this test asserts by FieldDefinitionId.
         await _documentTypeRepository.InsertAsync(
             new DocumentType(TypeId(TypeCode), null, TypeCode, TypeCode), autoSave: true);
         foreach (var f in fields)
@@ -118,7 +126,8 @@ public class DocumentReadAssembly_Tests : DocumentAIEntityFrameworkCoreTestBase
         await _documentRepository.InsertAsync(doc, autoSave: true);
     }
 
-    // 每个 FieldDataType 的代表样本 + 往返断言。default 分支抛错 = 穷尽性绊线（加新枚举值必须在此补全）。
+    // Representative sample + round-trip assertion for each FieldDataType. The default branch throws as an
+    // exhaustiveness tripwire: new enum values must be added here.
     private static (JsonElement Value, Action<JsonElement> AssertRoundTrip) SampleFor(FieldDataType dataType) => dataType switch
     {
         FieldDataType.Text => (Json("Acme"), e => e.GetString().ShouldBe("Acme")),
@@ -129,7 +138,7 @@ public class DocumentReadAssembly_Tests : DocumentAIEntityFrameworkCoreTestBase
         FieldDataType.Date => (Json("2024-03-09"), e => e.GetString().ShouldBe("2024-03-09")),
         FieldDataType.DateTime => (Json("2024-03-09T13:45:00"), e => e.GetString().ShouldBe("2024-03-09T13:45:00")),
         _ => throw new ArgumentOutOfRangeException(
-            nameof(dataType), dataType, "新增 FieldDataType 必须在此补样本 + 往返断言（#208 穷尽性绊线）。")
+            nameof(dataType), dataType, "New FieldDataType values must add a sample and round-trip assertion here (#208 exhaustiveness tripwire).")
     };
 
     private static JsonElement Json<T>(T value) => JsonSerializer.SerializeToElement(value);

@@ -6,11 +6,14 @@ using Volo.Abp.Modularity;
 namespace Dignite.DocumentAI;
 
 /// <summary>
-/// DocumentAI 的 MCP 出口适配器（与 REST 出口 <c>HttpApi</c> 平行）。
-/// 把通道文档暴露为 MCP 资源 + 检索 tool，供 Claude Desktop / Cursor / 任意 MCP 客户端消费。
-/// MCP SDK 依赖只进本项目，不渗入 Application；端点映射（<c>MapMcp</c>）仍只在 host。
-/// 认证复用 host 现有 OpenIddict Bearer（端点上 RequireAuthorization）；订阅 + lifecycle 通知是后续增量（#197）。
-/// 出口只依赖 <c>Application.Contracts</c>（与 REST 出口对称）：所有读路径走 AppService 接口、不捅 Domain（#222）。
+/// DocumentAI MCP outbound adapter, parallel to the REST <c>HttpApi</c> outbound surface.
+/// Exposes channel documents as MCP resources + search tools for Claude Desktop / Cursor / any MCP
+/// client. MCP SDK dependencies stay in this project and do not leak into Application; endpoint
+/// mapping (<c>MapMcp</c>) remains host-only. Authentication reuses the host's existing OpenIddict
+/// Bearer setup through RequireAuthorization on the endpoint. Subscription + lifecycle notifications
+/// are future incremental work (#197). The outbound surface depends only on
+/// <c>Application.Contracts</c>, symmetric with REST: all read paths go through AppService interfaces
+/// and do not reach into Domain (#222).
 /// </summary>
 [DependsOn(
     typeof(DocumentAIApplicationContractsModule))]
@@ -18,8 +21,9 @@ public class DocumentAIMcpModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        // Streamable HTTP transport；capabilities 仅声明裸 resources/tools，
-        // 不声明 subscribe / listChanged —— 诚实声明 pull-only，客户端不会挂等推送（#197 再补）。
+        // Streamable HTTP transport. Capabilities declare only plain resources/tools, with no
+        // subscribe / listChanged support, honestly advertising pull-only behavior so clients do not
+        // wait for push notifications (#197 will add that later).
         context.Services
             .AddMcpServer()
             .WithHttpTransport()
@@ -28,16 +32,21 @@ public class DocumentAIMcpModule : AbpModule
             .WithTools<DocumentSearchTool>()
             .WithTools<DocumentTypeTools>()
             .WithTools<DocumentTools>()
-            // resources/list 动态枚举当前主体可见的文档类型——AI 据此发现有哪些 documentTypeCode，
-            // 再 read 各自 docai://document-types/{code} 拿字段 schema。文档本身不枚举（数量无限，
-            // 走 search tool 发现）。read 路径仍由 DocumentTypeResources 的 UriTemplate 自动路由——
-            // list 与 read 职责分离：本 handler 只填充 resources/list，template read 不受影响。
+            // resources/list dynamically enumerates document types visible to the current principal.
+            // AI uses it to discover documentTypeCode values, then reads each
+            // docai://document-types/{code} resource to get the field schema. Documents themselves
+            // are not enumerated because their count is unbounded; they are discovered through the
+            // search tool. The read path is still automatically routed by DocumentTypeResources'
+            // UriTemplate. list and read responsibilities stay separate: this handler only fills
+            // resources/list, and template reads are unaffected.
             .WithListResourcesHandler(async (ctx, ct) =>
             {
-                // 委托 DocumentTypeResources.ListVisibleAsync：fail-closed 权限断言（AppService 方法体内
-                // OR 断言，MCP dispatch 不经 HTTP [Authorize] 但进程内 AppService 调用照常触发）+ ambient
-                // 租户隔离（两层独立单层模型）+ 按 TypeCode 排序后的结果集硬上限截断
-                // （DocumentAIMcpConsts.MaxDocumentTypeResults）都在投影内统一执行。
+                // Delegate to DocumentTypeResources.ListVisibleAsync. The projection centralizes
+                // fail-closed authorization assertions (OR assertion inside the AppService method
+                // body; MCP dispatch does not pass through HTTP [Authorize], but in-process AppService
+                // calls still execute normally), ambient tenant isolation (two-layer independent
+                // single-layer model), and hard result truncation after TypeCode ordering
+                // (DocumentAIMcpConsts.MaxDocumentTypeResults).
                 var documentTypeAppService = ctx.Services!.GetRequiredService<IDocumentTypeAppService>();
                 return await DocumentTypeResources.ListVisibleAsync(documentTypeAppService);
             });

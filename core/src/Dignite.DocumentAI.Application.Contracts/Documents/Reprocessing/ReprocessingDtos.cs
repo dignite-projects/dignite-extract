@@ -5,37 +5,39 @@ using System.ComponentModel.DataAnnotations;
 namespace Dignite.DocumentAI.Documents.Reprocessing;
 
 /// <summary>
-/// 批量字段重抽预览（#289 场景二）：受影响文档数 + 该类型当前字段清单（让人知道「重抽哪些字段」）。
+/// Bulk field re-extraction preview (#289 scenario two): affected document count plus the current
+/// field list for that type, so users know which fields will be re-extracted.
 /// </summary>
 public class FieldReextractionPreviewDto
 {
     public Guid DocumentTypeId { get; set; }
 
-    /// <summary>该类型下已完成文本提取、将被重抽的文档数（当前层、不含回收站）。</summary>
+    /// <summary>Number of documents under this type with completed text extraction that will be re-extracted (current layer, excluding recycle bin).</summary>
     public long DocumentCount { get; set; }
 
-    /// <summary>该类型当前活跃字段定义名（按 DisplayOrder）——预览展示「将抽取哪些字段」。</summary>
+    /// <summary>Current active field definition names for this type, ordered by DisplayOrder; preview shows which fields will be extracted.</summary>
     public List<string> FieldNames { get; set; } = new();
 }
 
-/// <summary>批量字段重抽触发入参：固定按文档类型范围（叶子操作，无级联、无破坏性分类副作用）。</summary>
+/// <summary>Input for triggering bulk field re-extraction: fixed to a document-type scope, a leaf operation with no cascade and no destructive classification side effects.</summary>
 public class StartFieldReextractionInput
 {
     [Required]
     public Guid DocumentTypeId { get; set; }
 }
 
-/// <summary>批量重新分类预览（#289 场景一）：受影响文档数。重警告文案由前端按范围 + 开关组合呈现。</summary>
+/// <summary>Bulk reclassification preview (#289 scenario one): affected document count. The frontend renders warning copy based on scope + toggle combinations.</summary>
 public class ReclassificationPreviewDto
 {
     public long DocumentCount { get; set; }
 }
 
 /// <summary>
-/// 批量重新分类的范围入参（预览 / 触发共用）。范围由人选、系统不预设默认。
+/// Scope input for bulk reclassification, shared by preview and trigger. A human chooses the scope;
+/// the system provides no default.
 /// <para>
-/// 校验：<see cref="ReclassificationScope.OnlyCurrentType"/> 必须带 <see cref="DocumentTypeId"/>；
-/// 其余范围忽略 <see cref="DocumentTypeId"/>。
+/// Validation: <see cref="ReclassificationScope.OnlyCurrentType"/> requires
+/// <see cref="DocumentTypeId"/>; other scopes ignore <see cref="DocumentTypeId"/>.
 /// </para>
 /// </summary>
 public class ReclassificationScopeInput : IValidatableObject
@@ -43,13 +45,15 @@ public class ReclassificationScopeInput : IValidatableObject
     [Required]
     public ReclassificationScope Scope { get; set; }
 
-    /// <summary>仅 <see cref="ReclassificationScope.OnlyCurrentType"/> 必填——锚定「仅已归为该类型」的文档。</summary>
+    /// <summary>Required only for <see cref="ReclassificationScope.OnlyCurrentType"/>, anchoring documents currently classified as that type only.</summary>
     public Guid? DocumentTypeId { get; set; }
 
     /// <summary>
-    /// 是否连「已人工确认（<see cref="DocumentReviewDisposition.Confirmed"/>）」的文档也重分。
-    /// 默认 <c>false</c>（保护人工确认，#289 默认开启）——把「覆盖人工成果」变成显式 opt-in。
-    /// 对 <see cref="ReclassificationScope.PendingReviewQueue"/> 无意义（待审核文档本就未确认）。
+    /// Whether to reclassify documents that were manually confirmed
+    /// (<see cref="DocumentReviewDisposition.Confirmed"/>). Default <c>false</c> protects manual
+    /// confirmations (#289 default-on), making "overwrite human work" an explicit opt-in. Meaningless
+    /// for <see cref="ReclassificationScope.PendingReviewQueue"/> because pending-review documents are
+    /// not confirmed.
     /// </summary>
     public bool IncludeManuallyConfirmed { get; set; }
 
@@ -65,8 +69,10 @@ public class ReclassificationScopeInput : IValidatableObject
 }
 
 /// <summary>
-/// 批量重处理触发结果：本次预估入队的文档数（触发时刻 count 查询的快照——dispatcher 链式枚举为最终事实源，
-/// 故为「预估」；批次 / 进度是内部运维状态，不进出口契约）。
+/// Bulk reprocessing trigger result: estimated number of documents enqueued this time, based on the
+/// count-query snapshot at trigger time. The dispatcher chain enumeration is the final source of
+/// truth, so this remains an estimate. Batches / progress are internal operations state and do not
+/// enter the outbound contract.
 /// </summary>
 public class ReprocessingStartResultDto
 {

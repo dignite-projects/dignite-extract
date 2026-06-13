@@ -11,8 +11,9 @@ using Volo.Abp.Domain.Entities;
 
 namespace Dignite.DocumentAI.Documents.DocumentTypes;
 
-// 授权按方法粒度声明（#223）：读 schema（GetVisibleAsync）与管理 schema 解耦，
-// 故不在类级 [Authorize]——每个方法显式声明自己的权限门（与 DocumentAppService 同源 programmatic 模式）。
+// Authorization is declared per method (#223): schema reads (GetVisibleAsync) are decoupled from schema management.
+// Therefore there is no class-level [Authorize]; each method explicitly declares its own permission gate,
+// using the same programmatic pattern as DocumentAppService.
 public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppService
 {
     private readonly IDocumentTypeRepository _repository;
@@ -31,17 +32,18 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
 
     public virtual async Task<List<DocumentTypeDto>> GetVisibleAsync()
     {
-        // 读 schema 与管理 schema 解耦（#223）：文档操作者（Documents.Default）需要读类型来驱动
-        // 类型筛选 / 分类指派 / 动态字段列；schema 管理员（DocumentTypes.Default）需要读自己的管理列表。
-        // 二者任一即可——fail-closed OR 断言（programmatic：反射 / 非 HTTP 路径下 [Authorize] 不触发）。
+        // Schema reads are decoupled from schema management (#223): document operators (Documents.Default) need to read types
+        // for type filters / classification assignment / dynamic field columns, while schema admins (DocumentTypes.Default)
+        // need to read their own management list. Either permission is enough: fail-closed OR assertion.
+        // Programmatic because [Authorize] does not trigger on reflection / non-HTTP paths.
         if (!await AuthorizationService.IsGrantedAsync(DocumentAIPermissions.Documents.Default) &&
             !await AuthorizationService.IsGrantedAsync(DocumentAIPermissions.DocumentTypes.Default))
         {
             throw new AbpAuthorizationException();
         }
 
-        // 不做 Host ∪ Tenant union；租户隔离由 ambient IMultiTenant 过滤器施加。
-        // Priority DESC + TypeCode ASC 排序在内存中保持。
+        // Do not union Host and Tenant. Tenant isolation is enforced by the ambient IMultiTenant filter.
+        // Keep Priority DESC + TypeCode ASC ordering in memory.
         var list = (await _repository.GetListAsync())
             .OrderByDescending(t => t.Priority)
             .ThenBy(t => t.TypeCode)
@@ -52,8 +54,8 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
     [Authorize(DocumentAIPermissions.DocumentTypes.Default)]
     public virtual async Task<List<DocumentTypeDto>> GetDeletedAsync()
     {
-        // 回收站视图仅 schema 管理屏幕消费——保持 admin 门（#223）。
-        // 仅关闭 ISoftDelete 看到已删除行；租户隔离仍由 ambient IMultiTenant 过滤器施加，不跨层。
+        // Trash view is consumed only by schema management screens, so keep the admin gate (#223).
+        // Disable only ISoftDelete to see deleted rows; tenant isolation is still enforced by the ambient IMultiTenant filter and does not cross layers.
         using (DataFilter.Disable<ISoftDelete>())
         {
             var queryable = await _repository.GetQueryableAsync();
@@ -68,11 +70,11 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
     [Authorize(DocumentAIPermissions.DocumentTypes.Create)]
     public virtual async Task<DocumentTypeDto> CreateAsync(CreateDocumentTypeDto input)
     {
-        // 严格单层判重——TypeCode 是 per-layer 命名空间，Host 与 tenant 各自独立，
-        // 跨层同 TypeCode 是合法的两行（由 TenantId 区分）。下游消费方按
-        // (TenantId, DocumentTypeCode) 元组消费。
-        // 关闭 ISoftDelete 过滤，让软删除记录也参与判重——否则"删除→重建同 TypeCode→
-        // 恢复旧记录"路径会触发唯一索引冲突或两行同 (TenantId, TypeCode) 活跃。
+        // Strict single-layer duplicate check. TypeCode is a per-layer namespace; Host and each tenant are independent.
+        // The same TypeCode across layers is valid as two rows distinguished by TenantId. Downstream consumers use
+        // the (TenantId, DocumentTypeCode) tuple.
+        // Disable the ISoftDelete filter so soft-deleted records also participate in duplicate checks. Otherwise the path
+        // "delete -> recreate same TypeCode -> restore old record" can cause unique index conflicts or two active rows with the same (TenantId, TypeCode).
         DocumentType? existing;
         using (DataFilter.Disable<ISoftDelete>())
         {
@@ -102,14 +104,15 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
     {
         var entity = await _repository.GetAsync(id);
 
-        // 跨层防御：只能改自己所在层。
+        // Cross-layer defense: callers may modify only their own layer.
         if (entity.TenantId != CurrentTenant.Id)
         {
             throw new EntityNotFoundException(typeof(DocumentType), id);
         }
 
-        // 重命名解锁（#207）：仅在 TypeCode 变化时判重（同层 (TenantId, TypeCode) 唯一；含软删占用，避免恢复冲突）。
-        // 内部关联（Document / FieldDefinition / ExportTemplate）已用本类型的不可变 Id，rename 不级联这些表。
+        // Rename unlock (#207): run duplicate check only when TypeCode changes. Same-layer (TenantId, TypeCode) is unique;
+        // soft-deleted records occupy the name too, avoiding restore conflicts.
+        // Internal associations (Document / FieldDefinition / ExportTemplate) already use this type's immutable Id, so rename does not cascade to those tables.
         if (!string.Equals(input.TypeCode, entity.TypeCode, StringComparison.Ordinal))
         {
             DocumentType? conflict;
@@ -134,9 +137,11 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
     {
         var entity = await _repository.GetAsync(id);
 
-        // Fail-closed：仍有文档引用此类型时阻止删除——强制租户先 reclassify 这些文档。按内部 DocumentTypeId 判定（#207）。
-        // 租户隔离由 ambient IMultiTenant 过滤器施加（GetAsync 与 document 查询都自动按当前层过滤）。
-        // 注：软删除走 UPDATE 不触发 FK；此应用层闸门 + DocumentType→Document 无 FK，故这里显式拦在用类型。
+        // Fail-closed: prevent deletion while documents still reference this type, forcing the tenant to reclassify those documents first.
+        // Determined by internal DocumentTypeId (#207). Tenant isolation is enforced by the ambient IMultiTenant filter;
+        // GetAsync and document queries are both automatically filtered to the current layer.
+        // Note: soft delete is an UPDATE and does not trigger FKs. Since this application-layer gate has no DocumentType -> Document FK,
+        // explicitly block deletion of in-use types here.
         var documentQueryable = await _documentRepository.GetQueryableAsync();
         var inUse = await AsyncExecuter.AnyAsync(
             documentQueryable.Where(d => d.DocumentTypeId == entity.Id));
@@ -146,8 +151,8 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
                 .WithData("TypeCode", entity.TypeCode);
         }
 
-        // 级联软删除：同类型（DocumentTypeId）下的 FieldDefinition 随 DocumentType 一并下线，
-        // 否则会留下孤儿字段定义且未来重建同 TypeCode 时无法复用同名字段。
+        // Cascading soft delete: FieldDefinitions under the same DocumentTypeId go offline with DocumentType.
+        // Otherwise orphan field definitions would remain, and a future recreation with the same TypeCode could not reuse the same field names.
         var fields = await _fieldDefinitionRepository.GetListAsync(entity.Id);
         if (fields.Count > 0)
         {
@@ -160,7 +165,7 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
     [Authorize(DocumentAIPermissions.DocumentTypes.Delete)]
     public virtual async Task<DocumentTypeDto> RestoreAsync(Guid id)
     {
-        // 整段恢复在禁用 ISoftDelete 的 scope 里执行：查询能看到已删除行，写入能把 IsDeleted=false。
+        // The whole restore block runs with ISoftDelete disabled: queries can see deleted rows and writes can set IsDeleted=false.
         using (DataFilter.Disable<ISoftDelete>())
         {
             var entity = await _repository.GetAsync(id);
@@ -169,14 +174,14 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
                 throw new EntityNotFoundException(typeof(DocumentType), id);
             }
 
-            // 幂等：未删除的直接返回当前状态。
+            // Idempotent: if not deleted, return the current state directly.
             if (!entity.IsDeleted)
             {
                 return ObjectMapper.Map<DocumentType, DocumentTypeDto>(entity);
             }
 
-            // 防御：同 (TenantId, TypeCode) 已有活跃行——CreateAsync 的判重应当已防住，
-            // 但极端情况下（手工 DB / seed bypass）仍可能发生，避免唯一索引冲突。
+            // Defense: an active row with the same (TenantId, TypeCode) already exists. CreateAsync duplicate checks should prevent this,
+            // but extreme cases such as manual DB edits / seed bypass can still happen; avoid unique index conflicts.
             var typeQueryable = await _repository.GetQueryableAsync();
             var typeConflict = await AsyncExecuter.AnyAsync(
                 typeQueryable.Where(t =>
@@ -194,8 +199,8 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
             entity.DeleterId = null;
             await _repository.UpdateAsync(entity);
 
-            // 级联恢复：同 (TenantId, TypeCode) 下软删除的 FieldDefinition 一并恢复。
-            // 与单字段 RestoreAsync 不同——这里跳过冲突字段（记录 warning），不中断整体恢复。
+            // Cascading restore: also restore soft-deleted FieldDefinitions under the same (TenantId, TypeCode).
+            // Unlike single-field RestoreAsync, skip conflicting fields here and log a warning rather than interrupting the whole restore.
             var fieldQueryable = await _fieldDefinitionRepository.GetQueryableAsync();
             var deletedFields = await AsyncExecuter.ToListAsync(
                 fieldQueryable.Where(f =>

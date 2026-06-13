@@ -5,18 +5,20 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 回归保护：DocumentClassificationWorkflow 对 LLM 置信度的两层防御。
+/// Regression protection: DocumentClassificationWorkflow's two-layer defense for LLM confidence.
 ///
-/// 背景：LLM 偶发返回百分制（如 99.9）或 NaN / &lt;0 / &gt;100 的 confidence。
-/// 如果原样透传到 Document.ApplyAutomaticClassificationResult，会触发聚合根的
-/// Check.Range(0,1) 抛 ArgumentException，导致整条 PipelineRun 翻为 Failed。
-/// 修复策略：
-///   - top-level 百分制 confidence → 归一化为 0..1。
-///   - top-level 真正非法 confidence → 视为"无可信结论"（typeCode=null + confidence=0），
-///     由 BackgroundJob 走 LowConfidence 分支触发 PendingReview。
-///   - 候选项 confidence 越界 → Clamp 到 [0,1]（候选项仅供 UI / Run 持久化，不影响聚合根不变量）。
+/// Background: LLMs occasionally return percentage confidence, such as 99.9, or NaN / &lt;0 / &gt;100 confidence.
+/// Passing it through to Document.ApplyAutomaticClassificationResult would trigger aggregate-root
+/// Check.Range(0,1), throwing ArgumentException and turning the whole PipelineRun to Failed.
+/// Fix strategy:
+///   - top-level percentage confidence -> normalize to 0..1.
+///   - top-level truly invalid confidence -> treat as "no reliable conclusion" (typeCode=null + confidence=0),
+///     so BackgroundJob takes the LowConfidence path and triggers PendingReview.
+///   - out-of-range candidate confidence -> clamp to [0,1]; candidates are only for UI / Run persistence and do
+///     not affect aggregate-root invariants.
 ///
-/// 这两个判定函数是修复的全部"承重"逻辑；RunAsync 中环绕它们的分支语句仅做赋值，目视即可正确。
+/// These two judgment functions are all the load-bearing logic for the fix; the branch statements around them
+/// in RunAsync only assign values and are visually correct.
 /// </summary>
 public class DocumentClassificationConfidenceGuardTests
 {

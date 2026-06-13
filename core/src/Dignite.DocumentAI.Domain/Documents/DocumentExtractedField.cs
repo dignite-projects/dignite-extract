@@ -8,28 +8,34 @@ using Volo.Abp.MultiTenancy;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 类型绑定字段的<b>字段值行</b>（字段架构 v2）——<see cref="Document"/> 聚合的 child entity，
-/// 字段值查询与持久化的<b>唯一</b> truth source（替代旧的 <c>Document.ExtractedFields</c> JSON 列，Issue #206）。
+/// <b>Field value row</b> for type-bound fields (field architecture v2): a child entity of the <see cref="Document"/> aggregate,
+/// and the <b>only</b> truth source for field value queries and persistence, replacing the old <c>Document.ExtractedFields</c> JSON column (Issue #206).
 /// <para>
-/// 一行一个字段值。复合主键 <c>(DocumentId, FieldDefinitionId, Order)</c>（Issue #207 + #212）——
-/// 内部用不可变 <see cref="FieldDefinitionId"/> 关联产生该值的 <see cref="FieldDefinition"/>，
-/// 不再冗余字段名 / TypeCode 字符串；<see cref="FieldDefinition.Name"/> rename 不级联本表。<see cref="Order"/> 是值在
-/// 多值集合内的 0-based 位序：单值字段恒为 0（同文档同字段唯一）；多值文本字段（<c>AllowMultiple</c>）一字段多行、Order 递增。
-/// 整组重建 / 操作员手改走 reconcile（按 <c>(FieldDefinitionId, Order)</c> 原地更新），不留重复行。值按写入时的 <c>FieldDataType</c> 落到对应类型化列
-/// （<see cref="TextValue"/> / <see cref="NumberValue"/> / …）——类型由所引用的 <see cref="FieldDefinition"/> 决定、<b>不在本行持久化</b>（#208），
-/// 让 <c>GetFieldMatchedIdsAsync</c> 用普通列比较（等值 + 范围）跨任意关系型数据库可移植——不再依赖 SQL Server <c>JSON_VALUE</c> / <c>TRY_CONVERT</c> 方言。
+/// One row represents one field value. Composite primary key <c>(DocumentId, FieldDefinitionId, Order)</c> (Issue #207 + #212).
+/// Internally associates the producing <see cref="FieldDefinition"/> through immutable <see cref="FieldDefinitionId"/>,
+/// with no redundant field name / TypeCode strings. <see cref="FieldDefinition.Name"/> rename does not cascade to this table.
+/// <see cref="Order"/> is the 0-based position of the value within a multi-value set: single-value fields always use 0
+/// (unique per document and field); multi-value text fields (<c>AllowMultiple</c>) use multiple rows per field with increasing Order.
+/// Whole-set rebuild / operator edits use reconcile, updating in place by <c>(FieldDefinitionId, Order)</c>, leaving no duplicate rows.
+/// Values are stored in the corresponding typed column according to the write-time <c>FieldDataType</c>
+/// (<see cref="TextValue"/> / <see cref="NumberValue"/> / ...). The type is determined by the referenced <see cref="FieldDefinition"/>
+/// and is <b>not persisted on this row</b> (#208). This lets <c>GetFieldMatchedIdsAsync</c> use ordinary column comparisons
+/// (equality + range) portably across relational databases, no longer relying on SQL Server <c>JSON_VALUE</c> / <c>TRY_CONVERT</c> dialects.
 /// </para>
 /// <para>
-/// 出口 DTO / MCP / REST 的 <c>ExtractedFields</c> 字典 key（即字段名）由读路径 join <see cref="FieldDefinition"/>
-/// 投影获取（穿透 soft-delete，#207）——本行不存字段名快照（CLAUDE.md / #207 "不引入 snapshot 字段"）。
+/// The <c>ExtractedFields</c> dictionary key for export DTO / MCP / REST, namely the field name, is projected by read paths
+/// joining <see cref="FieldDefinition"/> with soft-delete traversal (#207). This row stores no field-name snapshot
+/// (CLAUDE.md / #207 "do not introduce snapshot fields").
 /// </para>
 /// <para>
-/// 隔离约定（CLAUDE.md "## 安全约定" + Issue #206 复核护栏）：
+/// Isolation contract (CLAUDE.md "Security covenant" + Issue #206 review guardrail):
 /// <list type="bullet">
-///   <item>实现 <see cref="IMultiTenant"/>——child <c>DbSet</c> / navigation 被使用时 ABP 自动追加租户全局过滤，
-///   且 <c>TenantId</c> 前缀索引稳定命中；但查询仍从 <see cref="Document"/> 聚合根起手，租户边界权威来源是 Document。</item>
-///   <item><b>不</b>实现 <c>ISoftDelete</c>——避免跨实体级联软删的同步负担。软删 Document 时其字段行随聚合根
-///   被父过滤器挡在查询之外；硬删 Document 时级联删除字段行。</item>
+///   <item>Implements <see cref="IMultiTenant"/> so ABP automatically appends tenant global filters when the child <c>DbSet</c> / navigation is used,
+///   and <c>TenantId</c>-prefixed indexes are hit consistently. Queries still start from the <see cref="Document"/> aggregate root;
+///   Document remains the authoritative tenant boundary.</item>
+///   <item>Does <b>not</b> implement <c>ISoftDelete</c>, avoiding synchronization burden for cross-entity cascading soft delete.
+///   When Document is soft-deleted, its field rows are hidden by the parent filter through the aggregate root; when Document is hard-deleted,
+///   field rows are cascade-deleted.</item>
 /// </list>
 /// </para>
 /// </summary>
@@ -39,25 +45,29 @@ public class DocumentExtractedField : Entity, IMultiTenant
 
     public virtual Guid DocumentId { get; private set; }
 
-    /// <summary>产生该字段值的 <see cref="FieldDefinition"/>.Id（内部关联 / 查询索引键，#207）。</summary>
+    /// <summary><see cref="FieldDefinition"/>.Id that produced this field value (internal association / query index key, #207).</summary>
     public virtual Guid FieldDefinitionId { get; private set; }
 
     /// <summary>
-    /// 值在所属字段多值集合内的 0-based 位序（#212），参与复合主键。单值字段恒为 0；
-    /// 多值文本字段（<see cref="FieldDefinition.AllowMultiple"/>）按 JSON 数组元素顺序取 0,1,2…。
+    /// 0-based position of the value within the owning field's multi-value set (#212), participating in the composite primary key.
+    /// Single-value fields always use 0; multi-value text fields (<see cref="FieldDefinition.AllowMultiple"/>) use 0,1,2...
+    /// in JSON array element order.
     /// </summary>
     public virtual int Order { get; private set; }
 
-    // 类型化值列——按字段类型取用其一，其余为 null（类型由 FieldDefinition 决定、不在本行持久化，#208）。
-    // 普通列即可建 B-tree 索引、支持等值 + 范围。Number（整数与小数统一）落 NumberValue。
+    // Typed value columns: use one according to field type and keep the others null. Type is determined by FieldDefinition
+    // and is not persisted on this row (#208). Ordinary columns can have B-tree indexes and support equality + range.
+    // Number, covering both integers and decimals, goes to NumberValue.
     public virtual string? TextValue { get; private set; }
     public virtual bool? BooleanValue { get; private set; }
     public virtual decimal? NumberValue { get; private set; }
     public virtual DateOnly? DateValue { get; private set; }
     public virtual DateTime? DateTimeValue { get; private set; }
 
-    // LongText 落独立的 nvarchar(max) 列——长内容载荷（摘要 / 描述等），不进任何索引、不可作查询条件、不支持多值。
-    // 与 TextValue（限长 256、入复合索引、可等值查询）刻意分列：长文本进不了索引键，强塞 TextValue 会废掉 #209 的 index seek。
+    // LongText uses a separate nvarchar(max) column for long content payloads such as summaries / descriptions.
+    // It participates in no index, cannot be used as a query condition, and does not support multi-value.
+    // It is intentionally separate from TextValue, which is length-limited to 256, participates in composite indexes, and supports equality queries.
+    // Long text cannot be an index key; forcing it into TextValue would break the #209 index seek.
     public virtual string? LongTextValue { get; private set; }
 
     protected DocumentExtractedField()
@@ -74,9 +84,10 @@ public class DocumentExtractedField : Entity, IMultiTenant
     }
 
     /// <summary>
-    /// 原地写入 / 更新值（reconcile 时对同字段调用）。把规范 JSON（已由 App 层 <c>ExtractedFieldValueValidator</c>
-    /// 校验与 <paramref name="value"/>.DataType 对齐）拆进对应类型化列；先清空所有值列再按类型回填，
-    /// 保证类型切换（如同字段在新文档类型下换了 DataType）不残留旧列值。
+    /// Writes / updates the value in place, called for the same field during reconcile. Splits canonical JSON, already validated by
+    /// App-layer <c>ExtractedFieldValueValidator</c> to align with <paramref name="value"/>.DataType, into the matching typed column.
+    /// Clears all value columns before filling by type, ensuring type changes, such as the same field changing DataType under a new document type,
+    /// leave no stale old-column value.
     /// </summary>
     internal void SetValue(DocumentFieldValue value)
     {
@@ -114,9 +125,11 @@ public class DocumentExtractedField : Entity, IMultiTenant
     }
 
     /// <summary>
-    /// 从类型化列重建规范 <see cref="JsonElement"/>——DTO / MCP / REST 出口的 <c>ExtractedFields</c> 字典即时组装时使用
-    /// （wire-format 与旧 JSON 列保持兼容）。是 <see cref="SetValue"/> 的逆向，往返一致。
-    /// <paramref name="dataType"/> 由调用方从该行所引用的 <see cref="FieldDefinition"/> 提供（类型不在本行持久化，#208）。
+    /// Reconstructs canonical <see cref="JsonElement"/> from typed columns for on-demand assembly of the <c>ExtractedFields</c>
+    /// dictionary in DTO / MCP / REST exports, preserving wire-format compatibility with the old JSON column.
+    /// This is the inverse of <see cref="SetValue"/> and round-trips consistently.
+    /// <paramref name="dataType"/> is supplied by the caller from the <see cref="FieldDefinition"/> referenced by this row
+    /// because type is not persisted on this row (#208).
     /// </summary>
     public JsonElement ToJsonElement(FieldDataType dataType) => dataType switch
     {
@@ -126,8 +139,9 @@ public class DocumentExtractedField : Entity, IMultiTenant
         FieldDataType.Boolean => JsonSerializer.SerializeToElement(BooleanValue),
         FieldDataType.Date => JsonSerializer.SerializeToElement(DateValue?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
         FieldDataType.DateTime => JsonSerializer.SerializeToElement(DateTimeValue?.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture)),
-        // 与 SetValue 的 default 分支对称：未知类型 loud fail，绝不吐 Undefined 毒值（否则组装进 DTO 后
-        // 序列化响应会抛 "Cannot write a JsonElement with ValueKind Undefined"，整篇文档读取 500）。
+        // Symmetric with SetValue's default branch: unknown type loud-fails and never emits a toxic Undefined value.
+        // Otherwise, once assembled into a DTO, response serialization would throw
+        // "Cannot write a JsonElement with ValueKind Undefined" and make the whole document read return 500.
         _ => throw new ArgumentOutOfRangeException(nameof(dataType), dataType, "Unsupported field data type.")
     };
 

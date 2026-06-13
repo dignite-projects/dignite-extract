@@ -6,18 +6,21 @@ using Volo.Abp.Application.Services;
 namespace Dignite.DocumentAI.Documents.Fields;
 
 /// <summary>
-/// 字段定义管理（字段架构 v2 统一 API）。按所属层精确匹配单层、不跨层混合；
-/// 两层都通过此 AppService CRUD 自管——不存在 seed contributor / Module 启动注册路径。
+/// Field definition management (unified API for field architecture v2). Matches exactly one owning
+/// layer and never mixes layers. Both layers self-manage through this AppService CRUD surface; there
+/// is no seed contributor / module-startup registration path.
 /// </summary>
 public interface IFieldDefinitionAppService : IApplicationService
 {
     /// <summary>
-    /// 当前租户层字段定义列表（不跨层）。<see cref="GetFieldDefinitionListInput.DocumentTypeId"/> 指定时
-    /// 仅返回该文档类型下的字段；留空（<c>null</c>）单次返回当前层全部字段定义（批量读取路径，
-    /// 供 MCP <c>list_document_types</c> 等调用方内存分组、消 per-type N+1）。
-    /// <see cref="GetFieldDefinitionListInput.OnlyDeleted"/> 为 <c>false</c> 返回活跃字段
-    /// （按 DisplayOrder；批量时先按 DocumentTypeId 再按 DisplayOrder），
-    /// 为 <c>true</c> 返回回收站（已软删除）字段（按 DeletionTime 倒序）。
+    /// Field definition list for the current tenant layer; never crosses layers.
+    /// When <see cref="GetFieldDefinitionListInput.DocumentTypeId"/> is specified, returns only fields
+    /// under that document type. When omitted (<c>null</c>), returns all field definitions in the
+    /// current layer in one call, the bulk-read path used by callers such as MCP
+    /// <c>list_document_types</c> to group in memory and eliminate per-type N+1 queries.
+    /// When <see cref="GetFieldDefinitionListInput.OnlyDeleted"/> is <c>false</c>, returns active
+    /// fields ordered by DisplayOrder, or by DocumentTypeId then DisplayOrder in bulk mode. When
+    /// <c>true</c>, returns recycle-bin (soft-deleted) fields ordered by descending DeletionTime.
     /// </summary>
     Task<List<FieldDefinitionDto>> GetListAsync(GetFieldDefinitionListInput input);
 
@@ -28,10 +31,12 @@ public interface IFieldDefinitionAppService : IApplicationService
     Task DeleteAsync(Guid id);
 
     /// <summary>
-    /// 恢复单个软删除的字段定义。要求父 <see cref="DocumentType"/>（同 TenantId + TypeCode）存在且活跃；
-    /// 父类型缺失或仍处于已删除状态时抛 <see cref="DocumentAIErrorCodes.FieldDefinition.ParentTypeMissing"/>；
-    /// 同名活跃字段已存在则抛 <see cref="DocumentAIErrorCodes.FieldDefinition.RestoreConflict"/>。
-    /// 批量恢复请走 <see cref="IDocumentTypeAppService.RestoreAsync"/> 的级联路径。
+    /// Restores one soft-deleted field definition. Requires the parent <see cref="DocumentType"/>
+    /// (same TenantId + TypeCode) to exist and be active. Throws
+    /// <see cref="DocumentAIErrorCodes.FieldDefinition.ParentTypeMissing"/> when the parent type is
+    /// missing or still deleted. Throws <see cref="DocumentAIErrorCodes.FieldDefinition.RestoreConflict"/>
+    /// when an active field with the same name already exists. Use the cascade path in
+    /// <see cref="IDocumentTypeAppService.RestoreAsync"/> for bulk restore.
     /// </summary>
     Task<FieldDefinitionDto> RestoreAsync(Guid id);
 }

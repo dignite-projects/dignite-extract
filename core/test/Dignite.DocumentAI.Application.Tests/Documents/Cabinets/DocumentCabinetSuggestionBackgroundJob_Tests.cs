@@ -33,8 +33,9 @@ public class DocumentCabinetSuggestionJobTestModule : AbpModule
 }
 
 /// <summary>
-/// <see cref="DocumentCabinetSuggestionBackgroundJob"/> 行为测试（#265）：人工优先门控、弃选 / 阈值、
-/// 竞态复检、fail-open、LLM 调用在 UoW 之外。IChatClient / workflow 均 NSubstitute 替代，无真实 LLM。
+/// Behavior tests for <see cref="DocumentCabinetSuggestionBackgroundJob"/> (#265): manual-priority
+/// gate, abstain / threshold, race recheck, fail-open, and LLM call outside UoW. IChatClient / workflow
+/// are both replaced with NSubstitute, with no real LLM.
 /// </summary>
 public class DocumentCabinetSuggestionBackgroundJob_Tests
     : DocumentAIApplicationTestBase<DocumentCabinetSuggestionJobTestModule>
@@ -79,7 +80,7 @@ public class DocumentCabinetSuggestionBackgroundJob_Tests
         await _job.ExecuteAsync(new DocumentCabinetSuggestionJobArgs { DocumentId = doc.Id });
 
         doc.CabinetId.ShouldBe(existing);
-        // 人工优先：自门控命中，连 LLM 都不调。
+        // Manual priority: self-gate hits, so even the LLM is not called.
         await _workflow.DidNotReceive().RunAsync(
             Arg.Any<IReadOnlyList<Cabinet>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -131,7 +132,7 @@ public class DocumentCabinetSuggestionBackgroundJob_Tests
         var doc = CreateDocument(markdown: "some text", cabinetId: null);
         SetupRepositories(doc, cabinet);
 
-        // 默认阈值 0.6；0.4 应被拒。
+        // Default threshold is 0.6; 0.4 should be rejected.
         StubWorkflow(new CabinetSuggestionOutcome { CabinetId = cabinet.Id, Confidence = 0.4 });
 
         await _job.ExecuteAsync(new DocumentCabinetSuggestionJobArgs { DocumentId = doc.Id });
@@ -150,11 +151,12 @@ public class DocumentCabinetSuggestionBackgroundJob_Tests
             .RunAsync(Arg.Any<IReadOnlyList<Cabinet>>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns<CabinetSuggestionOutcome>(_ => throw new TimeoutException("LLM down"));
 
-        // Fail-open：不 rethrow，文档保持未归类。
+        // Fail-open: do not rethrow, and document remains unclassified.
         await _job.ExecuteAsync(new DocumentCabinetSuggestionJobArgs { DocumentId = doc.Id });
 
         doc.CabinetId.ShouldBeNull();
-        // 断言 workflow 确被调用——否则 CabinetId==null 可能因前置门控短路（假阳性），catch 根本没被走到。
+        // Assert workflow was actually called; otherwise CabinetId==null could be a false positive caused
+        // by pre-gate short-circuiting, with catch never reached.
         await _workflow.Received(1).RunAsync(
             Arg.Any<IReadOnlyList<Cabinet>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -165,7 +167,8 @@ public class DocumentCabinetSuggestionBackgroundJob_Tests
         var cabinet = new Cabinet(Guid.NewGuid(), null, "法务");
         var manualCabinetId = Guid.NewGuid();
 
-        // Begin 段加载到未归类文档；Complete 段重载时已被操作员手动改派（CabinetId 已设）。
+        // Begin phase loads an unclassified document; by Complete phase reload, an operator has manually
+        // reassigned it and CabinetId is already set.
         var docAtBegin = CreateDocument(markdown: "some text", cabinetId: null);
         var docAtComplete = CreateDocument(markdown: "some text", cabinetId: manualCabinetId, id: docAtBegin.Id);
 
@@ -183,9 +186,10 @@ public class DocumentCabinetSuggestionBackgroundJob_Tests
 
         await _job.ExecuteAsync(new DocumentCabinetSuggestionJobArgs { DocumentId = docAtBegin.Id });
 
-        // 人工改派的值不被 AI 覆盖。
+        // AI must not overwrite the manually reassigned value.
         docAtComplete.CabinetId.ShouldBe(manualCabinetId);
-        // load-bearing：任何文档实例都不应被写回（防御复检若误用 docAtBegin 实例 SetCabinet 的假阳性）。
+        // Load-bearing: no document instance should be written back. This prevents a false positive if the
+        // defensive recheck mistakenly calls SetCabinet on the docAtBegin instance.
         await _documentRepository.DidNotReceive().UpdateAsync(
             Arg.Any<Document>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
@@ -197,13 +201,15 @@ public class DocumentCabinetSuggestionBackgroundJob_Tests
         var doc = CreateDocument(markdown: "some text", cabinetId: null);
         SetupRepositories(doc, cabinet);
 
-        // 本作业非 PipelineRun、不可重试：provider per-call 超时（TaskCanceledException : OperationCanceledException）
-        // 必须被 fail-open 吞掉、绝不逃逸出 ExecuteAsync（否则 ABP 会把它当失败重排 → 重试风暴）。
+        // This job is not a PipelineRun and is not retryable. Provider per-call timeout
+        // (TaskCanceledException : OperationCanceledException) must be swallowed fail-open and never
+        // escape ExecuteAsync; otherwise ABP treats it as failure and reschedules, causing retry storms.
         _workflow
             .RunAsync(Arg.Any<IReadOnlyList<Cabinet>>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns<CabinetSuggestionOutcome>(_ => throw new TaskCanceledException("provider per-call timeout"));
 
-        // 不抛——吞掉（若 catch 误加 `when (ex is not OperationCanceledException)` 过滤，此调用会抛、测试失败）。
+        // Does not throw: swallowed. If catch incorrectly adds a
+        // `when (ex is not OperationCanceledException)` filter, this call throws and the test fails.
         await _job.ExecuteAsync(new DocumentCabinetSuggestionJobArgs { DocumentId = doc.Id });
 
         doc.CabinetId.ShouldBeNull();
@@ -218,7 +224,7 @@ public class DocumentCabinetSuggestionBackgroundJob_Tests
         var doc = CreateDocument(markdown: "some text", cabinetId: null);
         SetupRepositories(doc, cabinet);
 
-        // background-jobs.md：外部慢工作（LLM）必须在 UoW 之外执行。
+        // background-jobs.md: external slow work (LLM) must execute outside UoW.
         _workflow
             .RunAsync(Arg.Any<IReadOnlyList<Cabinet>>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(_ =>

@@ -7,7 +7,7 @@ public class FieldDefinitionDto : EntityDto<Guid>
 {
     public Guid? TenantId { get; set; }
 
-    /// <summary>所属文档类型不可变 Id（#207：内部稳定句柄，TypeCode 由 admin 可重命名故不作引用键）。</summary>
+    /// <summary>Immutable id of the owning document type (#207: internal stable handle; TypeCode can be renamed by admins and is not used as a reference key).</summary>
     public Guid DocumentTypeId { get; set; }
     public string Name { get; set; } = default!;
     public string DisplayName { get; set; } = default!;
@@ -16,6 +16,6 @@ public class FieldDefinitionDto : EntityDto<Guid>
     public int DisplayOrder { get; set; }
     public bool IsRequired { get; set; }
 
-    /// <summary>是否允许多值（#212）——仅 <see cref="FieldDataType.Text"/> 字段为 true 时该字段出口渲染为 JSON 数组。</summary>
+    /// <summary>Whether multiple values are allowed (#212). When true, only <see cref="FieldDataType.Text"/> field output is rendered as a JSON array.</summary>
     public bool AllowMultiple { get; set; }
 }

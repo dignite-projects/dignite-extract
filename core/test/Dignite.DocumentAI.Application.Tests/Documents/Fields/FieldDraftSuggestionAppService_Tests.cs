@@ -13,15 +13,18 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents.Fields;
 
 /// <summary>
-/// FieldDraftSuggestionAppService 的解析 / sanitize / 护栏 / fail-open 语义（issue #264）。
-/// IChatClient 用 NSubstitute 替代，无真实 LLM 调用——权限断言（CheckDraftPermissionAsync）在测试子类里放行
-/// （单元构造直接 new，无 HTTP 鉴权上下文），只验证服务自有的输出处理逻辑。
+/// Parse / sanitize / guardrail / fail-open semantics for FieldDraftSuggestionAppService (issue #264).
+/// IChatClient is replaced with NSubstitute and no real LLM call is made. Permission assertions
+/// (<c>CheckDraftPermissionAsync</c>) are allowed by the test subclass because the unit is created directly
+/// with no HTTP authorization context. These tests verify only the service-owned output handling logic.
 /// </summary>
 public class FieldDraftSuggestionAppService_Tests
 {
-    // 测试子类：放行权限断言（生产路径由类级 [Authorize] + CheckDraftPermissionAsync 的 Create||Update 把关）。
-    // [DisableConventionalRegistration]：阻止 ABP 把这个派生 ApplicationService 自动注册进 DI——否则 CI 跑全量
-    // 测试时容器构建会对这个 private 测试双类启用 Castle DynamicProxy 类拦截器而失败（不可访问），拖垮整个测试宿主。
+    // Test subclass: allow permission assertions. The production path is protected by class-level [Authorize]
+    // plus the Create || Update checks in CheckDraftPermissionAsync.
+    // [DisableConventionalRegistration]: prevents ABP from auto-registering this derived ApplicationService
+    // into DI. Otherwise full CI test-host construction enables Castle DynamicProxy class interceptors for this
+    // private test double, fails because it is inaccessible, and brings down the whole test host.
     [DisableConventionalRegistration]
     private sealed class TestableFieldDraftSuggestionAppService : FieldDraftSuggestionAppService
     {
@@ -64,7 +67,7 @@ public class FieldDraftSuggestionAppService_Tests
         var svc = CreateService(ChatClientReturning(
             "{\"displayName\":\"Contract Amount\",\"name\":\"contract_amount\",\"dataType\":\"number\",\"isRequired\":true,\"allowMultiple\":false}"));
 
-        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "提取合同总金额", ForNewField = true });
+        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "Extract contract total amount", ForNewField = true });
 
         draft.DisplayName.ShouldBe("Contract Amount");
         draft.Name.ShouldBe("contract_amount");
@@ -77,11 +80,12 @@ public class FieldDraftSuggestionAppService_Tests
     public async Task Sanitizes_name_from_llm_output()
     {
         var svc = CreateService(ChatClientReturning(
-            "{\"displayName\":\"甲方名称\",\"name\":\"Party Name!\",\"dataType\":\"text\",\"isRequired\":false,\"allowMultiple\":false}"));
+            "{\"displayName\":\"Party Name\",\"name\":\"Party Name!\",\"dataType\":\"text\",\"isRequired\":false,\"allowMultiple\":false}"));
 
-        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "甲方名称", ForNewField = true });
+        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "Party name", ForNewField = true });
 
-        // 不信任 LLM 输出：小写、非 [a-z0-9] 折叠为下划线、合并、去首尾。
+        // Do not trust LLM output: lowercase it, collapse non-[a-z0-9] characters to underscores, merge
+        // repeats, and trim leading / trailing underscores.
         draft.Name.ShouldBe("party_name");
     }
 
@@ -91,8 +95,9 @@ public class FieldDraftSuggestionAppService_Tests
         var svc = CreateService(ChatClientReturning(
             "{\"displayName\":\"Amount\",\"name\":\"contract_amount\",\"dataType\":\"number\",\"isRequired\":false,\"allowMultiple\":false}"));
 
-        // 护栏 1：编辑既有字段 —— Name 是契约级冻结身份键，恒回吐空，即使 LLM 给了建议。
-        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "金额", ForNewField = false });
+        // Guardrail 1: editing an existing field. Name is a contract-level frozen identity key and always
+        // returns empty, even when the LLM suggests one.
+        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "Amount", ForNewField = false });
 
         draft.Name.ShouldBe(string.Empty);
         draft.DisplayName.ShouldBe("Amount");
@@ -105,8 +110,9 @@ public class FieldDraftSuggestionAppService_Tests
         var svc = CreateService(ChatClientReturning(
             "{\"displayName\":\"Dates\",\"name\":\"dates\",\"dataType\":\"date\",\"isRequired\":false,\"allowMultiple\":true}"));
 
-        // 护栏 2：镜像 FieldDefinition.ValidateMultiValue —— 多值仅 Text 有效，非文本钳为 false。
-        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "所有日期", ForNewField = true });
+        // Guardrail 2: mirror FieldDefinition.ValidateMultiValue. Multi-value is valid only for Text; non-text
+        // is clamped to false.
+        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "All dates", ForNewField = true });
 
         draft.DataType.ShouldBe(FieldDataType.Date);
         draft.AllowMultiple.ShouldBeFalse();
@@ -118,7 +124,7 @@ public class FieldDraftSuggestionAppService_Tests
         var svc = CreateService(ChatClientReturning(
             "{\"displayName\":\"Tags\",\"name\":\"tags\",\"dataType\":\"text\",\"isRequired\":false,\"allowMultiple\":true}"));
 
-        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "标签列表", ForNewField = true });
+        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "Tag list", ForNewField = true });
 
         draft.DataType.ShouldBe(FieldDataType.Text);
         draft.AllowMultiple.ShouldBeTrue();
@@ -127,11 +133,12 @@ public class FieldDraftSuggestionAppService_Tests
     [Fact]
     public async Task Tolerates_string_boolean_from_weak_provider()
     {
-        // #264 review #4：弱结构化 provider 可能回字符串布尔，不应静默降级为 false。
+        // #264 review #4: weak structured providers may return boolean values as strings; they should not
+        // silently degrade to false.
         var svc = CreateService(ChatClientReturning(
             "{\"displayName\":\"Amount\",\"name\":\"amount\",\"dataType\":\"number\",\"isRequired\":\"true\",\"allowMultiple\":\"false\"}"));
 
-        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "金额", ForNewField = true });
+        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "Amount", ForNewField = true });
 
         draft.IsRequired.ShouldBeTrue();
         draft.AllowMultiple.ShouldBeFalse();
@@ -140,11 +147,12 @@ public class FieldDraftSuggestionAppService_Tests
     [Fact]
     public async Task Tolerates_numeric_boolean_from_weak_provider()
     {
-        // #264 review #4：数字 1/0 形态的布尔同样识别（allowMultiple 仅 Text 有效，此处 text + 1 → true）。
+        // #264 review #4: numeric 1/0 booleans are recognized too. allowMultiple is valid only for Text;
+        // here text + 1 becomes true.
         var svc = CreateService(ChatClientReturning(
             "{\"displayName\":\"Tags\",\"name\":\"tags\",\"dataType\":\"text\",\"isRequired\":0,\"allowMultiple\":1}"));
 
-        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "标签", ForNewField = true });
+        var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "Tags", ForNewField = true });
 
         draft.IsRequired.ShouldBeFalse();
         draft.AllowMultiple.ShouldBeTrue();
@@ -169,7 +177,8 @@ public class FieldDraftSuggestionAppService_Tests
 
         var draft = await svc.DraftAsync(new DraftFieldDefinitionInput { Prompt = "x", ForNewField = true });
 
-        // 控制字符折叠为单空格，与实体层 ValidateDisplayName 拒绝域一致（防起草值一保存即 loud fail）。
+        // Control characters collapse to a single space, matching the entity-level ValidateDisplayName rejection
+        // domain and preventing drafted values from failing loudly as soon as they are saved.
         draft.DisplayName.ShouldBe("Line Break Field");
     }
 

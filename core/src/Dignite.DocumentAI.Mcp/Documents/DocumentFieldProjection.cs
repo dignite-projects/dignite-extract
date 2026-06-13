@@ -5,15 +5,18 @@ using Dignite.DocumentAI.Ai;
 namespace Dignite.DocumentAI.Mcp.Documents;
 
 /// <summary>
-/// ExtractedFields 的 LLM-facing 投影逻辑——在检索 tool 和 get_document tool 之间共享，
-/// 保证两处的 PromptBoundary 包裹规则完全一致（安全规则的单一实现来源）。
+/// LLM-facing projection logic for ExtractedFields. Shared by the search tool and get_document tool so
+/// PromptBoundary wrapping rules are exactly consistent in both places, with one implementation source
+/// for the safety rule.
 /// </summary>
 internal static class DocumentFieldProjection
 {
     /// <summary>
-    /// 把文档的 ExtractedFields（原样 <see cref="JsonElement"/>）转成 LLM-facing 投影，保留声明类型：
-    /// 数字 / 布尔等结构化值原样透传；String 类型值经 <c>PromptBoundary.WrapField</c> 包裹防
-    /// indirect prompt injection；JSON null 跳过不投影；全部跳过 / 无字段 → 返回 null。
+    /// Converts document ExtractedFields, raw <see cref="JsonElement"/> values, into the LLM-facing
+    /// projection while preserving declared types: structured values such as numbers / booleans pass
+    /// through raw; String values are wrapped with <c>PromptBoundary.WrapField</c> to prevent indirect
+    /// prompt injection; JSON null values are skipped. Returns null when all values are skipped or no
+    /// fields exist.
     /// </summary>
     internal static IReadOnlyDictionary<string, JsonElement>? Project(
         IReadOnlyDictionary<string, JsonElement>? fields)
@@ -36,7 +39,8 @@ internal static class DocumentFieldProjection
                         PromptBoundary.WrapField(pair.Value.GetString()));
                     break;
                 case JsonValueKind.Array:
-                    // 多值字段（#212）：逐元素包裹——每个 String 元素都是用户派生自由文本。空数组跳过。
+                    // Multi-value fields (#212): wrap each element individually because every String
+                    // element is user-derived free text. Skip empty arrays.
                     var items = new List<JsonElement>();
                     foreach (var element in pair.Value.EnumerateArray())
                     {

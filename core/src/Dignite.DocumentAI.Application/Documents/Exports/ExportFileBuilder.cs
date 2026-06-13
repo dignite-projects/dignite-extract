@@ -7,8 +7,9 @@ using ClosedXML.Excel;
 namespace Dignite.DocumentAI.Documents.Exports;
 
 /// <summary>
-/// 导出文件序列化器。两种已知格式内联 dispatch——不抽 IExportFormatWriter provider 框架
-/// （CLAUDE.md：三行相似好过过早抽象）。未来若需自定义格式（固定宽度 / XML）再抽契约。
+/// Export file serializer. The two known formats dispatch inline instead of introducing an
+/// IExportFormatWriter provider framework (CLAUDE.md: three similar lines are better than premature
+/// abstraction). Introduce a contract later if custom formats such as fixed-width / XML are needed.
 /// </summary>
 internal static class ExportFileBuilder
 {
@@ -28,7 +29,8 @@ internal static class ExportFileBuilder
             sb.AppendLine(string.Join(",", row.Select(EscapeCsv)));
         }
 
-        // UTF-8 BOM——让 Excel 正确识别中日文 UTF-8 内容（无 BOM 时 Excel 按本地编码解析会乱码）。
+        // UTF-8 BOM lets Excel correctly recognize Chinese / Japanese UTF-8 content. Without a BOM,
+        // Excel may parse using the local code page and produce mojibake.
         var preamble = Encoding.UTF8.GetPreamble();
         var body = Encoding.UTF8.GetBytes(sb.ToString());
         var result = new byte[preamble.Length + body.Length];
@@ -78,10 +80,12 @@ internal static class ExportFileBuilder
         return neutralized;
     }
 
-    // CSV / spreadsheet formula injection 防御：值（忽略前导空白后）以 = + - @ 或 TAB / CR 开头时，
-    // 前缀单引号，阻止 Excel / Sheets 把它当公式执行。表头与单元格都来自用户控制文本
-    // （模板名 / 列名 / 文件名 / 抽取字段值），且本 builder 为 Excel 加了 UTF-8 BOM，风险被放大。
-    // XLSX 不需要此处理——ClosedXML 把 string 值写成明确的文本 cell（非 formula cell），不会被执行。
+    // CSV / spreadsheet formula injection defense: when a value starts with = + - @ or TAB / CR after
+    // ignoring leading whitespace, prefix a single quote to stop Excel / Sheets from executing it as
+    // a formula. Headers and cells all come from user-controlled text (template names / column names /
+    // file names / extracted field values), and this builder adds a UTF-8 BOM for Excel, which
+    // increases exposure. XLSX does not need this handling because ClosedXML writes string values as
+    // explicit text cells, not formula cells.
     private static string NeutralizeFormula(string value)
     {
         if (value.Length == 0)
@@ -89,8 +93,9 @@ internal static class ExportFileBuilder
             return value;
         }
 
-        // 检查原始首字符（捕获以 TAB/CR 开头）+ trim 后首字符（捕获前导空白后的 = + - @）——
-        // Excel 会在解析公式前 trim 前导空格，故两者都算触发面。
+        // Check the original first character to catch TAB/CR prefixes, plus the first character after
+        // trim to catch = + - @ after leading spaces. Excel trims leading spaces before formula
+        // parsing, so both are trigger surfaces.
         var trimmed = value.TrimStart();
         var dangerous = IsFormulaTrigger(value[0])
             || (trimmed.Length > 0 && IsFormulaTrigger(trimmed[0]));

@@ -4,10 +4,12 @@ using Volo.Abp.EventBus;
 namespace Dignite.DocumentAI.Abstractions.Documents;
 
 /// <summary>
-/// 文本提取（OCR 或数字版抽取）完成后发布。
-/// <see cref="UsedOcr"/> 标记走的是图像 OCR 还是数字版直接抽取；下游通过 REST 回拉 Markdown。
+/// Published after text extraction (OCR or digital-native extraction) completes.
+/// <see cref="UsedOcr"/> marks whether image OCR or digital-native direct extraction was used.
+/// Downstream consumers pull Markdown back through REST.
 /// <para>
-/// 不变契约（issue #188）：所有属性 <c>init</c>-only；<see cref="EventTime"/> 标 <c>required</c>。
+/// Stable contract (issue #188): all properties are <c>init</c>-only; <see cref="EventTime"/> is
+/// marked <c>required</c>.
 /// </para>
 /// </summary>
 [EventName("DocumentAI.Document.OCRCompleted")]
@@ -20,13 +22,14 @@ public class OCRCompletedEto
     public Guid? TenantId { get; init; }
 
     /// <summary>
-    /// 事件发生时间——DocumentAI 在 publish 时填入 <see cref="Volo.Abp.Timing.IClock.Now"/>。
-    /// 下游消费方按 <c>(DocumentId, EventType, EventTime)</c> 做幂等（at-least-once 投递）。
+    /// Event occurrence time. DocumentAI fills it with <see cref="Volo.Abp.Timing.IClock.Now"/> at
+    /// publish time. Downstream consumers can use <c>(DocumentId, EventType, EventTime)</c> for
+    /// idempotence under at-least-once delivery.
     /// </summary>
     public required DateTime EventTime { get; init; }
 
     /// <summary>
-    /// 是否实际走了 OCR 路径（true = 图像 OCR；false = 数字版直接抽取）。
+    /// Whether OCR was actually used: true = image OCR; false = digital-native direct extraction.
     /// </summary>
     public bool UsedOcr { get; init; }
 }

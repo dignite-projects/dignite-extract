@@ -15,12 +15,14 @@ using Volo.Abp.DependencyInjection;
 namespace Dignite.DocumentAI.Documents.Cabinets;
 
 /// <summary>
-/// 「留空 AI 兜底选柜」Workflow（#265）：从当前层候选柜里为文档挑一个最贴合的，无清晰匹配则弃选。
-/// 正交于内容 pipeline——不建 PipelineRun、不进 Ready 闸门（#194 落地）。安全约定见 llm-call-anti-patterns.md。
+/// Workflow for "blank cabinet AI fallback selection" (#265): choose the best-matching cabinet for a
+/// document from current-layer candidates, or abstain when there is no clear match. Orthogonal to the
+/// content pipeline: it creates no PipelineRun and does not participate in the Ready gate (#194).
+/// Security rules are documented in llm-call-anti-patterns.md.
 /// </summary>
 public class CabinetSuggestionWorkflow : ITransientDependency
 {
-    /// <summary>与分类同走 <see cref="DocumentAIConsts.StructuredChatClientKey"/> keyed client（structured-output、tool-free）——host 可指向更小 / 更便宜的模型。</summary>
+    /// <summary>Uses the same <see cref="DocumentAIConsts.StructuredChatClientKey"/> keyed client as classification (structured-output, tool-free), so hosts can point it at a smaller / cheaper model.</summary>
     private readonly IChatClient _chatClient;
     private readonly DocumentAIBehaviorOptions _options;
 
@@ -35,7 +37,7 @@ public class CabinetSuggestionWorkflow : ITransientDependency
         _options = options.Value;
     }
 
-    /// <summary>编译期常量 system instructions（防注入，不拼接运行时字符串）；让 LLM 选一个编号或弃选（宁缺毋滥）。</summary>
+    /// <summary>Compile-time constant system instructions for injection resistance; concatenate no runtime strings. The LLM chooses one number or abstains, preferring omission over a poor match.</summary>
     private const string SystemPrompt =
         "You help organize an uploaded document into the best-matching filing cabinet. " +
         "Cabinets are a human organizational dimension (e.g. by department, project, or batch) and are " +
@@ -47,8 +49,10 @@ public class CabinetSuggestionWorkflow : ITransientDependency
         "Return JSON only: {\"cabinetIndex\": <1-based number or null>, \"confidence\": <0.0-1.0>}.";
 
     /// <summary>
-    /// 为 <paramref name="markdown"/> 从候选柜里挑一个；<see cref="CabinetSuggestionOutcome.CabinetId"/> 为 <c>null</c> = 弃选
-    /// （无候选 / LLM 弃选 / 编号越界）。置信度阈值由调用方裁决，本方法只解析 + 映射。
+    /// Chooses a cabinet for <paramref name="markdown"/> from the candidates. A <c>null</c>
+    /// <see cref="CabinetSuggestionOutcome.CabinetId"/> means abstention: no candidates, LLM
+    /// abstained, or the returned index was out of range. The caller owns confidence threshold
+    /// decisions; this method only parses and maps.
     /// </summary>
     public virtual async Task<CabinetSuggestionOutcome> RunAsync(
         IReadOnlyList<Cabinet> candidates,
@@ -60,7 +64,8 @@ public class CabinetSuggestionWorkflow : ITransientDependency
             return CabinetSuggestionOutcome.None;
         }
 
-        // 选柜只需文档前段语义即可判归属，故按 MaxTextLengthPerExtraction 截断前部（与分类同策略）。
+        // Cabinet selection only needs the leading document semantics, so truncate to the prefix using
+        // the same strategy as classification.
         var truncatedText = markdown;
         if (markdown.Length > _options.MaxTextLengthPerExtraction)
         {
@@ -103,10 +108,12 @@ public class CabinetSuggestionWorkflow : ITransientDependency
     }
 
     /// <summary>
-    /// 候选柜格式化为 1-based 编号列表喂 LLM——用编号而非 Guid / Name 回显（避免 LLM 复制 GUID 出错，且天然抗注入：
-    /// 只能在预载候选内选）。Name / Description 都是用户控制文本，必须 <c>PromptBoundary.WrapField</c> 包裹；
-    /// 空 Description 只给 Name（镜像 <c>DocumentClassificationWorkflow</c> 的 description-optional 拼接）。
-    /// internal 便于 Application.Tests 直接验证拼接格式。
+    /// Formats candidate cabinets as a 1-based numbered list for the LLM. Use numbers instead of
+    /// echoed Guid / Name values to avoid LLM GUID copy errors and naturally resist injection because
+    /// it can only choose from preloaded candidates. Name / Description are user-controlled text and
+    /// must be wrapped with <c>PromptBoundary.WrapField</c>. Empty Description emits only Name,
+    /// mirroring <c>DocumentClassificationWorkflow</c>'s optional description concatenation. internal
+    /// lets Application.Tests verify the concatenation format directly.
     /// </summary>
     internal static string FormatCandidates(IReadOnlyList<Cabinet> candidates)
     {
@@ -123,8 +130,9 @@ public class CabinetSuggestionWorkflow : ITransientDependency
     }
 
     /// <summary>
-    /// LLM 的 <see cref="CabinetSuggestionResponse"/> → <see cref="CabinetSuggestionOutcome"/>：1-based 编号映射回
-    /// 候选 <see cref="Cabinet.Id"/>，越界 / null → 弃选；置信度 clamp 到 0..1。internal 便于 Tests 验证边界。
+    /// Maps the LLM <see cref="CabinetSuggestionResponse"/> to <see cref="CabinetSuggestionOutcome"/>:
+    /// a 1-based index maps back to candidate <see cref="Cabinet.Id"/>; out-of-range / null abstains;
+    /// confidence is clamped to 0..1. internal lets tests verify boundary behavior.
     /// </summary>
     internal CabinetSuggestionOutcome ResolveOutcome(
         CabinetSuggestionResponse? parsed,
@@ -135,7 +143,8 @@ public class CabinetSuggestionWorkflow : ITransientDependency
             return CabinetSuggestionOutcome.None;
         }
 
-        // 1-based 编号；越界（含 LLM 返回 0 / 负数 / 超过候选数）→ 弃选，不写脏柜。
+        // 1-based index. Out-of-range values, including 0, negatives, or values beyond the candidate
+        // count, abstain instead of writing a dirty cabinet.
         if (index < 1 || index > candidates.Count)
         {
             Logger.LogWarning(
@@ -160,8 +169,9 @@ public class CabinetSuggestionWorkflow : ITransientDependency
         return value;
     }
 
-    // 按 UTF-16 码元上限截断，但不切断代理对（与 DocumentClassificationWorkflow.TruncateAtCharBoundary 同源）。
-    // internal 便于 Application.Tests 直接验证边界逻辑。
+    // Truncate by UTF-16 code units without splitting surrogate pairs, matching
+    // DocumentClassificationWorkflow.TruncateAtCharBoundary. internal lets Application.Tests verify
+    // the boundary logic directly.
     internal static string TruncateAtCharBoundary(string text, int maxChars)
     {
         if (maxChars <= 0)
@@ -175,7 +185,7 @@ public class CabinetSuggestionWorkflow : ITransientDependency
 
     internal sealed class CabinetSuggestionResponse
     {
-        /// <summary>1-based 候选编号；<c>null</c> 表示 LLM 弃选（无清晰匹配）。</summary>
+        /// <summary>1-based candidate index; <c>null</c> means the LLM abstained because there was no clear match.</summary>
         public int? CabinetIndex { get; set; }
 
         public double Confidence { get; set; }
@@ -183,7 +193,8 @@ public class CabinetSuggestionWorkflow : ITransientDependency
 }
 
 /// <summary>
-/// 选柜结果。<see cref="CabinetId"/> 为 <c>null</c> = 弃选（无候选 / LLM 弃选 / 编号越界），调用方据此保持「未归类」。
+/// Cabinet selection result. A <c>null</c> <see cref="CabinetId"/> means abstention (no candidates,
+/// LLM abstained, or index out of range), so the caller keeps the document uncategorized.
 /// </summary>
 public sealed class CabinetSuggestionOutcome
 {

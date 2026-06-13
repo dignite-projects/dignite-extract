@@ -4,12 +4,12 @@ namespace Dignite.DocumentAI.Abstractions.TextExtraction;
 
 public class TextExtractionContext
 {
-    /// <summary>MIME 类型，由核心模块从 Document.FileOrigin.ContentType 传入。</summary>
+    /// <summary>MIME type passed by the core module from Document.FileOrigin.ContentType.</summary>
     public string ContentType { get; set; } = default!;
 
-    /// <summary>文件扩展名（含点号，如 ".pdf"）。</summary>
+    /// <summary>File extension, including the leading dot, such as ".pdf".</summary>
     public string FileExtension { get; set; } = default!;
 
-    /// <summary>语言提示（BCP 47 列表，如 ["ja", "en"]）。</summary>
+    /// <summary>Language hints as a BCP 47 list, such as ["ja", "en"].</summary>
     public IList<string> LanguageHints { get; set; } = new List<string>();
 }

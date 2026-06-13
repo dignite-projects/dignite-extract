@@ -109,7 +109,8 @@ public class DocumentPipelineRunAccessor : ITransientDependency
             return await _pipelineRunManager.StartAsync(document, pipelineCode);
         }
 
-        // #216：PipelineRun 独立聚合根后，按 runId 走仓储直接定位（不再经 Document.GetRun）。
+        // #216: after PipelineRun became an independent aggregate root, locate it directly by runId
+        // through the repository instead of Document.GetRun.
         var run = await _runRepository.FindAsync(pipelineRunId.Value);
         if (run?.PipelineCode == pipelineCode)
         {

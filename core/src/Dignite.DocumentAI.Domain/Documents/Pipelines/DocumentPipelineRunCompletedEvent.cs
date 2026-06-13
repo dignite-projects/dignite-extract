@@ -3,9 +3,11 @@ using System;
 namespace Dignite.DocumentAI.Documents.Pipelines;
 
 /// <summary>
-/// 单条流水线 Run 结束的本地域事件（成功、失败、跳过均发出）。
-/// 在 <see cref="DocumentPipelineRunManager"/> 的 CompleteAsync / FailAsync / SkipAsync 内发布，与状态变更同事务。
-/// 典型监听场景：流水线级监控/审计、失败后重试决策、业务模块挂载自定义后续处理。
+/// Local domain event emitted when a single pipeline run ends, whether it succeeds, fails, or is skipped.
+/// Published inside <see cref="DocumentPipelineRunManager"/> CompleteAsync, FailAsync, and SkipAsync in
+/// the same transaction as the status change.
+/// Typical listeners include pipeline-level monitoring and auditing, retry decisions after failures, and
+/// custom follow-up handling attached by business modules.
 /// </summary>
 public class DocumentPipelineRunCompletedEvent
 {

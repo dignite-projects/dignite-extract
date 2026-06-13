@@ -5,7 +5,7 @@ namespace Dignite.DocumentAI.Documents.DocumentTypes;
 
 public class UpdateDocumentTypeDto
 {
-    /// <summary>类型机器码（#207 起允许重命名；regex 白名单由实体校验，同层 (TenantId, TypeCode) 唯一性由 AppService 校验）。</summary>
+    /// <summary>Type machine code. Renames are allowed since #207; regex allowlisting is enforced by the entity, and same-layer (TenantId, TypeCode) uniqueness is enforced by AppService.</summary>
     [Required]
     [DynamicStringLength(typeof(DocumentTypeConsts), nameof(DocumentTypeConsts.MaxTypeCodeLength))]
     public string TypeCode { get; set; } = default!;
@@ -14,7 +14,7 @@ public class UpdateDocumentTypeDto
     [DynamicStringLength(typeof(DocumentTypeConsts), nameof(DocumentTypeConsts.MaxDisplayNameLength))]
     public string DisplayName { get; set; } = default!;
 
-    /// <summary>可选分类辅助说明（#262）：仅帮助 AI 识别此类型，不参与文档内容二次加工。</summary>
+    /// <summary>Optional classification helper description (#262): only helps AI identify this type and does not participate in document content post-processing.</summary>
     [DynamicStringLength(typeof(DocumentTypeConsts), nameof(DocumentTypeConsts.MaxDescriptionLength))]
     public string? Description { get; set; }
 

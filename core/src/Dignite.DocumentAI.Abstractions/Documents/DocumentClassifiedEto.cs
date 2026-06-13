@@ -4,10 +4,12 @@ using Volo.Abp.EventBus;
 namespace Dignite.DocumentAI.Abstractions.Documents;
 
 /// <summary>
-/// 文档分类完成后发布——下游字段抽取 / 业务消费方按 <see cref="DocumentTypeCode"/> 路由。
-/// 薄载荷：正文 Markdown 通过 REST / MCP / 仓储回拉，不随事件投递。
+/// Published after document classification completes. Downstream field extraction / business
+/// consumers route by <see cref="DocumentTypeCode"/>. Thin payload: body Markdown is pulled back
+/// through REST / MCP / repository and is not delivered with the event.
 /// <para>
-/// 不变契约（issue #188）：所有属性 <c>init</c>-only；<see cref="EventTime"/> 标 <c>required</c>。
+/// Stable contract (issue #188): all properties are <c>init</c>-only; <see cref="EventTime"/> is
+/// marked <c>required</c>.
 /// </para>
 /// </summary>
 [EventName("DocumentAI.Document.Classified")]
@@ -20,8 +22,9 @@ public class DocumentClassifiedEto
     public Guid? TenantId { get; init; }
 
     /// <summary>
-    /// 事件发生时间——DocumentAI 在 publish 时填入 <see cref="Volo.Abp.Timing.IClock.Now"/>。
-    /// 下游消费方按 <c>(DocumentId, EventType, EventTime)</c> 做幂等（at-least-once 投递）。
+    /// Event occurrence time. DocumentAI fills it with <see cref="Volo.Abp.Timing.IClock.Now"/> at
+    /// publish time. Downstream consumers can use <c>(DocumentId, EventType, EventTime)</c> for
+    /// idempotence under at-least-once delivery.
     /// </summary>
     public required DateTime EventTime { get; init; }
 

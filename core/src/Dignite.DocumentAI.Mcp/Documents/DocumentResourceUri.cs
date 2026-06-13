@@ -3,14 +3,15 @@ using System;
 namespace Dignite.DocumentAI.Mcp.Documents;
 
 /// <summary>
-/// MCP 文档资源 URI 的单一来源——资源模板（read 路径）与检索 tool 返回行共用同一 scheme，
-/// 防止在多处手写 <c>docai://documents/...</c> 漂移导致 read-after-search 断裂。
+/// Single source for MCP document resource URIs. Resource templates for the read path and rows returned
+/// by search tools share the same scheme, preventing hand-written <c>docai://documents/...</c> values
+/// from drifting across locations and breaking read-after-search.
 /// </summary>
 public static class DocumentResourceUri
 {
     private const string Prefix = "docai://documents/";
 
-    /// <summary>资源 URI 模板。用于 <c>[McpServerResource(UriTemplate = ...)]</c>，必须是编译期常量。</summary>
+    /// <summary>Resource URI template. Used by <c>[McpServerResource(UriTemplate = ...)]</c> and must be a compile-time constant.</summary>
     public const string Template = Prefix + "{id}";
 
     public static string Format(Guid documentId) => Prefix + documentId;

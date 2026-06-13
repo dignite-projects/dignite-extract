@@ -11,17 +11,24 @@ using Volo.Abp.Uow;
 namespace Dignite.DocumentAI.Documents.Pipelines.Reprocessing;
 
 /// <summary>
-/// 批量重新分类的分发任务（#289 步骤 5）——与字段重抽 dispatcher 同一链式自延续底座，区别在跑 <c>classification</c>
-/// pipeline（成功必连带字段重抽）+ 范围条件（类型 / 待审核队列 / 保护人工确认）。每批 keyset 分页只读 Id →
-/// enqueue 这批单篇 <see cref="DocumentClassificationBackgroundJob"/>（<c>PipelineRunId=null</c> → 作业内 StartAsync
-/// 建新 classification run）→ 满批则 enqueue 下一个 dispatcher（带游标）→ 结束。
+/// Dispatcher job for bulk reclassification (#289 step 5). It uses the same chained self-continuing
+/// base shape as the field re-extraction dispatcher, but runs the <c>classification</c> pipeline
+/// (success necessarily cascades field re-extraction) and applies scope conditions (type /
+/// pending-review queue / protect manual confirmation). Each batch keyset-paginates IDs only,
+/// enqueues one <see cref="DocumentClassificationBackgroundJob"/> per document
+/// (<c>PipelineRunId=null</c>, so the job calls StartAsync to create a new classification run),
+/// enqueues the next dispatcher with a cursor when the batch is full, then finishes.
 /// <para>
-/// 破坏性（#289 场景一不对称点）：重新分类会覆盖自动分类、低置信度打回待审核并清字段。范围 / 保护人工确认
-/// 已在 <see cref="DocumentReclassificationDispatcherArgs"/> 编码进 id 范围查询——dispatcher 只读 Id、不在此判 per-doc。
+/// Destructive behavior (#289 scenario-one asymmetry): reclassification overwrites automatic
+/// classification, sends low-confidence documents back to review, and clears fields. Scope / manual
+/// confirmation protection is encoded into the ID range query through
+/// <see cref="DocumentReclassificationDispatcherArgs"/>. The dispatcher reads only IDs and does not
+/// make per-document decisions here.
 /// </para>
 /// <para>
-/// 生命周期：classification 是 key pipeline，重排会把已 Ready 文档暂时打回 Processing（与单篇「重新识别」#263 同行为），
-/// 完成后据置信度重新派生（达标 → 回 Ready；不达标 → 待人工审核）。
+/// Lifecycle: classification is a key pipeline, so reclassification temporarily moves already Ready
+/// documents back to Processing, matching single-document re-recognition (#263). Completion re-derives
+/// state from confidence: passing returns to Ready; failing goes to manual review.
 /// </para>
 /// </summary>
 [BackgroundJobName("DocumentAI.DocumentReclassificationDispatcher")]
@@ -64,7 +71,8 @@ public class DocumentReclassificationDispatcherJob
 
                 foreach (var id in ids)
                 {
-                    // PipelineRunId=null → 作业内 BeginOrStartAsync 走 StartAsync 建新 classification attempt。
+                    // PipelineRunId=null makes the job's BeginOrStartAsync call StartAsync and create
+                    // a new classification attempt.
                     await _backgroundJobManager.EnqueueAsync(
                         new DocumentClassificationJobArgs { DocumentId = id });
                 }
@@ -94,17 +102,17 @@ public class DocumentReclassificationDispatcherJob
 
 public class DocumentReclassificationDispatcherArgs
 {
-    /// <summary>非空 = 仅该类型（<see cref="ReclassificationScope.OnlyCurrentType"/>）；空 = 全量 / 跨类型。</summary>
+    /// <summary>Non-null means only this type (<see cref="ReclassificationScope.OnlyCurrentType"/>); null means all / cross-type.</summary>
     public Guid? DocumentTypeId { get; set; }
 
-    /// <summary>非空 = 仅含该待审原因（待审核队列范围传 <see cref="DocumentReviewReasons.UnresolvedClassification"/>，#284 两轴模型）。</summary>
+    /// <summary>Non-null means only documents containing this review reason. The pending-review queue scope passes <see cref="DocumentReviewReasons.UnresolvedClassification"/> (#284 two-axis model).</summary>
     public DocumentReviewReasons? WithReason { get; set; }
 
-    /// <summary>true = 排除已人工确认（<see cref="DocumentReviewDisposition.Confirmed"/>）的文档（保护人工确认）。</summary>
+    /// <summary>true excludes manually confirmed documents (<see cref="DocumentReviewDisposition.Confirmed"/>), protecting manual confirmation.</summary>
     public bool ExcludeManuallyConfirmed { get; set; }
 
     public Guid? TenantId { get; set; }
 
-    /// <summary>keyset 游标：仅枚举 <c>Id &gt; AfterId</c> 的文档；首批为 null。</summary>
+    /// <summary>Keyset cursor: enumerate only documents where <c>Id &gt; AfterId</c>; null for the first batch.</summary>
     public Guid? AfterId { get; set; }
 }

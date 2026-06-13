@@ -14,7 +14,7 @@ using Volo.Abp.DependencyInjection;
 namespace Dignite.DocumentAI.Documents.Pipelines.Classification;
 
 /// <summary>
-/// 文档分类 Workflow（MAF ChatClientAgent + 结构化输出）。
+/// Document classification workflow using MAF <c>ChatClientAgent</c> with structured output.
 /// </summary>
 public class DocumentClassificationWorkflow : ITransientDependency
 {
@@ -57,24 +57,28 @@ public class DocumentClassificationWorkflow : ITransientDependency
             };
         }
 
-        // 候选集排序与数量上限由调用方（DocumentClassificationBackgroundJob）决定。
-        // 分类只需文档前段语义即可判型，故按 MaxTextLengthPerExtraction 截断前部（与字段抽取喂全文有意分化）。
+        // The caller (DocumentClassificationBackgroundJob) owns candidate ordering and limits.
+        // Classification only needs the leading document semantics, so it intentionally feeds a
+        // truncated prefix instead of the full text used by field extraction.
         var truncatedText = markdown;
         if (markdown.Length > _options.MaxTextLengthPerExtraction)
         {
-            // 截断会丢弃文档尾部，关键字段若位于尾部将无法分类——运营侧需要可见性。
+            // Truncation drops the document tail; operations need visibility when key fields beyond
+            // the cutoff may be missed.
             Logger.LogWarning(
                 "Classification input truncated from {OriginalLength} to {TruncatedLength} characters; key fields beyond the cutoff will be missed.",
                 markdown.Length, _options.MaxTextLengthPerExtraction);
             truncatedText = TruncateAtCharBoundary(markdown, _options.MaxTextLengthPerExtraction);
         }
 
-        // 字段架构 v2：DocumentType.DisplayName / Description 是 DB-resolved string，
-        // Host admin / 租户 admin 通过 admin UI 直接输入 string——是用户控制文本，
-        // 必须经 PromptBoundary.WrapField 包裹（CLAUDE.md "## 安全约定 / PromptBoundary"），
-        // 防止恶意 admin 通过 DisplayName / Description 注入指令（"Ignore previous instructions..."）。
-        // TypeCode 已经走实体层 ValidateTypeCode 强校验为 <owner>.<sub-type> 形式，安全。
-        // Description（#262）是可选分类辅助文本：仅当非空时追加一行，帮助 LLM 判型——不做任何内容二次加工。
+        // Field architecture v2: DocumentType.DisplayName / Description are DB-resolved strings
+        // entered by host or tenant admins in the admin UI, so they are user-controlled text.
+        // They must be wrapped with PromptBoundary.WrapField (CLAUDE.md "Security Covenant /
+        // PromptBoundary") to prevent malicious admin prompt injection via DisplayName / Description
+        // (for example, "Ignore previous instructions..."). TypeCode is safe because the entity layer
+        // already validates it as the <owner>.<sub-type> shape. Description (#262) is optional
+        // classification helper text: append one line only when it is non-empty, without additional
+        // content transformation.
         var typeDescriptions = candidateTypes.Select(t =>
         {
             var entry =
@@ -117,11 +121,12 @@ public class DocumentClassificationWorkflow : ITransientDependency
 
         var parsed = response.Result;
 
-        // LLM 偶发返回百分制置信度（如 99.9）或真正非法值（NaN / <0 / >100）。
-        // 百分制先归一化到 0..1；真正非法值按"无可信结论"处理：
-        // typeCode 置 null、confidence 置 0，由 BackgroundJob 走 LowConfidence 分支
-        // 进待人工审核队列（置 UnresolvedClassification 原因），避免 Document.ApplyAutomaticClassificationResult 的
-        // Check.Range 抛异常导致整条 PipelineRun 翻成 Failed。
+        // The LLM occasionally returns percentage confidence values (for example 99.9) or truly
+        // invalid values (NaN / <0 / >100). Percentages are normalized to 0..1 first; truly invalid
+        // values are treated as "no trusted conclusion": typeCode is cleared and confidence is set
+        // to 0, so the BackgroundJob takes the LowConfidence branch into manual review with the
+        // UnresolvedClassification reason. This avoids Check.Range in
+        // Document.ApplyAutomaticClassificationResult turning the whole PipelineRun into Failed.
         var rawConfidence = parsed?.Confidence ?? 0d;
         var typeCode = parsed?.TypeCode;
         if (!TryNormalizeConfidence(rawConfidence, out var confidenceScore))
@@ -139,10 +144,13 @@ public class DocumentClassificationWorkflow : ITransientDependency
                 rawConfidence, typeCode, confidenceScore);
         }
 
-        // Reason（LLM 给的分类理由）随 outcome 透传给 BackgroundJob 仅作日志 / 诊断——#284 起不再持久化到 Document
-        // （旧 ClassificationReason 字段已删）：高置信度路径忽略；低置信度路径仅记 log。操作员"为什么没分对"由
-        // DocumentPipelineRun 的候选类型（ClassificationCandidates）+ 前端通用文案承载。
-        // Run.StatusMessage 在两条路径下均不写入（MarkSucceeded 不接受 statusMessage），避免与技术错误信息混淆。
+        // Reason, the LLM's classification rationale, is passed through the outcome to the
+        // BackgroundJob only for logging / diagnostics. Since #284 it is no longer persisted on
+        // Document (the old ClassificationReason field was removed): high-confidence paths ignore
+        // it, while low-confidence paths only log it. Operator-facing "why was this not classified"
+        // context comes from DocumentPipelineRun ClassificationCandidates plus generic frontend copy.
+        // Run.StatusMessage is not written on either path (MarkSucceeded accepts no statusMessage),
+        // avoiding confusion with technical error messages.
         var outcome = new DocumentClassificationOutcome
         {
             TypeCode = typeCode,
@@ -154,9 +162,9 @@ public class DocumentClassificationWorkflow : ITransientDependency
         {
             foreach (var c in parsed.Candidates)
             {
-                // 候选项的 confidence 仅用于 UI 展示与 Run 持久化（PipelineRunCandidate 是纯
-                // record，不做 Check.Range），越界不会破坏聚合根；这里 Clamp 保证展示侧不出
-                // 现 1.5 之类的脏数据。
+                // Candidate confidence is only for UI display and run persistence. PipelineRunCandidate
+                // is a plain record and does not Check.Range, so out-of-range values cannot damage the
+                // aggregate root; clamp here so dirty values such as 1.5 do not leak to display code.
                 outcome.Candidates.Add(new PipelineRunCandidate(c.TypeCode, ClampConfidence(c.Confidence)));
             }
         }
@@ -201,9 +209,11 @@ public class DocumentClassificationWorkflow : ITransientDependency
         return value;
     }
 
-    // 按 UTF-16 码元上限截断，但不切断代理对：末位若是高位代理（其低位已被切掉），一并丢弃，
-    // 避免半个码点在 UTF-8 编码送 LLM 时退化成 U+FFFD。截断点已在被丢弃的文档尾部，多退一个 char 无影响。
-    // internal 便于 Application.Tests 直接验证边界逻辑（与上面置信度 helper 同源）。
+    // Truncate by UTF-16 code units without splitting surrogate pairs: when the last kept char is a
+    // high surrogate whose low surrogate was cut off, drop it too. This avoids half a code point
+    // degrading to U+FFFD when UTF-8 encoded for the LLM. The cut point is already in the discarded
+    // document tail, so dropping one extra char is harmless. internal lets Application.Tests verify
+    // the boundary logic directly, like the confidence helpers above.
     internal static string TruncateAtCharBoundary(string text, int maxChars)
     {
         if (maxChars <= 0)

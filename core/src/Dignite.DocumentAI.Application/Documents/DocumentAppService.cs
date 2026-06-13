@@ -57,8 +57,9 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
 
     public virtual async Task<DocumentDto> GetAsync(Guid id)
     {
-        // 方法体内 programmatic 权限断言——同时是 MCP 出口（DocumentResources 委托此方法，#222）的权限防线：
-        // MCP / 反射 / tool-dispatch 路径不经 HTTP [Authorize]，故此断言不得改写为类/方法级 [Authorize] 属性。
+        // Programmatic authorization assertion inside the method body. This is also the authorization guard for MCP exports
+        // because DocumentResources delegates to this method (#222). MCP / reflection / tool-dispatch paths do not pass through HTTP [Authorize],
+        // so this assertion must not be rewritten as a class-level or method-level [Authorize] attribute.
         await CheckPolicyAsync(DocumentAIPermissions.Documents.Default);
         var document = await _documentRepository.GetAsync(id, includeDetails: true);
         return await MapToDtoAsync(document);
@@ -68,8 +69,8 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
     {
         await CheckPolicyAsync(DocumentAIPermissions.Documents.Default);
 
-        // 解析外部类型码 → 内部 DocumentTypeId（#207）。提供了类型码但该层无此类型：带字段过滤 → loud fail
-        // （字段无从解析）；仅元数据 → 空页（无该类型文档）。
+        // Resolve external type code -> internal DocumentTypeId (#207). If a type code is supplied but the layer has no such type:
+        // with field filters -> loud fail because fields cannot be resolved; metadata-only -> empty page because no documents have that type.
         Guid? documentTypeId = null;
         if (!input.DocumentTypeCode.IsNullOrWhiteSpace())
         {
@@ -87,12 +88,12 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
             documentTypeId = type.Id;
         }
 
-        // ExtractedFields 字段值过滤器：把每个 FieldFilter 解析成带 FieldDefinitionId + 声明类型的 DocumentFieldQuery
-        // （FieldDefinition 跨聚合查询，属调用层职责）。任一字段未在该类型下定义 → loud fail
-        // （UnknownExtractedField，可纠正信号），不静默空。无 FieldFilters → null（仅元数据检索）。
+        // ExtractedFields value filters: resolve each FieldFilter into a DocumentFieldQuery carrying FieldDefinitionId + declared type.
+        // FieldDefinition cross-aggregate lookup is the caller-layer responsibility. If any field is not defined under that type, loud fail
+        // with UnknownExtractedField as a correctable signal, instead of silently returning empty. No FieldFilters -> null (metadata-only retrieval).
         var fieldQueries = await ResolveFieldQueriesAsync(input, documentTypeId);
 
-        // 回收站视图：需要 Restore 权限，且整个查询管道必须在 DataFilter.Disable<ISoftDelete> 作用域内
+        // Trash-bin view: requires Restore permission, and the entire query pipeline must run inside DataFilter.Disable<ISoftDelete>.
         if (input.IsDeleted == true)
         {
             await CheckPolicyAsync(DocumentAIPermissions.Documents.Restore);
@@ -113,7 +114,7 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
             return null;
         }
 
-        // DTO 校验已保证有 FieldFilters 时 DocumentTypeCode 非空；上面已解析到 documentTypeId（非空，否则已 throw/return）。
+        // DTO validation already guarantees DocumentTypeCode is non-empty when FieldFilters exist; documentTypeId was resolved above and is non-null, otherwise we already threw or returned.
         var fieldQueries = new List<DocumentFieldQuery>(input.FieldFilters.Count);
         foreach (var filter in input.FieldFilters)
         {
@@ -125,7 +126,7 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
                     .WithData("DocumentTypeCode", input.DocumentTypeCode!);
             }
 
-            // 内部按 FieldDefinitionId 匹配 child 行（#207）；FieldName 仅用于仓储错误诊断。
+            // Internally match child rows by FieldDefinitionId (#207); FieldName is only for repository error diagnostics.
             fieldQueries.Add(new DocumentFieldQuery(
                 definition.Id, filter.Name!, definition.DataType, filter.Value, filter.Min, filter.Max));
         }
@@ -139,13 +140,15 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
         bool onlyDeleted,
         List<DocumentFieldQuery>? fieldQueries)
     {
-        // 用 WithDetailsAsync(选择器) 只 eager-load ExtractedFieldValues child 行（不含 PipelineRuns）——
-        // 持久化无关（ABP 仓储 API，避免 App 层直接依赖 EF Core .Include）。一次性 JOIN 取回 → 组装
-        // ExtractedFields 字典，杜绝逐文档 N+1 / lazy loading（Issue #206 复核护栏）。
+        // Use WithDetailsAsync(selector) to eager-load only ExtractedFieldValues child rows, excluding PipelineRuns.
+        // This is persistence-agnostic through the ABP repository API and avoids direct EF Core .Include dependency in the App layer.
+        // A single JOIN retrieves the data for assembling the ExtractedFields dictionary, preventing per-document N+1 / lazy loading
+        // (Issue #206 review guardrail).
         var query = await _documentRepository.WithDetailsAsync(d => d.ExtractedFieldValues);
 
-        // ExtractedFields 字段值过滤：仓储用 Documents-anchored LINQ（child EXISTS + 类型化列比较）取（锚定
-        // DocumentTypeId 的）匹配 Id 集合，再与本查询求交——保持 ApplyFilter 为元数据过滤单一来源。
+        // ExtractedFields value filtering: the repository uses Documents-anchored LINQ (child EXISTS + typed-column comparison)
+        // to get the matching Id set anchored to DocumentTypeId, then intersects it with this query. This keeps ApplyFilter
+        // as the single source for metadata filtering.
         if (fieldQueries is { Count: > 0 })
         {
             var matchedIds = await _documentRepository.GetFieldMatchedIdsAsync(documentTypeId!.Value, fieldQueries);
@@ -166,7 +169,7 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
         var documents = await AsyncExecuter.ToListAsync(query);
         var dtos = ObjectMapper.Map<List<Document>, List<DocumentListItemDto>>(documents);
 
-        // DocumentTypeCode + ExtractedFields 字典 key 是 Id → code/name 投影：分页后一次性批量 join 填充（无 N+1）。
+        // DocumentTypeCode + ExtractedFields dictionary keys are Id -> code/name projections: populate them after pagination with one batch join, no N+1.
         await FillListReferencesAsync(documents, dtos);
 
         return new PagedResultDto<DocumentListItemDto>(totalCount, dtos);
@@ -175,20 +178,21 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
     [Authorize(DocumentAIPermissions.Documents.Upload)]
     public virtual async Task<DocumentDto> UploadAsync(UploadDocumentInput input)
     {
-        // 前置检查：当前层至少要有一个 DocumentType（CLAUDE.md "两层文档类型体系" 单层精确匹配）。
-        // Host 启动期 seed 入口已删除（HostDocumentTypeDataSeedContributor / DocumentTypeOptions），
-        // DocumentType 现在只能通过 IDocumentTypeAppService 运行时创建——所以新部署 / 新租户必须先建类型才能上传。
-        // 不做这个 fail-fast 检查的话，上传成功 → 分类候选集为空 → 文档永远卡在待人工审核队列。
+        // Pre-check: the current layer must have at least one DocumentType (CLAUDE.md "two-layer document type system", exact single-layer match).
+        // Host startup seeding entry points were removed (HostDocumentTypeDataSeedContributor / DocumentTypeOptions).
+        // DocumentTypes can now only be created at runtime through IDocumentTypeAppService, so a new deployment / tenant must create types before upload.
+        // Without this fail-fast check, upload would succeed, classification candidates would be empty, and the document would stay in the manual-review queue forever.
         var hasType = await _documentTypeRepository.GetCountAsync() > 0;
         if (!hasType)
         {
             throw new BusinessException(DocumentAIErrorCodes.DocumentType.NoneConfigured);
         }
 
-        // 文件柜归属校验（#194）：若指定 cabinetId，先断言 Cabinets 权限（fail-closed，与前端 canViewCabinets
-        // gate 对称）——[Authorize(Documents.Upload)] 不覆盖 cabinet 归属，无此断言则无 Cabinets 权限者可绕过 UI
-        // 把文档归到隐藏柜。再校验柜存在（租户隔离由 ambient IMultiTenant 过滤器施加，跨租户 FindAsync 返回 null）。
-        // 柜正交于 pipeline——此处仅做上传时人工归属校验，后续 pipeline 不碰。
+        // Cabinet ownership validation (#194): when cabinetId is specified, assert Cabinets permission first
+        // (fail-closed, symmetric with the frontend canViewCabinets gate). [Authorize(Documents.Upload)] does not cover cabinet ownership;
+        // without this assertion, a user without Cabinets permission could bypass the UI and assign a document to a hidden cabinet.
+        // Then validate cabinet existence. Tenant isolation is enforced by the ambient IMultiTenant filter, so cross-tenant FindAsync returns null.
+        // Cabinets are orthogonal to pipelines; this only validates manual ownership during upload, and later pipelines do not touch it.
         if (input.CabinetId.HasValue)
         {
             await CheckPolicyAsync(DocumentAIPermissions.Cabinets.Default);
@@ -205,9 +209,10 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
         var contentType = input.File.ContentType ?? "application/octet-stream";
         var extension = Path.GetExtension(fileName);
 
-        // fail-closed 文件校验（#221）：content-type + 扩展名双重白名单。任意类型都会落 blob 并触发
-        // 文本提取 / 分类 job，浪费算力且行为不确定——故不在通道允许集内立即 loud fail，不落 blob、不入队。
-        // content-type 客户端可伪造，扩展名又决定 blob 后缀 + DefaultTextExtractor dispatch，故二者都校验。
+        // Fail-closed file validation (#221): dual allow-list for content-type + extension. Any accepted file is stored as a blob
+        // and triggers text extraction / classification jobs, consuming compute and creating uncertain behavior for unsupported formats.
+        // Therefore unsupported channel formats loud-fail immediately: no blob write and no enqueue.
+        // Content-type is client-spoofable, while extension determines blob suffix + DefaultTextExtractor dispatch, so both are validated.
         if (string.IsNullOrEmpty(extension) ||
             !DocumentConsts.AllowedUploadExtensions.Contains(extension) ||
             !DocumentConsts.AllowedUploadContentTypes.Contains(contentType))
@@ -217,8 +222,9 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
                 .WithData("ContentType", contentType);
         }
 
-        // 客户端声明的长度先做廉价拒绝（不可信，攻击者可少报或不报）——真正的边界是下方流式拷贝按
-        // 实际字节数施加的硬上限，超限即刻中止，不把超大 body 全量缓冲进内存。
+        // The client-declared length gets a cheap early rejection first, but it is untrusted: attackers can underreport or omit it.
+        // The real boundary is the hard limit enforced by the streaming copy below using actual bytes read. Over-limit bodies abort immediately
+        // without buffering the full oversized body into memory.
         if (input.File.ContentLength is > 0 and var declared && declared > DocumentConsts.MaxUploadFileBytes)
         {
             throw new BusinessException(DocumentAIErrorCodes.Document.FileTooLarge)
@@ -226,8 +232,9 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
                 .WithData("MaxBytes", DocumentConsts.MaxUploadFileBytes);
         }
 
-        // 在独立 using 作用域内缓冲：拿到 bytes 后立即释放 buffer，使 SaveAsync 期间只驻留 bytes（1×），
-        // 消除此前 buffer + bytes 同时驻留的 ~2× 内存放大（#221 复审补充 1）。哈希需全量字节，无法完全流式。
+        // Buffer inside an independent using scope: release the buffer immediately after bytes are obtained, so SaveAsync retains only bytes (1x).
+        // This removes the earlier buffer + bytes simultaneous residency (~2x memory amplification, #221 review follow-up 1).
+        // Hashing requires the full byte array, so this cannot be fully streamed.
         byte[] bytes;
         await using (var source = input.File.GetStream())
         using (var buffer = new MemoryStream())
@@ -239,9 +246,10 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
 
         var contentHash = ContentHasher.Sha256Hex(bytes);
 
-        // 内容哈希去重是 check-then-act（ContentHash 仅非唯一索引）。两个并发的同文件上传可能双双通过检查 →
-        // 产生重复 Document。本期有意接受该 race（#221 复审补充 2）：概率低、危害低（最多一份重复，可后续删），
-        // 而给 ContentHash 加唯一索引会把 race 失败方变成一次 500——通道层不为低概率重复付这个代价。
+        // Content-hash deduplication is check-then-act because ContentHash has only a non-unique index. Two concurrent uploads of the same file
+        // can both pass the check and create duplicate Documents. This race is intentionally accepted for now (#221 review follow-up 2):
+        // low probability and low impact (at most one duplicate, removable later). Adding a unique index to ContentHash would turn the losing side
+        // of the race into a 500; the channel layer does not pay that cost for low-probability duplication.
         var existing = await _documentRepository.FindByContentHashAsync(contentHash);
         if (existing != null)
         {
@@ -293,9 +301,9 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
     }
 
     /// <summary>
-    /// 把 <paramref name="source"/> 拷贝进 <paramref name="destination"/>，按实际读取字节数施加硬上限（#221）。
-    /// 一旦累计超过 <paramref name="maxBytes"/> 立即抛 <c>Document.FileTooLarge</c>——不依赖客户端声明的
-    /// ContentLength（可伪造），也不把超大 body 全量缓冲进内存。
+    /// Copies <paramref name="source"/> into <paramref name="destination"/> while enforcing a hard limit by actual bytes read (#221).
+    /// Throws <c>Document.FileTooLarge</c> as soon as the cumulative count exceeds <paramref name="maxBytes"/>.
+    /// Does not rely on client-declared ContentLength, which can be forged, and does not buffer the entire oversized body into memory.
     /// </summary>
     protected static async Task CopyWithLimitAsync(Stream source, Stream destination, long maxBytes, string fileName)
     {
@@ -320,7 +328,7 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
     {
         await CheckPolicyAsync(DocumentAIPermissions.Documents.Default);
 
-        // 只取 blob 流——仅需标量 + owned FileOrigin（随实体加载），不需要任何子集合。
+        // Only fetch the blob stream: scalar fields + owned FileOrigin are loaded with the entity, and no child collection is needed.
         var document = await _documentRepository.GetAsync(id, includeDetails: false);
         var stream = await _blobContainer.GetAsync(document.FileOrigin.BlobName);
 
@@ -338,7 +346,7 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
 
         await _documentRepository.DeleteAsync(id);
 
-        // 通知下游消费方：Document 进入回收站，应将派生数据置为可恢复的归档状态
+        // Notify downstream consumers: the Document entered the trash bin, so derived data should move to a recoverable archived state.
         await _distributedEventBus.PublishAsync(
             new DocumentDeletedEto
             {
@@ -354,7 +362,7 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
         Document document;
         using (DataFilter.Disable<ISoftDelete>())
         {
-            // 永久删除只需标量 + owned FileOrigin（blob 名），子集合一概不用。
+            // Permanent delete needs only scalar fields + owned FileOrigin (blob name); no child collections are needed.
             document = await _documentRepository.GetAsync(id, includeDetails: false);
         }
 
@@ -371,8 +379,8 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
                 document.FileOrigin.BlobName, id);
         }
 
-        // #210：永久删除时一并删归档的原生 payload blob（按 manifest 的稳定 key，不做 prefix 清理）。
-        // 与原始文件 blob 同样 best-effort——删失败只记日志，不阻断永久删除主流程。
+        // #210: permanently delete archived native payload blobs together, using stable keys from the manifest and no prefix cleanup.
+        // Like the original file blob, this is best-effort: failures are logged but do not block the main permanent-delete flow.
         var nativePayloadBlobName = document.ExtractionMetadata?.NativePayloadManifest?.BlobName;
         if (!string.IsNullOrEmpty(nativePayloadBlobName))
         {
@@ -388,7 +396,7 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
             }
         }
 
-        // 通知下游消费方：Document 已不可恢复，应物理删除派生数据
+        // Notify downstream consumers: the Document is unrecoverable, so derived data should be physically deleted.
         await _distributedEventBus.PublishAsync(
             new DocumentPermanentlyDeletedEto
             {
@@ -426,10 +434,10 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
     }
 
     /// <summary>
-    /// 重试单条 pipeline。当前仅 <see cref="PipelineRunStatus.Failed"/> 可重试；
-    /// Pending/Running 抛 <c>PipelineRetryInProgress</c>，Succeeded/Skipped 抛 <c>PipelineNotRetryable</c>。
-    /// 重试先创建 Pending Run，再把带 PipelineRunId 的 BackgroundJob 入队。
-    /// 链式重放语义（隐式）：重试 <c>text-extraction</c> → 成功后链触发 <c>classification</c>。
+    /// Retries one pipeline. Currently only <see cref="PipelineRunStatus.Failed"/> can be retried;
+    /// Pending/Running throw <c>PipelineRetryInProgress</c>, and Succeeded/Skipped throw <c>PipelineNotRetryable</c>.
+    /// Retry first creates a Pending Run, then enqueues a BackgroundJob carrying PipelineRunId.
+    /// Chained replay semantics are implicit: retrying <c>text-extraction</c> triggers <c>classification</c> after success.
     /// </summary>
     [Authorize(DocumentAIPermissions.Documents.Pipelines.Retry)]
     public virtual async Task RetryPipelineAsync(Guid id, RetryPipelineInput input)
@@ -440,10 +448,10 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
                 .WithData("PipelineCode", input.PipelineCode);
         }
 
-        // 只需文档主行（IsDeleted / FileOrigin）+ 最近一次该 pipeline 的 run（判可重试）；不碰字段值。
-        // 租户隔离由 ambient IMultiTenant 过滤器施加，GetAsync 对跨租户 / 不存在 id 抛 EntityNotFound。
-        // #216 follow-up：retry 状态机判定下沉到 DocumentPipelineRunManager.EnsureRetryableAsync，
-        // AppService 不再直接依赖 IDocumentPipelineRunRepository。
+        // Need only the main document row (IsDeleted / FileOrigin) + latest run for this pipeline to decide retryability; field values are not touched.
+        // Tenant isolation is enforced by the ambient IMultiTenant filter; GetAsync throws EntityNotFound for cross-tenant or missing id.
+        // #216 follow-up: retry state-machine checks moved down to DocumentPipelineRunManager.EnsureRetryableAsync,
+        // so AppService no longer directly depends on IDocumentPipelineRunRepository.
         var document = await _documentRepository.GetAsync(id, includeDetails: false);
 
         if (document.IsDeleted)
@@ -462,18 +470,18 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
     }
 
     /// <summary>
-    /// 「重新识别」（#263）——在现有 Markdown 上重跑 AI 自动分类 → 级联重抽字段，不重新 OCR。
-    /// 重排 classification job（与文本提取完成后链式触发同一路径），由后台作业跑 LLM 自动重判；
-    /// 完成后高置信度发 <see cref="DocumentClassifiedEto"/> 级联字段重抽，低置信度落待人工审核。
+    /// "Re-recognize" (#263): reruns AI automatic classification on existing Markdown -> cascades field re-extraction, without rerunning OCR.
+    /// Re-enqueues the classification job on the same path used after text extraction completes. The background job performs LLM automatic reclassification;
+    /// after completion, high confidence emits <see cref="DocumentClassifiedEto"/> to cascade field re-extraction, while low confidence enters manual review.
     /// <para>
-    /// 与 <see cref="ReclassifyAsync"/>（人工指定类型、同步落库）和 <see cref="RetryPipelineAsync"/>
-    /// （仅 Failed 可重试）的语义边界见 <see cref="IDocumentAppService.RerecognizeAsync"/>。
+    /// See <see cref="IDocumentAppService.RerecognizeAsync"/> for semantic boundaries with <see cref="ReclassifyAsync"/>
+    /// (operator-specified type, synchronous persistence) and <see cref="RetryPipelineAsync"/> (only Failed runs are retryable).
     /// </para>
     /// </summary>
     [Authorize(DocumentAIPermissions.Documents.ConfirmClassification)]
     public virtual async Task RerecognizeAsync(Guid id)
     {
-        // 只需标量（IsDeleted / Markdown / FileOrigin）；不碰字段值。租户隔离由 ambient IMultiTenant 过滤器施加。
+        // Need only scalar fields (IsDeleted / Markdown / FileOrigin); field values are not touched. Tenant isolation is enforced by the ambient IMultiTenant filter.
         var document = await _documentRepository.GetAsync(id, includeDetails: false);
 
         if (document.IsDeleted)
@@ -482,32 +490,32 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
                 .WithData("FileName", document.FileOrigin.BlobName);
         }
 
-        // 自动分类的输入是 Document.Markdown——文本提取尚未产出文本则无从重判。
+        // Automatic classification input is Document.Markdown. If text extraction has not produced text yet, reclassification cannot run.
         if (string.IsNullOrEmpty(document.Markdown))
         {
             throw new BusinessException(DocumentAIErrorCodes.Document.NotTextExtracted);
         }
 
-        // 并发护栏：classification 正 Pending/Running 时不重排（新 attempt 不撞 Running 的唯一索引，故须显式拦）。
+        // Concurrency guard: do not re-enqueue while classification is Pending/Running. New attempts do not collide with the unique index for Running, so this must be blocked explicitly.
         await _pipelineRunManager.EnsureNotInProgressAsync(id, DocumentAIPipelines.Classification);
 
         Logger.LogInformation(
             "RerecognizeAsync user={UserId} tenant={TenantId} doc={DocumentId}",
             CurrentUser.Id, CurrentTenant.Id, document.Id);
 
-        // 重排自动分类——QueueAsync 内部建 Pending run + 派生 LifecycleStatus→Processing + 入队后台作业。
+        // Re-enqueue automatic classification. QueueAsync creates a Pending run, derives LifecycleStatus -> Processing, and enqueues the background job.
         await _pipelineJobScheduler.QueueAsync(document, DocumentAIPipelines.Classification);
     }
 
     /// <summary>
-    /// 「仅重抽字段」（#289 场景二单篇版）——在现有分类上只重跑 <c>field-extraction</c> pipeline，不重排分类、不重 OCR。
-    /// 复用与批量字段重抽相同的后台作业 + 共享抽取引擎；<c>field-extraction</c> 是生命周期中性 pipeline（不在 KeyPipelines），
-    /// 已 Ready 文档重抽后仍 Ready，不被打回 Processing。
+    /// "Field re-extraction only" (#289 scenario 2, single-document version): reruns only the <c>field-extraction</c> pipeline on the existing classification,
+    /// without reclassification or OCR. Reuses the same background job and shared extraction engine as bulk field re-extraction.
+    /// <c>field-extraction</c> is lifecycle-neutral (not in KeyPipelines), so a Ready document remains Ready after re-extraction and is not moved back to Processing.
     /// </summary>
     [Authorize(DocumentAIPermissions.Documents.ConfirmClassification)]
     public virtual async Task ReextractFieldsAsync(Guid id)
     {
-        // 只需标量（IsDeleted / DocumentTypeId / Markdown）；不碰字段值。租户隔离由 ambient IMultiTenant 过滤器施加。
+        // Need only scalar fields (IsDeleted / DocumentTypeId / Markdown); field values are not touched. Tenant isolation is enforced by the ambient IMultiTenant filter.
         var document = await _documentRepository.GetAsync(id, includeDetails: false);
 
         if (document.IsDeleted)
@@ -516,57 +524,61 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
                 .WithData("FileName", document.FileOrigin.BlobName);
         }
 
-        // 字段抽取挂在 DocumentType 下——未分类无从抽取。
+        // Field extraction hangs off DocumentType; unclassified documents have nothing to extract against.
         if (!document.DocumentTypeId.HasValue)
         {
             throw new BusinessException(DocumentAIErrorCodes.Document.NotClassified);
         }
 
-        // 字段抽取的输入是 Document.Markdown——文本提取尚未产出文本则无从抽取。
+        // Field extraction input is Document.Markdown. If text extraction has not produced text yet, extraction cannot run.
         if (string.IsNullOrEmpty(document.Markdown))
         {
             throw new BusinessException(DocumentAIErrorCodes.Document.NotTextExtracted);
         }
 
-        // 并发护栏：field-extraction 正 Pending/Running 时不重排（避免双击叠加；新 attempt 不撞 Running 的唯一索引，须显式拦）。
+        // Concurrency guard: do not re-enqueue while field-extraction is Pending/Running, avoiding double-click stacking.
+        // New attempts do not collide with the unique index for Running, so this must be blocked explicitly.
         await _pipelineRunManager.EnsureNotInProgressAsync(id, DocumentAIPipelines.FieldExtraction);
 
         Logger.LogInformation(
             "ReextractFieldsAsync user={UserId} tenant={TenantId} doc={DocumentId}",
             CurrentUser.Id, CurrentTenant.Id, document.Id);
 
-        // 建 Pending field-extraction run + 入队后台作业（生命周期中性，不动 LifecycleStatus）。
+        // Create a Pending field-extraction run + enqueue the background job. Lifecycle-neutral, so LifecycleStatus is unchanged.
         await _pipelineJobScheduler.QueueAsync(document, DocumentAIPipelines.FieldExtraction);
     }
 
     /// <summary>
-    /// 操作员手改字段抽取结果（个别纠错）。整体替换 ExtractedFields；key 必须是该文档所属层、
-    /// 该 DocumentType 下已定义的字段名；完成后复用 FieldsExtractedEto 重发让下游同步。
+    /// Operator edits field extraction results (individual correction). Replaces ExtractedFields as a whole;
+    /// keys must be field names defined under this document's layer and DocumentType. After completion, reuses FieldsExtractedEto
+    /// to notify downstream consumers to synchronize.
     /// </summary>
     [Authorize(DocumentAIPermissions.Documents.ConfirmClassification)]
     public virtual async Task<DocumentDto> UpdateExtractedFieldsAsync(Guid id, UpdateExtractedFieldsInput input)
     {
-        // 租户隔离由 ambient IMultiTenant 过滤器施加——GetAsync 对跨租户 id 已抛 EntityNotFound。
+        // Tenant isolation is enforced by the ambient IMultiTenant filter; GetAsync already throws EntityNotFound for cross-tenant ids.
         var document = await _documentRepository.GetAsync(id, includeDetails: true);
 
-        // 字段定义挂在 DocumentType 下——未分类无从校验字段名。
+        // Field definitions hang off DocumentType; unclassified documents have no basis for validating field names.
         if (!document.DocumentTypeId.HasValue)
         {
             throw new BusinessException(DocumentAIErrorCodes.Document.NotClassified);
         }
 
-        // ETO 仍携带 DocumentTypeCode 字符串（出口契约不变）——由内部 DocumentTypeId 解析（#207）。
+        // ETO still carries the DocumentTypeCode string, preserving the export contract. It is resolved from internal DocumentTypeId (#207).
         var documentTypeCode = await ResolveTypeCodeAsync(document.DocumentTypeId);
 
-        // 校验每个 key 是该文档所属层、该 DocumentType 下已定义的字段名。
-        // GetListAsync 按 ambient CurrentTenant.Id 查单层（已断言 == document.TenantId），按内部 DocumentTypeId 匹配。
+        // Validate that each key is a field name defined under this document's layer and DocumentType.
+        // GetListAsync reads a single layer by ambient CurrentTenant.Id (already asserted == document.TenantId) and matches by internal DocumentTypeId.
         var definitions = await _fieldDefinitionRepository.GetListAsync(document.DocumentTypeId.Value);
         var definitionsByName = definitions.ToDictionary(d => d.Name, StringComparer.Ordinal);
         var fields = input.Fields ?? new Dictionary<string, JsonElement>();
 
-        // 校验每个值符合声明类型后，展开成 typed DocumentFieldValue（FieldDefinitionId + DataType 来自 FieldDefinition）。
-        // 校验通过即可直接交给聚合根，不再经 JSON 字典中转——值类型与列对齐的转换集中在 DocumentExtractedField 内。
-        // #212：多值文本字段的 JSON 数组由 DocumentFieldValueFactory 拆成多行（Order 0,1,2…），单值字段 1 行（Order 0）。
+        // After validating each value against the declared type, expand into typed DocumentFieldValue instances
+        // (FieldDefinitionId + DataType come from FieldDefinition). Validated values can be passed directly to the aggregate root,
+        // no longer through an intermediate JSON dictionary; conversion from value type to aligned columns is centralized in DocumentExtractedField.
+        // #212: JSON arrays for multi-value text fields are split by DocumentFieldValueFactory into multiple rows (Order 0,1,2...);
+        // single-value fields produce one row (Order 0).
         var fieldValues = new List<DocumentFieldValue>(fields.Count);
         foreach (var (key, value) in fields)
         {
@@ -591,11 +603,11 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
                 definition.Id, definition.DataType, definition.AllowMultiple, value));
         }
 
-        // 整组替换（与 FieldExtractionEventHandler 一致：空则清空全部字段行）。
+        // Whole-set replacement, consistent with FieldExtractionEventHandler: empty means clear all field rows.
         document.SetFields(fieldValues);
 
-        // #284：操作员补录后重新评估必填缺失——补齐则 clear MissingRequiredFields（退出审核队列闭环），
-        // 仍缺则保持。复用已加载的 definitions（筛 IsRequired）+ 写入后的 ExtractedFieldValues。
+        // #284: after operator entry, reevaluate missing required fields. If filled, clear MissingRequiredFields to close the review-queue loop;
+        // if still missing, keep it. Reuse loaded definitions filtered by IsRequired plus the written ExtractedFieldValues.
         var requiredIds = definitions.Where(d => d.IsRequired).Select(d => d.Id).ToList();
         var extractedIds = document.ExtractedFieldValues.Select(f => f.FieldDefinitionId).Distinct().ToList();
         document.SetReviewReason(
@@ -604,9 +616,10 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
 
         await _documentRepository.UpdateAsync(document, autoSave: true);
 
-        // FieldsExtractedEto.FieldCount 是逻辑字段数（产生 ≥1 个值的不同字段个数），非展开后的行数——
-        // 与 FieldExtractionEventHandler 同一算法，保证两条写入路径对同一终态发出一致的薄信号
-        // （多值字段空数组 [] 展开 0 行不计入，避免与 LLM 路径分叉）。下游按 (DocumentId, EventType, EventTime) 幂等、回拉最新字段值。
+        // FieldsExtractedEto.FieldCount is the logical field count (distinct fields that produced >= 1 value), not the expanded row count.
+        // Use the same algorithm as FieldExtractionEventHandler so both write paths emit the same thin signal for the same final state.
+        // Empty arrays for multi-value fields expand to 0 rows and do not count, avoiding divergence from the LLM path.
+        // Downstream consumers are idempotent by (DocumentId, EventType, EventTime) and pull back the latest field values.
         var fieldCount = fieldValues.Select(v => v.FieldDefinitionId).Distinct().Count();
         await _distributedEventBus.PublishAsync(
             new FieldsExtractedEto
@@ -643,10 +656,10 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
     }
 
     /// <summary>
-    /// 改派文档所属文件柜（#257）。与 <see cref="UploadAsync"/> 的柜归属校验对称：
-    /// 指派到某柜时断言 <see cref="DocumentAIPermissions.Cabinets.Default"/> + 校验柜在当前层存在
-    /// （租户隔离由 ambient IMultiTenant 过滤器施加，跨租户 FindAsync 返回 null）；移出（CabinetId == null）
-    /// 仅需方法级 <see cref="DocumentAIPermissions.Documents.Default"/>。柜正交于 pipeline——不触发任何后续 Run、不发出口事件。
+    /// Reassigns the document's cabinet (#257). Symmetric with <see cref="UploadAsync"/> cabinet ownership validation:
+    /// assigning to a cabinet asserts <see cref="DocumentAIPermissions.Cabinets.Default"/> and validates that the cabinet exists in the current layer
+    /// (tenant isolation is enforced by the ambient IMultiTenant filter, so cross-tenant FindAsync returns null). Removing from a cabinet (CabinetId == null)
+    /// only needs method-level <see cref="DocumentAIPermissions.Documents.Default"/>. Cabinets are orthogonal to pipelines, so this triggers no later Run and emits no export event.
     /// </summary>
     [Authorize(DocumentAIPermissions.Documents.Default)]
     public virtual async Task<DocumentDto> UpdateCabinetAsync(Guid id, UpdateDocumentCabinetInput input)
@@ -672,16 +685,17 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
     }
 
     /// <summary>
-    /// Confirm 与 Reclassify 共享实现：按不可变 DocumentTypeId 解析类型后写入 ReviewDisposition=Confirmed（清 UnresolvedClassification 原因），
-    /// 发布 DocumentClassifiedEto（投射回可重命名 TypeCode 出口契约）让下游消费方重跑字段抽取。
+    /// Shared implementation for Confirm and Reclassify: resolves type by immutable DocumentTypeId, writes ReviewDisposition=Confirmed
+    /// (clearing UnresolvedClassification), and publishes DocumentClassifiedEto projected back to the renamable TypeCode export contract
+    /// so downstream consumers can rerun field extraction.
     /// </summary>
     protected virtual async Task<DocumentDto> ApplyManualClassificationAsync(Guid id, Guid documentTypeId)
     {
         var document = await _documentRepository.GetAsync(id, includeDetails: true);
 
-        // 类型校验责任在 AppService（不再走 manager 内部 EnsureRegisteredTypeCodeAsync）：
-        // 按不可变 Id（#207）解析，租户隔离交给 ABP IMultiTenant 全局过滤器精确单层匹配；
-        // 不存在则 fail-fast，避免写入"业务模块订阅者认不出的类型"。
+        // Type validation responsibility lives in AppService and no longer goes through manager-internal EnsureRegisteredTypeCodeAsync:
+        // resolve by immutable Id (#207), with tenant isolation delegated to ABP IMultiTenant global filters for exact single-layer matching.
+        // Missing type fails fast, avoiding writes of a type that business-module subscribers cannot recognize.
         var typeDef = await _documentTypeRepository.FindAsync(documentTypeId);
         if (typeDef == null)
         {
@@ -713,19 +727,19 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
         if (input.LifecycleStatus.HasValue)
             query = query.Where(x => x.LifecycleStatus == input.LifecycleStatus.Value);
 
-        // 类型过滤用已解析的内部 DocumentTypeId（#207）。
+        // Type filtering uses the resolved internal DocumentTypeId (#207).
         if (documentTypeId.HasValue)
             query = query.Where(x => x.DocumentTypeId == documentTypeId.Value);
 
         if (input.CabinetId.HasValue)
             query = query.Where(x => x.CabinetId == input.CabinetId.Value);
 
-        // 按人工审核处置阶段过滤（#284）。被拒绝的文档落 ReviewDisposition=Rejected，可显式查询。
+        // Filter by manual-review disposition phase (#284). Rejected documents have ReviewDisposition=Rejected and can be queried explicitly.
         if (input.ReviewDisposition.HasValue)
             query = query.Where(d => d.ReviewDisposition == input.ReviewDisposition.Value);
 
-        // 操作员审核队列（#284）：有任一未解决待审原因（分类未定 + 必填缺失，单队列）且未被拒绝
-        // ——已拒绝的文档操作员已处置过，不在待办队列（仍可按 ReviewDisposition=Rejected 单独查）。
+        // Operator review queue (#284): any unresolved review reason (unresolved classification + missing required fields, one queue) and not rejected.
+        // Rejected documents have already been handled by the operator, so they are not in the work queue; they can still be queried separately by ReviewDisposition=Rejected.
         if (input.HasReviewReasons == true)
             query = query.Where(d => d.ReviewReasons != DocumentReviewReasons.None
                                   && d.ReviewDisposition != DocumentReviewDisposition.Rejected);
@@ -743,27 +757,29 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
         };
     }
 
-    // ===== #207：Id → 外部 code/name 投影。内部存 DocumentTypeId / FieldDefinitionId，出口 DTO 仍输出 code/name；
-    // 穿透 soft-delete 让历史文档引用的已归档类型 / 字段也能解析（不引入 snapshot 字段，rename 透明反映当前值）。=====
+    // ===== #207: Id -> external code/name projection. Internally store DocumentTypeId / FieldDefinitionId, while export DTOs still output code/name.
+    // Traverse soft-delete so archived types / fields referenced by historical documents can still resolve. No snapshot fields are introduced;
+    // renames transparently reflect current values. =====
 
-    /// <summary>映射单个 Document → DocumentDto 并填充 DocumentTypeCode + ExtractedFields（Id → code/name）+ 提取完整性（#268）。</summary>
+    /// <summary>Maps one Document -> DocumentDto and fills DocumentTypeCode + ExtractedFields (Id -> code/name) + extraction integrity (#268).</summary>
     protected virtual async Task<DocumentDto> MapToDtoAsync(Document document)
     {
         var dto = ObjectMapper.Map<Document, DocumentDto>(document);
         var (typeCodes, fieldNames) = await ResolveReferenceMapsAsync(new[] { document });
         dto.DocumentTypeCode = ResolveTypeCode(document.DocumentTypeId, typeCodes);
         dto.ExtractedFields = AssembleExtractedFields(document.ExtractedFieldValues, fieldNames);
-        // #268：透出提取完整性质量信号（非 provenance）。null metadata（历史 / 数字版 / 未提取）按完整处理。
+        // #268: expose extraction integrity quality signal, not provenance. Null metadata (historical / digital-native / not extracted) is treated as complete.
         dto.ExtractionIsComplete = document.ExtractionMetadata?.IsComplete ?? true;
         dto.ExtractionIncompleteReason = document.ExtractionMetadata?.IncompleteReason;
-        // #284：审核轴——RequiresReview 派生 + 详情厚明细（含缺失必填字段名）。服务端算，客户端纯渲染。
-        // 统一判据（含 disposition）：已拒绝文档虽保留客观原因也不算"需关注"，明细同步置空，避免"已拒绝 + 待审"自相矛盾。
+        // #284: review axis: derived RequiresReview + thick detail entries including missing required field names. Server computes; client only renders.
+        // Unified predicate including disposition: rejected documents may retain objective reasons but do not count as "requires attention";
+        // details are cleared too, avoiding contradictory "rejected + pending review" presentation.
         dto.RequiresReview = ReviewReasonPolicy.RequiresAttention(document.ReviewReasons, document.ReviewDisposition);
         dto.ReviewReasonDetails = await BuildReviewReasonDetailsAsync(document);
         return dto;
     }
 
-    /// <summary>批量填充列表 DTO 的 DocumentTypeCode + ExtractedFields（分页后一次性解析两张映射表，无 N+1）。</summary>
+    /// <summary>Batch-fills list DTO DocumentTypeCode + ExtractedFields, resolving both mapping tables once after pagination, with no N+1.</summary>
     protected virtual async Task FillListReferencesAsync(
         IReadOnlyList<Document> documents, IReadOnlyList<DocumentListItemDto> dtos)
     {
@@ -777,18 +793,19 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
         {
             dtos[i].DocumentTypeCode = ResolveTypeCode(documents[i].DocumentTypeId, typeCodes);
             dtos[i].ExtractedFields = AssembleExtractedFields(documents[i].ExtractedFieldValues, fieldNames);
-            // #284：列表薄——只出 RequiresReview（badge 用），不组装明细（详情页才有，避免列表 N+1）。
+            // #284: thin list: expose only RequiresReview for badges and do not assemble details. Details are for the detail page to avoid list N+1.
             dtos[i].RequiresReview = ReviewReasonPolicy.RequiresAttention(documents[i].ReviewReasons, documents[i].ReviewDisposition);
         }
     }
 
     /// <summary>
-    /// 组装待审原因结构化明细（#284，仅详情页调用——详情厚）。每个 set 的原因位生成一条：IsBlocking 按 policy 填；
-    /// MissingRequiredFields 额外算缺失必填字段的 DisplayName。无未解决原因 → null。
+    /// Assembles structured review reason details (#284, detail page only: thick detail). Each set reason bit produces one item;
+    /// IsBlocking is filled from policy, and MissingRequiredFields additionally computes missing required field DisplayName values.
+    /// No unresolved reasons -> null.
     /// </summary>
     protected virtual async Task<List<ReviewReasonDetailDto>?> BuildReviewReasonDetailsAsync(Document document)
     {
-        // 与 RequiresReview 同源判据：无未解决原因 / 已拒绝（操作员已处置）→ 不组装明细。
+        // Same predicate source as RequiresReview: no unresolved reasons / rejected (operator already handled) -> do not assemble details.
         if (!ReviewReasonPolicy.RequiresAttention(document.ReviewReasons, document.ReviewDisposition))
         {
             return null;
@@ -807,8 +824,9 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
 
         if ((document.ReviewReasons & DocumentReviewReasons.MissingRequiredFields) != DocumentReviewReasons.None)
         {
-            // MRF 位与缺失字段名可能短暂不一致（in-flight 改 schema / 重抽未落）：字段名为空时跳过该明细，
-            // 不渲染"缺失必填：0 项"的空壳条目。MRF flag 本身仍由字段抽取阶段权威维护。
+            // The MRF bit and missing field names can briefly disagree (in-flight schema change / re-extraction not persisted yet).
+            // Skip this detail when field names are empty, instead of rendering an empty "missing required: 0 items" shell.
+            // The MRF flag itself is still authoritatively maintained by the field extraction phase.
             var missingFieldNames = await BuildMissingRequiredFieldNamesAsync(document);
             if (missingFieldNames.Count > 0)
             {
@@ -821,19 +839,22 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
             }
         }
 
-        // 全部原因位的明细都被跳过（如 MRF 唯一原因但字段名暂空）→ 返回 null 而非空数组，
-        // 与"无明细"语义统一（前端 reviewReasonDetails?.length 判定一致）。RequiresReview 仍由上游独立判据决定。
+        // If all reason-bit details were skipped (for example MRF is the only reason but field names are temporarily empty),
+        // return null rather than an empty array. This keeps "no details" semantics consistent with frontend reviewReasonDetails?.length checks.
+        // RequiresReview is still determined independently by the upstream predicate.
         return details.Count > 0 ? details : null;
     }
 
     /// <summary>
-    /// 缺失必填字段的 DisplayName（该类型当前 IsRequired 定义中未出现在已抽到值集合里的）。
+    /// DisplayName values for missing required fields: current IsRequired definitions for this type that are absent from the extracted value set.
     /// <para>
-    /// #284：这里<b>故意不复用</b> <see cref="ResolveReferenceMapsAsync"/>，二者在 soft-delete 轴上语义相反、键也不同——
-    /// <c>ResolveReferenceMaps</c> 用 <c>Disable&lt;ISoftDelete&gt;</c> 按<b>已抽值的 FieldDefinitionId</b> 查，为的是让历史文档
-    /// 引用的已归档字段仍能在出口解析出字段名（值不成孤儿）；而本方法要找的是「当前仍必填却<b>缺失</b>的字段」，必须只看
-    /// <b>active</b> 定义、按 <b>DocumentTypeId</b> 全量查（缺失项天然不在 by-id 映射里）。已软删的字段不再必填，绝不能误报为待补录。
-    /// 本方法仅详情页单文档调用一次（非列表、非 N+1），无合并的性能动机。
+    /// #284: this method intentionally does <b>not</b> reuse <see cref="ResolveReferenceMapsAsync"/>. They have opposite soft-delete semantics and different keys.
+    /// <c>ResolveReferenceMaps</c> uses <c>Disable&lt;ISoftDelete&gt;</c> and looks up by <b>FieldDefinitionId of extracted values</b>
+    /// so archived fields referenced by historical documents can still resolve to field names at export time, preventing orphaned values.
+    /// This method looks for fields that are "currently still required but <b>missing</b>", so it must read only <b>active</b> definitions
+    /// and query all definitions by <b>DocumentTypeId</b>; missing items are naturally absent from by-id maps.
+    /// Soft-deleted fields are no longer required and must never be reported as pending entry.
+    /// This method is called once for a single document on the detail page, not in lists and not as N+1, so there is no performance reason to merge it.
     /// </para>
     /// </summary>
     protected virtual async Task<List<string>> BuildMissingRequiredFieldNamesAsync(Document document)
@@ -852,10 +873,11 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
     }
 
     /// <summary>
-    /// 一次性解析这批文档涉及的全部 DocumentTypeId → TypeCode 与 FieldDefinitionId → (Name, DataType, AllowMultiple) 映射。
-    /// 穿透 soft-delete（已归档类型 / 字段仍可解析）；IMultiTenant 仍按 ambient 租户隔离（这批文档同属一层）。
-    /// DataType 随 Name 一并取出（#208：字段类型由 FieldDefinition 决定、不在字段值行持久化），供 <see cref="DocumentExtractedField.ToJsonElement"/> 重建出口 JSON；
-    /// AllowMultiple（#212）决定该字段在出口渲染为 JSON 数组（多值）还是标量（单值）。
+    /// Resolves all DocumentTypeId -> TypeCode and FieldDefinitionId -> (Name, DataType, AllowMultiple) mappings for this document batch at once.
+    /// Traverses soft-delete so archived types / fields still resolve; IMultiTenant still isolates by ambient tenant because this batch belongs to one layer.
+    /// DataType is loaded with Name (#208: field type is determined by FieldDefinition and is not persisted on field value rows) so
+    /// <see cref="DocumentExtractedField.ToJsonElement"/> can reconstruct export JSON. AllowMultiple (#212) decides whether the field renders as a JSON array
+    /// (multi-value) or scalar (single-value) in exports.
     /// </summary>
     protected virtual async Task<(Dictionary<Guid, string> TypeCodes, Dictionary<Guid, (string Name, FieldDataType DataType, bool AllowMultiple)> Fields)>
         ResolveReferenceMapsAsync(IReadOnlyCollection<Document> documents)
@@ -908,13 +930,14 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
             return null;
         }
 
-        // 按 FieldDefinitionId 分组（#212）：多值文本字段一字段多行（Order 0,1,2…），单值一字段一行（Order 0）。
-        // 容量按 values.Count 上界预留（去重后 ≤ 该值），省去多字段文档的字典扩容。
+        // Group by FieldDefinitionId (#212): multi-value text fields have multiple rows per field (Order 0,1,2...), single-value fields have one row (Order 0).
+        // Preallocate capacity by values.Count as an upper bound (deduplicated count <= this), avoiding dictionary growth for documents with many fields.
         var dict = new Dictionary<string, JsonElement>(values.Count, StringComparer.Ordinal);
         foreach (var group in values.GroupBy(v => v.FieldDefinitionId))
         {
-            // FK RESTRICT 保证被引用字段定义不会被硬删；软删的由穿透 join 解析。极端缺失则跳过（不吐半成品 key）。
-            // 出口 JSON 类型由 FieldDefinition.DataType 决定（#208：不在字段值行持久化）。
+            // FK RESTRICT ensures referenced field definitions cannot be hard-deleted; soft-deleted definitions are resolved by the traversing join.
+            // In extreme missing cases, skip instead of emitting a half-baked key. Export JSON type is determined by FieldDefinition.DataType
+            // (#208: not persisted on field value rows).
             if (!fieldDefs.TryGetValue(group.Key, out var def))
             {
                 continue;
@@ -922,8 +945,8 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
 
             if (def.AllowMultiple)
             {
-                // 多值字段（#212）：按 Order 升序渲染为 JSON 数组（出口 wire-shape：string[]）——与写入路径
-                // （UpdateExtractedFieldsAsync / 抽取均收数组）对称，让 operator 读—改—存往返一致。
+                // Multi-value field (#212): render as a JSON array ordered by Order ascending (export wire-shape: string[]).
+                // This is symmetric with write paths (UpdateExtractedFieldsAsync / extraction both accept arrays), keeping operator read-edit-save round trips consistent.
                 var array = group
                     .OrderBy(v => v.Order)
                     .Select(v => v.ToJsonElement(def.DataType))
@@ -932,7 +955,7 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
             }
             else
             {
-                // 单值字段：取 Order 最小行渲染标量（MinBy 单趟取最小，不全排序），wire-shape 与既有完全一致。
+                // Single-value field: render the row with the smallest Order as a scalar. MinBy finds it in one pass without full sorting, preserving the existing wire-shape.
                 var primary = group.MinBy(v => v.Order)!;
                 dict[def.Name] = primary.ToJsonElement(def.DataType);
             }
@@ -941,7 +964,7 @@ public class DocumentAppService : DocumentAIAppService, IDocumentAppService
         return dict.Count > 0 ? dict : null;
     }
 
-    /// <summary>解析单个文档的 DocumentTypeId → TypeCode（穿透 soft-delete），用于出口 ETO 携带的 DocumentTypeCode。</summary>
+    /// <summary>Resolves one document's DocumentTypeId -> TypeCode, traversing soft-delete, for DocumentTypeCode carried by export ETOs.</summary>
     protected virtual async Task<string?> ResolveTypeCodeAsync(Guid? documentTypeId)
     {
         if (!documentTypeId.HasValue)

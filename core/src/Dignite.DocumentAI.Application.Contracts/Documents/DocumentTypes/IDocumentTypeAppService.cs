@@ -6,14 +6,15 @@ using Volo.Abp.Application.Services;
 namespace Dignite.DocumentAI.Documents.DocumentTypes;
 
 /// <summary>
-/// 文档类型管理（字段架构 v2）。按所属层精确匹配单层、不做 Host ∪ Tenant union；
-/// 两层都通过此 AppService CRUD 自管——不存在 seed contributor / Module 启动注册路径。
+/// Document type management (field architecture v2). Matches exactly one owning layer and does not
+/// union Host and Tenant. Both layers self-manage through this AppService CRUD surface; there is no
+/// seed contributor / module-startup registration path.
 /// </summary>
 public interface IDocumentTypeAppService : IApplicationService
 {
     Task<List<DocumentTypeDto>> GetVisibleAsync();
 
-    /// <summary>调用方所在层已软删除的文档类型列表（回收站视图）。</summary>
+    /// <summary>Soft-deleted document types in the caller's layer (recycle-bin view).</summary>
     Task<List<DocumentTypeDto>> GetDeletedAsync();
 
     Task<DocumentTypeDto> CreateAsync(CreateDocumentTypeDto input);
@@ -23,9 +24,11 @@ public interface IDocumentTypeAppService : IApplicationService
     Task DeleteAsync(Guid id);
 
     /// <summary>
-    /// 恢复软删除的文档类型，并级联恢复同 (TenantId, TypeCode) 下随之被软删除的字段定义。
-    /// 若同代码已有活跃记录则抛 <see cref="DocumentAIErrorCodes.DocumentType.RestoreConflict"/>；
-    /// 个别字段恢复时与活跃字段冲突的会被跳过（防御性，正常流程下不会发生）。
+    /// Restores a soft-deleted document type and cascades restore to field definitions under the same
+    /// (TenantId, TypeCode) that were soft-deleted with it. Throws
+    /// <see cref="DocumentAIErrorCodes.DocumentType.RestoreConflict"/> when an active record with the
+    /// same code already exists. Individual fields that conflict with active fields during restore are
+    /// skipped defensively, although normal flows should not hit this.
     /// </summary>
     Task<DocumentTypeDto> RestoreAsync(Guid id);
 }

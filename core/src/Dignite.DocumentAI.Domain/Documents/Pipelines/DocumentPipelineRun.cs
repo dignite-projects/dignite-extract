@@ -6,52 +6,58 @@ using Volo.Abp.MultiTenancy;
 namespace Dignite.DocumentAI.Documents.Pipelines;
 
 /// <summary>
-/// 文档流水线执行记录。
-/// 一条 Document + PipelineCode + AttemptNumber 唯一确定一次执行。
-/// 同一流水线可重试，每次重试产生一条新记录，AttemptNumber 自增。
+/// Document pipeline execution record.
+/// One Document + PipelineCode + AttemptNumber uniquely identifies one execution.
+/// The same pipeline can be retried; each retry creates a new record and increments AttemptNumber.
 ///
-/// 实现 <see cref="IHasExtraProperties"/>：各 pipeline 的产物（分类候选、chunk 数量等）
-/// 以 key-value 形式写入 ExtraProperties，避免为每种 pipeline 扩列。
+/// Implements <see cref="IHasExtraProperties"/>: pipeline outputs such as classification candidates
+/// or chunk counts are written to ExtraProperties as key-value data, avoiding new columns for each
+/// pipeline type.
 /// <para>
-/// 拆于 #216：从 <see cref="Document"/> 聚合 child entity 升为独立 <see cref="AggregateRoot{Guid}"/>，
-/// 通过 <see cref="IDocumentPipelineRunRepository"/> 操作；与 <see cref="Document"/> 通过 <see cref="DocumentId"/>
-/// reference-by-id 关联（无导航属性），DB 层仍保留 FK + CASCADE（Document 硬删时一并清除）。
-/// 仍由 <see cref="DocumentPipelineRunManager"/> 编排状态流转——<c>internal</c> 修饰符把 Mark 方法和构造器
-/// 钳在 Domain assembly 内，禁止任何外部直接 new / 改状态。
+/// Split in #216 from a <see cref="Document"/> aggregate child entity into an independent
+/// <see cref="AggregateRoot{Guid}"/> operated through <see cref="IDocumentPipelineRunRepository"/>.
+/// It is associated with <see cref="Document"/> by reference-by-id through <see cref="DocumentId"/>
+/// with no navigation property, while the DB still keeps FK + CASCADE so hard-deleting Document also
+/// removes runs. State transitions are still orchestrated by
+/// <see cref="DocumentPipelineRunManager"/>. <c>internal</c> constructors and Mark methods keep direct
+/// creation / status mutation inside the Domain assembly.
 /// </para>
 /// </summary>
 public class DocumentPipelineRun : AggregateRoot<Guid>, IMultiTenant
 {
-    // ExtraProperties / IHasExtraProperties 由 AggregateRoot<TKey> 基类提供，无需再次声明（拆于 #216）。
+    // ExtraProperties / IHasExtraProperties are provided by the AggregateRoot<TKey> base class and do
+    // not need to be redeclared after the #216 split.
 
     public virtual Guid? TenantId { get; private set; }
 
-    /// <summary>所属文档 ID</summary>
+    /// <summary>Owning document ID.</summary>
     public virtual Guid DocumentId { get; private set; }
 
     /// <summary>
-    /// 流水线标识。核心常量见 <see cref="DocumentAIPipelines"/>；
-    /// 业务模块可注册自定义值，建议前缀 "{moduleCode}."。
+    /// Pipeline identifier. Core constants are in <see cref="DocumentAIPipelines"/>.
+    /// Business modules may register custom values; the recommended prefix is "{moduleCode}.".
     /// </summary>
     public virtual string PipelineCode { get; private set; } = default!;
 
     public virtual PipelineRunStatus Status { get; private set; }
 
-    /// <summary>第几次尝试（从 1 开始，重试递增）</summary>
+    /// <summary>Attempt number, starting at 1 and incrementing on retry.</summary>
     public virtual int AttemptNumber { get; private set; }
 
     public virtual DateTime StartedAt { get; private set; }
     public virtual DateTime? CompletedAt { get; private set; }
 
     /// <summary>
-    /// 状态描述。失败时为异常信息、跳过时为跳过原因；成功时通常为 null。
-    /// 仅用于诊断/审计展示，不承载业务语义（业务结果由相关聚合根字段表达）。
+    /// Status description. On failure this is the exception message; on skip this is the skip reason;
+    /// on success it is usually null. Used only for diagnostics / audit display and carries no
+    /// business semantics, which are expressed by fields on the relevant aggregate roots.
     /// </summary>
     public virtual string? StatusMessage { get; private set; }
 
     protected DocumentPipelineRun()
     {
-        // AggregateRoot<TKey> 基类构造已初始化 ExtraProperties + SetDefaultsForExtraProperties。
+        // AggregateRoot<TKey> base construction already initializes ExtraProperties +
+        // SetDefaultsForExtraProperties.
     }
 
     internal DocumentPipelineRun(

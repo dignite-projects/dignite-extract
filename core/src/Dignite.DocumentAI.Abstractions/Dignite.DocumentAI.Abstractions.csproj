@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Volo.Abp.Core 提供 DI 标记接口；EventBus.Abstractions 提供 [EventName] 属性（用于集成事件 ETO） -->
+    <!-- Volo.Abp.Core provides DI marker interfaces; EventBus.Abstractions provides [EventName] for integration-event ETOs. -->
     <PackageReference Include="Volo.Abp.Core" />
     <PackageReference Include="Volo.Abp.EventBus.Abstractions" />
   </ItemGroup>

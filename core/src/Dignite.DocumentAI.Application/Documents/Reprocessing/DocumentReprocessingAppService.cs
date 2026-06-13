@@ -13,12 +13,15 @@ using Volo.Abp.Domain.Entities;
 namespace Dignite.DocumentAI.Documents.Reprocessing;
 
 /// <summary>
-/// 存量文档批量重处理（#289）。人工触发 + 预览 + 链式分发 + 单篇幂等执行底座的应用层入口。
-/// 触发只 enqueue 一个 dispatcher（点按钮立即返回），dispatcher 在后台 keyset 分页枚举范围、分批入队单篇任务。
+/// Application-layer entry point for bulk reprocessing of existing documents (#289), covering manual
+/// trigger + preview + chained dispatch + idempotent per-document execution. Triggering enqueues only
+/// one dispatcher and returns immediately; the dispatcher keyset-paginates the scope in the
+/// background and enqueues per-document jobs in batches.
 /// <para>
-/// 安全：admin 级 <see cref="DocumentAIPermissions.Documents.Reprocessing"/> 权限；范围 count / 枚举均经 ABP
-/// <c>IMultiTenant</c> 全局过滤器按 <see cref="ApplicationService.CurrentTenant"/> 自动隔离（不手写 TenantId 谓词，
-/// dispatcher 据传入的 <c>CurrentTenant.Id</c> 还原 ambient 层）。
+/// Security: admin-level <see cref="DocumentAIPermissions.Documents.Reprocessing"/> permission. Scope
+/// count / enumeration is automatically isolated by the ABP <c>IMultiTenant</c> global filter using
+/// <see cref="ApplicationService.CurrentTenant"/>; no handwritten TenantId predicates are used. The
+/// dispatcher restores the ambient layer from the passed <c>CurrentTenant.Id</c>.
 /// </para>
 /// </summary>
 public class DocumentReprocessingAppService : DocumentAIAppService, IDocumentReprocessingAppService
@@ -114,14 +117,15 @@ public class DocumentReprocessingAppService : DocumentAIAppService, IDocumentRep
         return new ReprocessingStartResultDto { EstimatedDocumentCount = count };
     }
 
-    /// <summary>把范围 DTO 翻译成仓储范围查询三元组，并校验 OnlyCurrentType 的类型存在于当前层。</summary>
+    /// <summary>Translates the scope DTO into the repository range-query triple and validates that OnlyCurrentType exists in the current layer.</summary>
     protected virtual async Task<(Guid? TypeId, DocumentReviewReasons? WithReason, bool ExcludeConfirmed)> ResolveScopeAsync(
         ReclassificationScopeInput input)
     {
         switch (input.Scope)
         {
             case ReclassificationScope.OnlyCurrentType:
-                // DocumentTypeId 必填由 DTO IValidatableObject 保证；此处校验其存在于当前层。
+                // DocumentTypeId requiredness is guaranteed by DTO IValidatableObject; validate here
+                // that it exists in the current layer.
                 await EnsureTypeInCurrentLayerAsync(input.DocumentTypeId!.Value);
                 return (input.DocumentTypeId, null, !input.IncludeManuallyConfirmed);
 
@@ -129,8 +133,9 @@ public class DocumentReprocessingAppService : DocumentAIAppService, IDocumentRep
                 return (null, null, !input.IncludeManuallyConfirmed);
 
             case ReclassificationScope.PendingReviewQueue:
-                // 待审核队列 = 分类未定（#284 两轴：UnresolvedClassification 原因，取代旧 PendingReview）。
-                // 这些文档本就无已确认类型，IncludeManuallyConfirmed 无意义。
+                // Pending review queue = unresolved classification (#284 two-axis model:
+                // UnresolvedClassification reason, replacing old PendingReview). These documents have
+                // no confirmed type, so IncludeManuallyConfirmed is meaningless.
                 return (null, DocumentReviewReasons.UnresolvedClassification, false);
 
             default:
@@ -138,10 +143,10 @@ public class DocumentReprocessingAppService : DocumentAIAppService, IDocumentRep
         }
     }
 
-    /// <summary>校验文档类型存在于当前 ambient 层（跨层 / 不存在 → <see cref="EntityNotFoundException"/>）。</summary>
+    /// <summary>Validates that the document type exists in the current ambient layer; cross-layer / nonexistent IDs throw <see cref="EntityNotFoundException"/>.</summary>
     protected virtual async Task EnsureTypeInCurrentLayerAsync(Guid documentTypeId)
     {
-        // FindAsync 经 ambient IMultiTenant 过滤器隔离——跨层 id 返回 null。
+        // FindAsync is isolated by the ambient IMultiTenant filter, so cross-layer IDs return null.
         _ = await _documentTypeRepository.FindAsync(documentTypeId)
             ?? throw new EntityNotFoundException(typeof(DocumentType), documentTypeId);
     }

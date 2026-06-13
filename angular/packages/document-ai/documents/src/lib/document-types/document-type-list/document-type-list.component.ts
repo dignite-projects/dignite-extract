@@ -95,7 +95,7 @@ export class DocumentTypeListComponent implements OnInit {
     `${DOCUMENT_AI_PERMISSIONS.DocumentTypes.Create} || ${DOCUMENT_AI_PERMISSIONS.DocumentTypes.Update} || ${DOCUMENT_AI_PERMISSIONS.DocumentTypes.Delete}`,
   );
 
-  // 批量重处理入口（#289）——admin 级、独立于类型 CRUD 权限。
+  // Bulk reprocessing entry points (#289): admin-level and independent from type CRUD permissions.
   readonly canReextractFields = this.permissionService.getGrantedPolicy(
     DOCUMENT_AI_PERMISSIONS.Documents.Reprocessing.FieldExtraction,
   );
@@ -103,7 +103,7 @@ export class DocumentTypeListComponent implements OnInit {
     DOCUMENT_AI_PERMISSIONS.Documents.Reprocessing.Reclassification,
   );
 
-  // 打开的重处理模态目标（null = 关闭）。
+  // Target for the open reprocessing modal; null means closed.
   reextractTarget = signal<DocumentTypeDto | null>(null);
   reclassifyTarget = signal<DocumentTypeDto | null>(null);
 
@@ -130,7 +130,8 @@ export class DocumentTypeListComponent implements OnInit {
       ],
     ],
     displayName: ['', [Validators.required, Validators.maxLength(MAX_DISPLAY_NAME_LENGTH)]],
-    // 可选分类辅助说明（#262）：仅帮助 AI 识别类型，不参与文档内容加工。
+    // Optional classification helper description (#262): only helps AI identify the type and does not
+    // participate in document content processing.
     description: ['', [Validators.maxLength(MAX_DESCRIPTION_LENGTH)]],
     confidenceThreshold: [0.7, [Validators.required, Validators.min(0), Validators.max(1)]],
     priority: [0, [Validators.required]],
@@ -184,7 +185,8 @@ export class DocumentTypeListComponent implements OnInit {
     this.load();
   }
 
-  // LLM 不可用 / 未翻译时的本地回退：取与现有类型代码不冲突的最小 type_{n}。
+  // Local fallback when the LLM is unavailable or does not translate: choose the smallest type_{n} that
+  // does not conflict with existing type codes.
   private nextTypeCode(): string {
     const existing = new Set(this.allTypes().map(t => t.typeCode));
     let i = 1;
@@ -234,15 +236,15 @@ export class DocumentTypeListComponent implements OnInit {
   openCreate(): void {
     this.form.reset({ typeCode: '', displayName: '', description: '', confidenceThreshold: 0.7, priority: 0 });
     this.form.controls.typeCode.enable();
-    // 必须在 form.reset()/enable() 之后调用：二者触发的 valueChanges 会误标"手动编辑"，
-    // reset() 清掉该标记并复位建议状态（含 spinner）。
+    // Must be called after form.reset()/enable(): both trigger valueChanges that can be misread as
+    // "manual edit". reset() clears that marker and resets suggestion state, including the spinner.
     this.slugHandle?.reset();
     this.editing.set('create');
   }
 
   openEdit(type: DocumentTypeDto): void {
-    // 先 disable 再 reset：让 slug 自动建议在编辑态 reset 期间识别为非自动接管，
-    // 不会把既有 typeCode 当"过期键"清空（见 wireSlugSuggestion 注释）。
+    // Disable before reset so slug auto-suggestion sees edit-mode reset as not automatically managed and
+    // does not clear the existing typeCode as a stale key. See wireSlugSuggestion comments.
     this.form.controls.typeCode.disable();
     this.form.reset({
       typeCode: type.typeCode,
@@ -256,14 +258,18 @@ export class DocumentTypeListComponent implements OnInit {
     this.editing.set(type);
   }
 
-  // 显示名失焦 → 触发 slug 自动建议（实测反馈：从停顿防抖改为失焦触发）。
+  // Display-name blur triggers slug auto-suggestion. Measured feedback changed this from pause debounce
+  // to blur trigger.
   onDisplayNameBlur(): void {
     this.slugHandle?.notifyDisplayNameBlur();
   }
 
-  // 遮罩关闭防误触：只有当 mousedown 与 click 都发生在遮罩本身（而非对话框内）时才关闭。
-  // 否则在输入框里拖选文本、松手落在遮罩区时，浏览器会在遮罩上触发 click（mousedown/mouseup 的最近公共祖先），
-  // 误关弹窗并丢失已填内容。记录 mousedown 起点是判定"这一次点击是否真的从遮罩发起"的唯一可靠方式。
+  // Backdrop close guard: close only when both mousedown and click occur on the backdrop itself, not
+  // inside the dialog.
+  // Otherwise, dragging selected text inside an input and releasing over the backdrop can make the
+  // browser fire click on the backdrop, the nearest common ancestor of mousedown/mouseup, closing the
+  // modal and losing entered content. Recording the mousedown origin is the only reliable way to know
+  // whether this click truly started from the backdrop.
   private backdropMouseDownOnSelf = false;
 
   onBackdropMouseDown(event: MouseEvent): void {

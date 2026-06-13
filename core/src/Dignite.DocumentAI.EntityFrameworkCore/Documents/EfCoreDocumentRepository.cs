@@ -66,10 +66,11 @@ public class EfCoreDocumentRepository
 
     public virtual async Task HardDeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        // 只穿透软删（物理删已软删的行），保留 IMultiTenant 租户边界——绝不 IgnoreQueryFilters()
-        // （会连同 IMultiTenant 一起关掉，使无应用层租户校验的未来调用方跨租户硬删，#220）。
-        // ExecuteDeleteAsync 依赖 DB 级 ON DELETE CASCADE（DocumentExtractedField / DocumentPipelineRun
-        // 两个 child FK 均 OnDelete(Cascade)），收窄过滤器不影响级联。
+        // Traverse only soft delete to physically delete already-soft-deleted rows, while preserving the IMultiTenant tenant boundary.
+        // Never use IgnoreQueryFilters(), because it would also disable IMultiTenant and allow future callers without app-layer tenant validation
+        // to hard-delete across tenants (#220).
+        // ExecuteDeleteAsync relies on DB-level ON DELETE CASCADE. Both child FKs, DocumentExtractedField and DocumentPipelineRun,
+        // use OnDelete(Cascade), and the narrowed filter does not affect cascading.
         using (DataFilter.Disable<ISoftDelete>())
         {
             var dbContext = await GetDbContextAsync();
@@ -84,9 +85,9 @@ public class EfCoreDocumentRepository
         IReadOnlyList<DocumentFieldQuery> fieldQueries,
         CancellationToken cancellationToken = default)
     {
-        // 调用层（DocumentAppService.GetListAsync）仅在有字段过滤器时调用，且已校验 documentTypeCode 必填、
-        // 字段数量 / 长度 / 至少一个值（DTO + AppService 层，loud AbpValidationException），并已把 documentTypeCode /
-        // fieldName 解析为内部 Id。此处防御空入参。
+        // Caller layer (DocumentAppService.GetListAsync) calls this only when field filters exist, and has already validated required documentTypeCode,
+        // field count / length / at least one value (DTO + AppService layer, loud AbpValidationException), then resolved documentTypeCode /
+        // fieldName to internal Ids. This guard defends direct empty input.
         if (fieldQueries is not { Count: > 0 })
         {
             return new List<Guid>();
@@ -94,11 +95,12 @@ public class EfCoreDocumentRepository
 
         var dbSet = await GetDbSetAsync();
 
-        // 字段值过滤从 Documents 聚合根起手——租户（IMultiTenant）+ 软删（ISoftDelete）全局过滤器按 ambient 状态
-        // 自动施加（Issue #206：不再禁用过滤器、不手写 TenantId 谓词）。documentTypeId 锚定单一类型
-        // （字段值离开类型无确定含义）。每个字段过滤编译成一个 ExtractedFieldValues.Any（EXISTS，按 FieldDefinitionId
-        // 匹配 child），多字段之间 AND（结构化检索惯例：不同字段互相收窄）。普通列比较（= / 范围），跨任意关系型
-        // 数据库可移植——不再依赖 SQL Server JSON_VALUE / TRY_CONVERT / raw SQL，注入面归零。
+        // Field value filtering starts from the Documents aggregate root. Tenant (IMultiTenant) + soft-delete (ISoftDelete)
+        // global filters are applied automatically by ambient state (Issue #206: no filter disabling and no hand-written TenantId predicate).
+        // documentTypeId anchors one type because field values have no stable meaning outside a type.
+        // Each field filter compiles to ExtractedFieldValues.Any (EXISTS, matching the child by FieldDefinitionId), and multiple fields are ANDed
+        // following structured retrieval convention: different fields narrow each other. Ordinary column comparisons (= / range) are portable
+        // across relational databases, no longer relying on SQL Server JSON_VALUE / TRY_CONVERT / raw SQL, eliminating the injection surface.
         var query = dbSet.Where(d => d.DocumentTypeId == documentTypeId);
 
         foreach (var fieldQuery in fieldQueries)
@@ -116,9 +118,10 @@ public class EfCoreDocumentRepository
         Guid fieldDefinitionId,
         CancellationToken cancellationToken = default)
     {
-        // 直接扫 child DbSet（不经聚合根）——查"是否还有任何字段值引用此 FieldDefinition"。
-        // 不受父 Document 的 ISoftDelete 约束（child 无 ISoftDelete，自身 DbSet 不施加父过滤器）：软删文档的字段行
-        // 仍在、恢复后复活，故一并计入。IMultiTenant 仍按 ambient 租户隔离（字段定义在当前层）。
+        // Scan the child DbSet directly, bypassing the aggregate root, to answer "does any field value still reference this FieldDefinition".
+        // This is not constrained by the parent Document's ISoftDelete filter because the child has no ISoftDelete and its DbSet does not apply parent filters.
+        // Field rows for soft-deleted documents still exist and revive on restore, so count them too. IMultiTenant still isolates by ambient tenant,
+        // matching field definitions in the current layer.
         var dbContext = await GetDbContextAsync();
         return await dbContext.Set<DocumentExtractedField>()
             .AnyAsync(f => f.FieldDefinitionId == fieldDefinitionId, GetCancellationToken(cancellationToken));
@@ -146,7 +149,7 @@ public class EfCoreDocumentRepository
         var dbSet = await GetDbSetAsync();
         var query = ApplyReprocessingScope(dbSet, documentTypeId, withReason, excludeManuallyConfirmed);
 
-        // keyset 游标：WHERE Id > afterId ORDER BY Id Take(N)，走主键索引、O(batch)，优于 OFFSET 深翻页。
+        // Keyset cursor: WHERE Id > afterId ORDER BY Id Take(N). Uses the primary-key index and is O(batch), better than deep OFFSET pagination.
         if (afterId.HasValue)
         {
             var cursor = afterId.Value;
@@ -157,14 +160,15 @@ public class EfCoreDocumentRepository
             .OrderBy(d => d.Id)
             .Take(maxCount)
             .AsNoTracking()
-            .Select(d => d.Id)   // 绝不读整行（尤其 Markdown），防 OOM
+            .Select(d => d.Id)   // Never read full rows, especially Markdown, to avoid OOM.
             .ToListAsync(GetCancellationToken(cancellationToken));
     }
 
     /// <summary>
-    /// 批量重处理（#289）的共享范围谓词。<c>IMultiTenant</c> + <c>ISoftDelete</c> 全局过滤器按 ambient 状态
-    /// 自动施加（回收站 / 跨租户文档不入范围）。恒要求已完成文本提取（<c>Markdown</c> 非空——重分类 / 字段抽取
-    /// 都需要文本载荷，never-extracted 文档无从重处理）。其余条件见 <see cref="IDocumentRepository.CountForReprocessingAsync"/>。
+    /// Shared scope predicate for bulk reprocessing (#289). <c>IMultiTenant</c> + <c>ISoftDelete</c> global filters are applied
+    /// automatically by ambient state, so trash / cross-tenant documents are out of scope. Always requires completed text extraction
+    /// (<c>Markdown</c> non-empty) because reclassification / field extraction both need text payload and never-extracted documents cannot be reprocessed.
+    /// See <see cref="IDocumentRepository.CountForReprocessingAsync"/> for the remaining conditions.
     /// </summary>
     private static IQueryable<Document> ApplyReprocessingScope(
         IQueryable<Document> query,
@@ -182,14 +186,14 @@ public class EfCoreDocumentRepository
 
         if (withReason.HasValue && withReason.Value != DocumentReviewReasons.None)
         {
-            // #284 两轴模型：待审原因是 [Flags] 位集。「含该原因」= 按位与非零。
+            // #284 two-axis model: review reasons are a [Flags] bitset. "Contains this reason" = bitwise AND non-zero.
             var reason = withReason.Value;
             query = query.Where(d => (d.ReviewReasons & reason) != DocumentReviewReasons.None);
         }
 
         if (excludeManuallyConfirmed)
         {
-            // 保护人工确认：排除操作员已确认（Confirmed 处置）的文档。
+            // Protect manual confirmation: exclude documents with operator-confirmed (Confirmed disposition).
             query = query.Where(d => d.ReviewDisposition != DocumentReviewDisposition.Confirmed);
         }
 
@@ -197,26 +201,26 @@ public class EfCoreDocumentRepository
     }
 
     /// <summary>
-    /// 把单字段值查询编译成一个对 <see cref="Document.ExtractedFieldValues"/> 的 <c>Any</c>（EXISTS）谓词，
-    /// 按 <see cref="FieldDataType"/> 分派到对应类型化列做普通比较：
+    /// Compiles one field value query into an <c>Any</c> (EXISTS) predicate over <see cref="Document.ExtractedFieldValues"/>,
+    /// dispatching by <see cref="FieldDataType"/> to ordinary comparisons on the corresponding typed column:
     /// <list type="bullet">
-    ///   <item><c>Text</c> / <c>Boolean</c>：仅等值（红线：永不 LIKE）；传区间 → 抛
-    ///   <see cref="DocumentAIErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange"/>（给 AI 客户端可纠正信号）。</item>
-    ///   <item><c>Number</c> / <c>Date</c> / <c>DateTime</c>：等值或区间（含界）。
-    ///   入参无法解析为声明类型 → 抛 <see cref="DocumentAIErrorCodes.ExtractedField.InvalidValue"/>（loud，不静默空）。</item>
+    ///   <item><c>Text</c> / <c>Boolean</c>: equality only (red line: never LIKE); passing a range throws
+    ///   <see cref="DocumentAIErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange"/> as a correctable signal for AI clients.</item>
+    ///   <item><c>Number</c> / <c>Date</c> / <c>DateTime</c>: equality or inclusive range.
+    ///   Inputs that cannot parse as the declared type throw <see cref="DocumentAIErrorCodes.ExtractedField.InvalidValue"/> loudly, not silent empty.</item>
     /// </list>
-    /// 等值统一表达为退化区间 <c>[v, v]</c>，与区间共用同一谓词形，消除等值 / 区间分支重复。
+    /// Equality is uniformly represented as a degenerate interval <c>[v, v]</c>, sharing the same predicate shape as ranges and removing equality/range branch duplication.
     /// </summary>
     private static IQueryable<Document> ApplyFieldValueFilter(
         IQueryable<Document> query,
         DocumentFieldQuery fieldQuery)
     {
-        // 内部按 FieldDefinitionId 匹配 child 行（#207，不再按字段名字符串）。FieldName 仅用于错误信息（可读诊断）。
+        // Internally match child rows by FieldDefinitionId (#207, no longer by field name string). FieldName is only for readable diagnostics in error messages.
         var fieldDefinitionId = fieldQuery.FieldDefinitionId;
         var name = fieldQuery.FieldName;
 
-        // fail-closed：等值 / 区间至少给其一。全空是残缺查询——loud fail（与 DocumentFieldQuery 契约一致），
-        // 绝不退化成「该类型全捞」。调用层 DTO 已校验，此处是直连仓储的纵深防御。
+        // Fail-closed: provide at least equality or range. Completely empty means malformed query and loud-fails, matching the DocumentFieldQuery contract.
+        // It must never degrade into "fetch everything of this type". Caller-layer DTO already validates this; this is defense in depth for direct repository calls.
         if (fieldQuery.FieldValue == null && fieldQuery.FieldValueMin == null && fieldQuery.FieldValueMax == null)
         {
             throw InvalidValue(name, fieldQuery.FieldDataType);
@@ -237,8 +241,9 @@ public class EfCoreDocumentRepository
                     .Any(f => f.FieldDefinitionId == fieldDefinitionId && f.TextValue == textValue));
 
             case FieldDataType.LongText:
-                // 长文本字段落 nvarchar(max) 列、不进索引——红线：永不作查询条件（等值 / 区间 / LIKE 全禁）。
-                // 长内容查询属下游 RAG 的事（CLAUDE.md OUT of scope）。loud fail 给 AI 客户端可纠正信号，绝不退化成全捞。
+                // LongText fields live in nvarchar(max) columns and are not indexed. Red line: never use them as query conditions
+                // (equality / range / LIKE are all forbidden). Long-content search belongs to downstream RAG (CLAUDE.md OUT of scope).
+                // Loud-fail as a correctable signal for AI clients, never degrade into fetching everything.
                 throw NotQueryable(name, fieldQuery.FieldDataType);
 
             case FieldDataType.Boolean:
@@ -286,8 +291,8 @@ public class EfCoreDocumentRepository
     }
 
     /// <summary>
-    /// 把字段查询解析成类型化的 <c>(min, max)</c> 闭区间界：等值退化为 <c>[v, v]</c>；区间取 min / max
-    /// （任一可空）。任一入参解析失败抛 <see cref="DocumentAIErrorCodes.ExtractedField.InvalidValue"/>（loud）。
+    /// Parses a field query into typed inclusive <c>(min, max)</c> bounds: equality degenerates to <c>[v, v]</c>;
+    /// range uses min / max, each nullable. Any input parse failure throws <see cref="DocumentAIErrorCodes.ExtractedField.InvalidValue"/> loudly.
     /// </summary>
     private static (T? Min, T? Max) ParseRange<T>(
         DocumentFieldQuery fieldQuery, Func<string, T?> parse)
@@ -323,8 +328,9 @@ public class EfCoreDocumentRepository
             ? DateOnly.FromDateTime(v)
             : null;
 
-    // 只认无偏移的 wall-clock ISO 串（与存储侧 datetime2 / DocumentExtractedField.SetValue 一致）。带偏移 / Z 的串
-    // 会被 .NET 换算到服务器本地时区、与存储的 wall-clock 语义不一致——判脏入参返回 null（调用方 loud fail）。
+    // Accept only offset-free wall-clock ISO strings, consistent with storage-side datetime2 / DocumentExtractedField.SetValue.
+    // Strings with offset / Z would be converted by .NET to server local time and break wall-clock storage semantics,
+    // so treat them as dirty input and return null; the caller loud-fails.
     private static DateTime? ParseDateTime(string s)
         => DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var v)
             && v.Kind == DateTimeKind.Unspecified

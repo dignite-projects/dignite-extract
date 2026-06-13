@@ -15,8 +15,10 @@ public static class DocumentAIEntityFrameworkCoreQueryableExtensions
             return queryable;
         }
 
-        // 仅剩 ExtractedFieldValues 一个集合 child（#206）；单一 Include，无笛卡尔积风险，AsSplitQuery 已不必要。
-        // PipelineRuns 自 #216 拆为独立聚合根后不在此 eager-load——查询走 IDocumentPipelineRunRepository。
+        // Only one collection child remains, ExtractedFieldValues (#206). A single Include has no
+        // Cartesian-product risk, so AsSplitQuery is no longer needed.
+        // PipelineRuns are no longer eager-loaded here since #216 split them into an independent aggregate
+        // root; queries go through IDocumentPipelineRunRepository.
         return queryable.Include(x => x.ExtractedFieldValues);
     }
 }

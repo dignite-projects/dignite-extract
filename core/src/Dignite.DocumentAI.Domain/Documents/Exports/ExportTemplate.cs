@@ -9,10 +9,13 @@ using Volo.Abp.MultiTenancy;
 namespace Dignite.DocumentAI.Documents.Exports;
 
 /// <summary>
-/// 导出模板聚合根。唯一约束 <c>(TenantId, Name)</c>；跨层同名是合法的两行。
+/// Export template aggregate root. Unique constraint: <c>(TenantId, Name)</c>. Same names across
+/// layers are valid separate rows.
 /// <para>
-/// 导出引擎是通道的"文件出口"——只做字段投影 + 重命名 + 排序 + 序列化，<strong>零业务转换</strong>
-/// （不算税 / 不做科目映射 / 不做汇率换算）。业务格式靠租户拼模板组合，DocumentAI 不预置行业模板。
+/// The export engine is the channel's "file outbound surface": it only performs field projection +
+/// renaming + ordering + serialization, with <strong>zero business transformation</strong>. It does
+/// not calculate tax, map accounts, or convert exchange rates. Tenants compose templates for business
+/// formats; DocumentAI ships no industry templates.
 /// </para>
 /// </summary>
 public class ExportTemplate : FullAuditedAggregateRoot<Guid>, IMultiTenant
@@ -24,12 +27,15 @@ public class ExportTemplate : FullAuditedAggregateRoot<Guid>, IMultiTenant
     public virtual ExportFormat Format { get; private set; }
 
     /// <summary>
-    /// 限定适用的文档类型（引用 <see cref="DocumentType"/>.Id，#207）。导出列收敛为 ExtractedField-only 后模板必然类型绑定
-    /// （列引用该类型下的字段定义），故此关联<b>必填</b>。存在性由 AppService 校验，被引用类型硬删由 FK RESTRICT 阻止。
+    /// Document type this template applies to, referencing <see cref="DocumentType"/>.Id (#207). After
+    /// export columns were narrowed to ExtractedField-only, templates are necessarily type-bound
+    /// because columns reference field definitions under that type, so this association is
+    /// <b>required</b>. Existence is validated by AppService, and hard delete of referenced types is
+    /// blocked by FK RESTRICT.
     /// </summary>
     public virtual Guid DocumentTypeId { get; private set; }
 
-    /// <summary>列定义（按 Order 升序）。整体序列化进大文本列（#206 后由 native json 降级），无单列查询需求，不开子表。</summary>
+    /// <summary>Column definitions ordered by Order ascending. Serialized as a whole into a large text column (degraded from native json after #206); no per-column query need, so no child table.</summary>
     public virtual IReadOnlyList<ExportColumn> Columns { get; private set; } = new List<ExportColumn>();
 
     protected ExportTemplate() { }

@@ -4,15 +4,20 @@ using Volo.Abp.EventBus;
 namespace Dignite.DocumentAI.Abstractions.Documents;
 
 /// <summary>
-/// 全流水线完成 + 文档拿到已确认类型后发布——下游消费方的"可信信号"。
-/// 生命周期跃迁到 <c>Ready</c> 即隐含通过分类 / 人工审核闸门：
+/// Published after the full pipeline completes and the document has a confirmed type: the "trusted
+/// signal" for downstream consumers. A lifecycle transition to <c>Ready</c> implicitly means the
+/// classification / manual-review gate passed:
 /// <list type="bullet">
-///   <item>自动分类置信度 ≥ 类型门槛 → 自动到 Ready 发布</item>
-///   <item>分类置信度不足 / 无合适类型 → 文档进待人工审核队列；操作员确认类型后才发布</item>
+///   <item>Automatic classification confidence meets the type threshold: automatically reaches Ready
+///   and publishes.</item>
+///   <item>Classification confidence is insufficient / no suitable type: the document enters the
+///   manual review queue and publishes only after an operator confirms the type.</item>
 /// </list>
-/// 大多数下游业务消费方应订阅此事件而非早期阶段事件（DocumentUploaded/OCRCompleted/...）。
+/// Most downstream business consumers should subscribe to this event rather than early-stage events
+/// (DocumentUploaded/OCRCompleted/...).
 /// <para>
-/// 不变契约（issue #188）：所有属性 <c>init</c>-only；<see cref="EventTime"/> 标 <c>required</c>。
+/// Stable contract (issue #188): all properties are <c>init</c>-only; <see cref="EventTime"/> is
+/// marked <c>required</c>.
 /// </para>
 /// </summary>
 [EventName("DocumentAI.Document.Ready")]
@@ -25,8 +30,9 @@ public class DocumentReadyEto
     public Guid? TenantId { get; init; }
 
     /// <summary>
-    /// 事件发生时间——DocumentAI 在 publish 时填入 <see cref="Volo.Abp.Timing.IClock.Now"/>。
-    /// 下游消费方按 <c>(DocumentId, EventType, EventTime)</c> 做幂等（at-least-once 投递）。
+    /// Event occurrence time. DocumentAI fills it with <see cref="Volo.Abp.Timing.IClock.Now"/> at
+    /// publish time. Downstream consumers can use <c>(DocumentId, EventType, EventTime)</c> for
+    /// idempotence under at-least-once delivery.
     /// </summary>
     public required DateTime EventTime { get; init; }
 

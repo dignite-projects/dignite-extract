@@ -11,8 +11,9 @@ using Xunit;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// <see cref="CabinetSuggestionWorkflow"/> 的纯解析 / 边界单元测试（无 DI、无真实 LLM）——
-/// 验证 1-based 编号 → 候选 <see cref="Cabinet.Id"/> 映射、弃选（null / 0 / 越界）、置信度 clamp、截断边界。
+/// Pure parsing / boundary unit tests for <see cref="CabinetSuggestionWorkflow"/> with no DI and no real
+/// LLM. Verifies 1-based number to candidate <see cref="Cabinet.Id"/> mapping, abstain cases
+/// (null / 0 / out-of-range), confidence clamp, and truncation boundary.
 /// </summary>
 public class CabinetSuggestionWorkflow_Tests
 {
@@ -84,9 +85,9 @@ public class CabinetSuggestionWorkflow_Tests
     }
 
     [Theory]
-    [InlineData(0)]    // LLM 返回 0（非 1-based）
-    [InlineData(-1)]   // 负数
-    [InlineData(3)]    // 超过候选数（2 个候选）
+    [InlineData(0)]    // LLM returned 0, not 1-based.
+    [InlineData(-1)]   // Negative number.
+    [InlineData(3)]    // Exceeds candidate count; there are 2 candidates.
     [InlineData(99)]
     public void Abstains_When_Index_Out_Of_Range(int index)
     {
@@ -111,7 +112,8 @@ public class CabinetSuggestionWorkflow_Tests
     [Fact]
     public void Truncate_Does_Not_Split_Surrogate_Pair()
     {
-        // "A" + 😀 (代理对) + "B"；maxChars=2 落在代理对中间 → 丢弃整个高位代理，得 "A"。
+        // "A" + 😀 (surrogate pair) + "B"; maxChars=2 lands inside the surrogate pair, so the entire high
+        // surrogate is dropped and the result is "A".
         var result = CabinetSuggestionWorkflow.TruncateAtCharBoundary("A\U0001F600B", 2);
 
         result.ShouldBe("A");
@@ -158,7 +160,8 @@ public class CabinetSuggestionWorkflow_Tests
     [Fact]
     public void FormatCandidates_Omits_Description_When_Absent()
     {
-        // 空描述（Candidates helper 不设描述）→ 只给名称，不追加 " — 描述"。
+        // Empty description, because the Candidates helper does not set one, emits only the name and does
+        // not append " - description".
         var result = CabinetSuggestionWorkflow.FormatCandidates(Candidates("法务"));
 
         result.ShouldNotContain(" — ");

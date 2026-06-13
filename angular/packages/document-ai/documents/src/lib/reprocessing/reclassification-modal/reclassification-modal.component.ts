@@ -22,12 +22,17 @@ import {
 } from '@dignite/document-ai';
 
 /**
- * 批量「重新分类」预览 + 触发模态（#289 场景一）——级联 + 破坏性、重警告。
- * 范围由人按意图选（仅该类型 / 全量·跨类型 / 待审核队列），系统不预设默认；默认保护人工确认
- * （覆盖人工成果须显式 opt-in）。范围 / 开关变化即时刷新受影响文档数预览。
+ * Bulk reclassification preview and trigger modal (#289 scenario 1): cascading, destructive, and
+ * strongly warned.
+ * Humans choose the scope by intent (only this type / all documents across types / pending review
+ * queue); the system does not prescribe a default. Manual confirmations are protected by default, and
+ * overwriting manual results requires an explicit opt-in. Scope and toggle changes refresh the affected
+ * document count preview immediately.
  *
- * 从某文档类型菜单打开时传 [documentTypeId]，默认范围为「仅该类型」；可切到全量 / 待审核队列。
- * 无类型上下文（全局入口）打开时「仅该类型」不可选，默认「全量·跨类型」。
+ * When opened from a document type menu, [documentTypeId] is passed and the default scope is only that
+ * type; users can switch to all documents or the pending review queue.
+ * When opened without type context, such as a global entry, only-this-type is unavailable and the
+ * default is all documents across types.
  */
 @Component({
   selector: 'lib-reclassification-modal',
@@ -63,7 +68,8 @@ export class ReclassificationModalComponent implements OnInit {
     return !!this.documentTypeId;
   }
 
-  // 待审核队列范围下「保护人工确认」开关无意义（待审文档本就未确认）。
+  // The protect-manual-confirmations toggle is meaningless for the pending review queue, because pending
+  // review documents are not confirmed yet.
   get includeToggleApplies(): boolean {
     return this.form.controls.scope.value !== ReclassificationScope.PendingReviewQueue;
   }
@@ -71,14 +77,15 @@ export class ReclassificationModalComponent implements OnInit {
   private readonly previewTrigger = new Subject<void>();
 
   ngOnInit(): void {
-    // 无类型上下文：默认「全量·跨类型」（「仅该类型」不可选）。
+    // No type context: default to all documents across types; only-this-type is unavailable.
     this.form.controls.scope.setValue(
       this.hasType ? ReclassificationScope.OnlyCurrentType : ReclassificationScope.AllDocuments,
       { emitEvent: false },
     );
     this.applyIncludeTogglePolicy();
 
-    // switchMap：范围 / 开关快速切换时取消在途预览请求，避免乱序响应把过期 scope 的计数显示出来（review round 1）。
+    // switchMap cancels in-flight preview requests when scope or toggles change quickly, preventing
+    // out-of-order responses from showing counts for stale scopes (review round 1).
     this.previewTrigger
       .pipe(
         switchMap(() => {
@@ -110,8 +117,9 @@ export class ReclassificationModalComponent implements OnInit {
     this.previewTrigger.next();
   }
 
-  // 待审核队列范围下「保护人工确认」开关无意义——用 reactive-forms 的 disable/enable 驱动（不用模板 [disabled]，
-  // 避免 Angular 对 formControlName 上 [disabled] 的 dev 警告，并让 FormControl.disabled 状态真正同步）。
+  // The protect-manual-confirmations toggle is meaningless for the pending review queue. Drive this with
+  // reactive-forms disable/enable instead of template [disabled], avoiding Angular dev warnings on
+  // formControlName [disabled] and keeping FormControl.disabled truly synchronized.
   private applyIncludeTogglePolicy(): void {
     const control = this.form.controls.includeManuallyConfirmed;
     if (this.includeToggleApplies) {
@@ -121,7 +129,8 @@ export class ReclassificationModalComponent implements OnInit {
     }
   }
 
-  // 预览失败后的显式重试（与字段重抽模态 UX 对齐）；switchMap 会取消任何在途请求。
+  // Explicit retry after preview failure, aligned with the field re-extraction modal UX; switchMap
+  // cancels any in-flight request.
   refreshPreview(): void {
     this.previewTrigger.next();
   }

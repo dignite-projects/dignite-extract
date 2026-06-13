@@ -9,7 +9,7 @@ public class DocumentAITextExtractionElBrunoMarkItDownModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        // 注册 ElBruno.MarkItDotNet 内部 ConverterRegistry / MarkdownService / 内置 12 个 Converter
+        // Registers ElBruno.MarkItDotNet's internal ConverterRegistry, MarkdownService, and 12 built-in converters.
         context.Services.AddMarkItDotNet();
     }
 }

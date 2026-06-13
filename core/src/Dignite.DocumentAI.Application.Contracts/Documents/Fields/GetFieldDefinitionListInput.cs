@@ -2,20 +2,25 @@ using System;
 
 namespace Dignite.DocumentAI.Documents.Fields;
 
-/// <summary>字段定义列表查询输入（统一 <c>GetListAsync</c>）。匹配当前层、不跨层。</summary>
+/// <summary>Field definition list query input for unified <c>GetListAsync</c>. Matches the current layer and never crosses layers.</summary>
 public class GetFieldDefinitionListInput
 {
     /// <summary>
-    /// 目标文档类型不可变 Id（#207：内部按 Id 关联，TypeCode 可重命名故不作引用键）。
-    /// 留空（<c>null</c>）= 不按类型过滤，单次返回当前层全部字段定义——供 MCP <c>list_document_types</c>
-    /// 等批量读取方一次取全、内存按 DocumentTypeId 分组，消 per-type N+1 查询。
-    /// 权限门与按类型查询完全一致（不放大可见范围——逐类型枚举本就能拿到同一集合）。
+    /// Target document type immutable Id (#207: internal associations use Id because TypeCode can be
+    /// renamed and is not a reference key). Empty (<c>null</c>) means no type filter and returns all
+    /// field definitions in the current layer in one call. This supports bulk readers such as MCP
+    /// <c>list_document_types</c>, which fetch all definitions once and group by DocumentTypeId in
+    /// memory, eliminating per-type N+1 queries. Permission gate is exactly the same as type-filtered
+    /// queries, so visible scope is not widened; enumerating per type could already obtain the same
+    /// set.
     /// </summary>
     public Guid? DocumentTypeId { get; set; }
 
     /// <summary>
-    /// <c>true</c> 仅返回回收站（已软删除）字段，按 <c>DeletionTime</c> 倒序；
-    /// <c>false</c>（默认）返回活跃字段，按 <c>DisplayOrder</c>（批量时先按 <c>DocumentTypeId</c>）。两视图互斥。
+    /// <c>true</c> returns only recycle-bin (soft-deleted) fields ordered by descending
+    /// <c>DeletionTime</c>. <c>false</c> (default) returns active fields ordered by
+    /// <c>DisplayOrder</c>, or by <c>DocumentTypeId</c> first in bulk mode. The two views are mutually
+    /// exclusive.
     /// </summary>
     public bool OnlyDeleted { get; set; }
 }

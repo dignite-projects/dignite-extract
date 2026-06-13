@@ -6,12 +6,13 @@ using Dignite.DocumentAI.Documents.Fields;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 单个 ExtractedFields 字段过滤条件（<see cref="GetDocumentListInput.FieldFilters"/> 列表元素，
-/// 同时是 MCP 检索 tool 的 LLM-facing 入参元素）。一次检索可传多个，它们之间取 <c>AND</c>（全部满足），
-/// 且都锚定在同一个 <c>documentTypeCode</c> 内。字段声明类型由服务端从 <c>(documentTypeCode, Name)</c> 的
-/// <c>FieldDefinition</c> 解析——调用方不传类型。
-/// <see cref="Value"/>（等值）与 <see cref="Min"/> / <see cref="Max"/>（区间）至少给其一；
-/// 区间只对 Number / Date / DateTime 字段有意义，Text / Boolean 只认等值。
+/// Single ExtractedFields field filter: one element of <see cref="GetDocumentListInput.FieldFilters"/>
+/// and also the LLM-facing input element for the MCP search tool. A search can pass multiple filters;
+/// they are combined with <c>AND</c> and all must be anchored to the same <c>documentTypeCode</c>. The
+/// server resolves the declared field type from <c>(documentTypeCode, Name)</c> and the
+/// <c>FieldDefinition</c>; callers do not pass a type. At least one of <see cref="Value"/> (equality)
+/// or <see cref="Min"/> / <see cref="Max"/> (range) must be provided. Ranges are meaningful only for
+/// Number / Date / DateTime fields; Text / Boolean support equality only.
 /// </summary>
 public class DocumentFieldFilter : IValidatableObject
 {
@@ -36,8 +37,9 @@ public class DocumentFieldFilter : IValidatableObject
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        // 至少给一个值（等值或区间下/上界），否则是残缺过滤器——loud fail（AbpValidationException），
-        // 不静默退化成"该类型全捞"。
+        // Require at least one value: equality, lower bound, or upper bound. Otherwise this is an
+        // incomplete filter and must fail loudly through AbpValidationException instead of silently
+        // degrading to "return all documents of this type".
         if (Value == null && Min == null && Max == null)
         {
             yield return new ValidationResult(

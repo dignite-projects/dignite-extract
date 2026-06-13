@@ -4,43 +4,53 @@ using Volo.Abp.Domain.Values;
 namespace Dignite.DocumentAI.Documents;
 
 /// <summary>
-/// 文档文本提取的 <b>provenance 元数据</b>（持久化值对象，#210）。整体序列化进 <c>Document.ExtractionMetadata</c> 的
-/// JSON 列（<c>AbpJsonValueConverter</c> + 手写 <c>ValueComparer</c>，套路同 <c>ExportTemplate.Columns</c>）。
+/// <b>Provenance metadata</b> for document text extraction (persisted value object, #210).
+/// Serialized as a whole into the <c>Document.ExtractionMetadata</c> JSON column
+/// (<c>AbpJsonValueConverter</c> plus a handwritten <c>ValueComparer</c>, following the
+/// <c>ExportTemplate.Columns</c> pattern).
 /// <para>
-/// 类名前缀 <c>Text</c> 消歧：field extraction（字段抽取）vs text extraction（文本提取）。
+/// The <c>Text</c> class-name prefix disambiguates field extraction from text extraction.
 /// </para>
 /// <para>
-/// 承载：胜出 provider 名 + 原生 payload 归档清单（<see cref="NativePayloadManifest"/>，
-/// 可空——未归档时 null）。原始 bbox / cell 等空间信号<b>留 blob</b>，本类只存 manifest。
+/// Carries the winning provider name plus the native payload archive manifest
+/// (<see cref="NativePayloadManifest"/>, nullable when nothing was archived). Raw spatial signals such
+/// as bbox / cell data <b>stay in blob storage</b>; this class stores only the manifest.
 /// </para>
 /// <para>
-/// get-only 属性 + 唯一带参构造让 System.Text.Json 反序列化复用同一构造（参数名匹配属性名），套路同 <c>ExportColumn</c>。
+/// Get-only properties plus a single parameterized constructor let System.Text.Json reuse this
+/// constructor during deserialization, with parameter names matching property names. This follows the
+/// same pattern as <c>ExportColumn</c>.
 /// </para>
 /// </summary>
 public class DocumentTextExtractionMetadata : ValueObject
 {
     /// <summary>
-    /// 胜出 provider 的家族 / 名称（如 <c>PaddleOCR</c> / <c>AzureDocumentIntelligence</c> / <c>ElBruno.MarkItDotNet</c>）；未知时 null。
+    /// Winning provider family / name, such as <c>PaddleOCR</c>,
+    /// <c>AzureDocumentIntelligence</c>, or <c>ElBruno.MarkItDotNet</c>; null when unknown.
     /// <para>
-    /// <b>不是解析入口。</b>将来解析归档的原生 payload 时，认 <see cref="NativePayloadManifest.SchemaName"/>（带到 model 粒度，
-    /// 如 <c>PaddleOCR/PP-StructureV3</c>）——同一 provider 不同 model 的结构不同（PP-StructureV3 页级、bbox 占位
-    /// vs PP-OCRv4 行级），仅凭家族名会选错解析器。本字段只是 payload 缺席（数字版 / 归档失败，manifest 为 null）时
-    /// 唯一的"谁产出了 Markdown"兜底溯源。
+    /// <b>Not a parser entry point.</b> When archived native payload is parsed later, choose by
+    /// <see cref="NativePayloadManifest.SchemaName"/>, which reaches model granularity such as
+    /// <c>PaddleOCR/PP-StructureV3</c>. Different models under the same provider can have different
+    /// structures, for example PP-StructureV3 page-level bbox placeholders versus PP-OCRv4 line-level
+    /// output, so a family name alone can select the wrong parser. This field is only the fallback
+    /// "who produced the Markdown" provenance when payload is absent, such as digital-native input or
+    /// archive failure with a null manifest.
     /// </para>
     /// </summary>
     public string? ProviderName { get; }
 
-    /// <summary>原生 payload 归档清单；未归档（无 payload / 超限 / 写失败）时为 <c>null</c>。</summary>
+    /// <summary>Native payload archive manifest; <c>null</c> when not archived (no payload / over limit / write failed).</summary>
     public NativePayloadManifest? NativePayloadManifest { get; }
 
     /// <summary>
-    /// 本次文本提取是否<b>完整</b>（#268）。<c>true</c> = 已捕获全部内容；<c>false</c> = 已知有缺失
-    /// （OCR 输出被截断 / 命中重复守卫被丢弃 / 多页 PDF 有页未能转写）。历史记录（构造时未给）默认 <c>true</c>，
-    /// 视为完整——它们先于本信号产生。
+    /// Whether this text extraction is <b>complete</b> (#268). <c>true</c> means all content was
+    /// captured; <c>false</c> means content is known to be missing, such as truncated OCR output,
+    /// duplicate-guard drops, or pages in a multi-page PDF that could not be transcribed. Historical
+    /// records created before this signal default to <c>true</c> and are treated as complete.
     /// </summary>
     public bool IsComplete { get; }
 
-    /// <summary>不完整时的简短诊断说明；完整时为 <c>null</c>。</summary>
+    /// <summary>Short diagnostic when incomplete; <c>null</c> when complete.</summary>
     public string? IncompleteReason { get; }
 
     public DocumentTextExtractionMetadata(
@@ -57,13 +67,16 @@ public class DocumentTextExtractionMetadata : ValueObject
 
     protected override IEnumerable<object> GetAtomicValues()
     {
-        // ABP 的 ValueEquals 用 SequenceEqual + 默认比较器，对 atomic 走 object.Equals——嵌套 ValueObject
-        // 不会递归 ValueEquals（默认比较器退化为引用相等）。故这里把 NativePayloadManifest 的各原子值<b>展平</b>
-        // 进父序列，让父级 ValueEquals 真正结构化深比较；可空成员统一取空串/0 占位避免 null atomic + 区分
-        // "manifest 缺席" 与 "manifest 各字段恰为默认值"（前缀 NULL sentinel）。
+        // ABP ValueEquals uses SequenceEqual + the default comparer, which applies object.Equals to
+        // atomics. Nested ValueObject values do not recursively use ValueEquals; the default comparer
+        // degrades to reference equality. Flatten NativePayloadManifest atomics into the parent
+        // sequence so parent-level ValueEquals performs real structural deep comparison. Nullable
+        // members use empty string / 0 placeholders to avoid null atomics, and a NULL sentinel
+        // distinguishes "manifest absent" from "manifest fields all have default values".
         yield return ProviderName ?? string.Empty;
 
-        // 完整性原子值在 manifest 的 yield break 之前产出——否则 manifest 为 null 时会被跳过，漏入相等性比较。
+        // Emit completeness atomics before the manifest yield break; otherwise they would be skipped
+        // when manifest is null and would not participate in equality.
         yield return IsComplete;
         yield return IncompleteReason ?? string.Empty;
 

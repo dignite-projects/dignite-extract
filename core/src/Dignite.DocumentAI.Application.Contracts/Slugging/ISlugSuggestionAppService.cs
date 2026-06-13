@@ -5,14 +5,16 @@ using Volo.Abp.Application.Services;
 namespace Dignite.DocumentAI.Slugging;
 
 /// <summary>
-/// 显示名 → 机器标识（slug）建议（issue #190）。
+/// Suggests a display-name-to-machine-identifier slug (issue #190).
 /// <para>
-/// 抹平 admin "填两个字段（显示名 + 机器键）录入成本高"的痛点：admin 只填显示名（作为标签传入），
-/// 前端调本服务用 LLM 出英译候选预填 <see cref="FieldDefinition.Name"/> /
-/// <see cref="DocumentType.TypeCode"/>，admin 可手动覆盖。
+/// Reduces the admin burden of filling two fields, display name plus machine key: the admin enters only
+/// the display name as the label, and the frontend calls this service so the LLM can produce an English
+/// candidate for pre-filling <see cref="FieldDefinition.Name"/> or <see cref="DocumentType.TypeCode"/>.
+/// The admin may override it manually.
 /// </para>
 /// <para>
-/// FieldDefinition 与 DocumentType 两个创建表单**共用**此单一端点——slug 格式同时满足两套白名单。
+/// The FieldDefinition and DocumentType creation forms share this single endpoint, and the slug format
+/// satisfies both allowlists.
 /// </para>
 /// </summary>
 public interface ISlugSuggestionAppService : IApplicationService

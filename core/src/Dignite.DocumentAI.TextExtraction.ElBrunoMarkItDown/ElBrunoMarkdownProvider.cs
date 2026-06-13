@@ -38,11 +38,11 @@ public class ElBrunoMarkdownProvider : IMarkdownTextProvider, ITransientDependen
         {
             Logger.LogDebug("ElBruno conversion failed for {Extension}: {Error}",
                 context.FileExtension, conversion.ErrorMessage);
-            // 仍自报 provider 身份（失败结果也记 provenance）。
+            // Still report provider identity so failed results keep provenance.
             return new TextExtractionResult { ProviderName = ProviderIdentifier };
         }
 
-        // 纯 text→Markdown，无空间模型 → NativePayload 留 null。
+        // Pure text-to-Markdown conversion has no spatial model, so NativePayload stays null.
         return new TextExtractionResult
         {
             Markdown = conversion.Markdown ?? string.Empty,
