@@ -1,4 +1,8 @@
 node_modules/
 dist/
+# Exception: apps/host/Dockerfile.local copies the host-prebuilt SPA from dist/host/browser,
+# so it must stay in the build context. The rest of dist/ stays excluded; the multi-stage
+# Dockerfile rebuilds the SPA inside the image and does not rely on this path.
+!dist/host/browser
 .nx/
 .angular/
