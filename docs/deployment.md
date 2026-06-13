@@ -131,13 +131,8 @@ When deploying to a new environment, upgrading critical dependencies, or shippin
 
 ## Database portability
 
-SQL Server is the host baseline, and one schema detail is **not** portable as-is: the filtered unique indexes that enforce per-layer uniqueness.
+SQL Server is the host baseline, but the schema is **provider-agnostic**: it emits no provider-specific index DDL, so it applies cleanly on SQL Server, PostgreSQL, and other relational providers with no per-provider re-evaluation.
 
-`DocumentTypes (TenantId, TypeCode)`, `FieldDefinitions (TenantId, DocumentTypeId, Name)`, `ExportTemplates (TenantId, Name)`, and `Cabinets (TenantId, Name)` are all declared as **unique indexes with a `HasFilter("IsDeleted = 0")` predicate**. The Host layer stores its rows with `TenantId IS NULL`, and these indexes rely on SQL Server's semantics that a **unique index treats NULLs as equal** — which is exactly what makes "one `host.contract` row in the Host layer" enforceable.
+Layer-scoped uniqueness — `DocumentTypes (TenantId, TypeCode)`, `FieldDefinitions (TenantId, DocumentTypeId, Name)`, `ExportTemplates (TenantId, Name)`, and `Cabinets (TenantId, Name)` — is enforced in the application/domain layer by dedicated domain services (`DocumentTypeManager` / `FieldDefinitionManager` / `ExportTemplateManager` / `CabinetManager`), **not** by a soft-delete-filtered DB unique index (#304). This is the ABP-idiomatic approach and removes the previous portability blockers: the non-portable `HasFilter("IsDeleted = 0")` literal, and the reliance on SQL Server's "a unique index treats NULLs as equal" semantics for Host-layer rows (`TenantId IS NULL`) — semantics PostgreSQL does not share by default (`NULLS DISTINCT`). Layer scoping is delegated to ABP's `IMultiTenant` global filter, so the same key is allowed across the Host and tenant layers while a duplicate within one layer is rejected.
 
-Two things break on other providers:
-
-- **PostgreSQL** defaults to `NULLS DISTINCT` for unique indexes, so multiple Host rows with the same `TypeCode` / `Name` would be allowed — Host-layer uniqueness silently stops being enforced. (PostgreSQL 15+ can opt back in with `NULLS NOT DISTINCT`, which EF Core does not emit by default.)
-- The `HasFilter("IsDeleted = 0")` literal is SQL-Server syntax and is not portable verbatim (quoting and boolean handling differ).
-
-If you ever retarget the core modules at a non-SQL-Server provider, re-evaluate these four indexes (filtered-unique semantics + the filter literal) before trusting the two-layer uniqueness guarantee. For the SQL Server baseline shipped here, the behavior is correct.
+The accepted tradeoff is a TOCTOU race window in the SELECT-then-INSERT check: two concurrent creates of the same key could both pass the check and both insert. This is acceptable for these four low-frequency, admin-managed configuration entities. If a high-concurrency write path is ever added for them, revisit (serializable unit of work / advisory lock / a portable normalized-column unique index).

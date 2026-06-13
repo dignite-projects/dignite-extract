@@ -29,17 +29,20 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
     private readonly IDocumentRepository _documentRepository;
     private readonly IDocumentTypeRepository _documentTypeRepository;
     private readonly IFieldDefinitionRepository _fieldDefinitionRepository;
+    private readonly ExportTemplateManager _exportTemplateManager;
 
     public ExportTemplateAppService(
         IExportTemplateRepository templateRepository,
         IDocumentRepository documentRepository,
         IDocumentTypeRepository documentTypeRepository,
-        IFieldDefinitionRepository fieldDefinitionRepository)
+        IFieldDefinitionRepository fieldDefinitionRepository,
+        ExportTemplateManager exportTemplateManager)
     {
         _templateRepository = templateRepository;
         _documentRepository = documentRepository;
         _documentTypeRepository = documentTypeRepository;
         _fieldDefinitionRepository = fieldDefinitionRepository;
+        _exportTemplateManager = exportTemplateManager;
     }
 
     public virtual async Task<ExportTemplateDto> GetAsync(Guid id)
@@ -62,7 +65,7 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
     [Authorize(DocumentAIPermissions.Documents.Templates.Create)]
     public virtual async Task<ExportTemplateDto> CreateAsync(CreateExportTemplateDto input)
     {
-        await EnsureTemplateNameAvailableAsync(input.Name);
+        await _exportTemplateManager.CheckNameAvailableAsync(input.Name);
         await EnsureDocumentTypeExistsAsync(input.DocumentTypeId);
         var columns = await MapColumnsAsync(input.Columns, input.DocumentTypeId);
 
@@ -86,7 +89,7 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
         // Check duplicates only when renaming. If the name did not change, no lookup is needed and self-match false positives are avoided.
         if (!string.Equals(entity.Name, input.Name, StringComparison.Ordinal))
         {
-            await EnsureTemplateNameAvailableAsync(input.Name);
+            await _exportTemplateManager.CheckNameAvailableAsync(input.Name);
         }
 
         await EnsureDocumentTypeExistsAsync(input.DocumentTypeId);
@@ -237,16 +240,6 @@ public class ExportTemplateAppService : DocumentAIAppService, IExportTemplateApp
         }
 
         return entity;
-    }
-
-    protected virtual async Task EnsureTemplateNameAvailableAsync(string name)
-    {
-        var existing = await _templateRepository.FindByNameAsync(name);
-        if (existing != null)
-        {
-            throw new BusinessException(DocumentAIErrorCodes.Export.TemplateNameAlreadyExists)
-                .WithData("Name", name);
-        }
     }
 
     /// <summary>Asserts that the document type constrained by the template exists in the current layer (#207 required, associated by immutable Id); missing loud-fails.</summary>

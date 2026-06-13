@@ -212,13 +212,12 @@ public static class DocumentAIDbContextModelCreatingExtensions
             b.Property(x => x.ConfidenceThreshold).IsRequired();
             b.Property(x => x.Priority).IsRequired();
 
-            // Unique constraint: (TenantId, TypeCode); the same TypeCode may be reused across layers. Soft-delete filtered.
-            // Portability: Host-layer uniqueness (TenantId IS NULL) relies on SQL Server's "unique index treats NULL as equal" behavior.
-            // PostgreSQL's default NULLS DISTINCT would silently invalidate this constraint for Host rows, and HasFilter literals are not cross-DB.
-            // Re-review when migrating providers. This applies to all four (TenantId, ...) + IsDeleted filtered unique indexes in this file.
-            b.HasIndex(x => new { x.TenantId, x.TypeCode })
-                .IsUnique()
-                .HasFilter("IsDeleted = 0");
+            // Layer-scoped uniqueness on (TenantId, TypeCode) is enforced by DocumentTypeManager in the application/domain
+            // layer (#304), not by a DB index. The previous soft-delete-filtered unique index relied on SQL Server's
+            // "unique index treats NULL as equal" semantics for Host rows (TenantId IS NULL) plus a HasFilter("IsDeleted = 0")
+            // literal — neither portable across providers (PostgreSQL defaults to NULLS DISTINCT, which would silently drop the
+            // Host-layer guarantee). Dropping it makes the schema cross-DB by construction; the accepted tradeoff is a TOCTOU
+            // race on these low-frequency admin-config entities. The same applies to FieldDefinition / ExportTemplate / Cabinet below.
         });
 
         builder.Entity<FieldDefinition>(b =>
@@ -238,12 +237,10 @@ public static class DocumentAIDbContextModelCreatingExtensions
                 .HasForeignKey(x => x.DocumentTypeId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Unique constraint: field names are unique per tenant and per type (#207: by DocumentTypeId). Soft-delete filtered.
-            b.HasIndex(x => new { x.TenantId, x.DocumentTypeId, x.Name })
-                .IsUnique()
-                .HasFilter("IsDeleted = 0");
+            // Layer-scoped uniqueness on (TenantId, DocumentTypeId, Name) is enforced by FieldDefinitionManager in the
+            // application/domain layer (#304), not by a DB index — see the DocumentType block above for the cross-DB rationale.
 
-            // Unfiltered index: supports listing fields by (tenant layer, type) in trash-bin paths (DataFilter.Disable<ISoftDelete>), where the unique index with IsDeleted=0 filter is unusable.
+            // Non-unique index: supports listing fields by (tenant layer, type), including trash-bin paths (DataFilter.Disable<ISoftDelete>).
             b.HasIndex(x => new { x.TenantId, x.DocumentTypeId });
         });
 
@@ -269,10 +266,8 @@ public static class DocumentAIDbContextModelCreatingExtensions
                 .HasForeignKey(x => x.DocumentTypeId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Unique constraint: (TenantId, Name); the same name across layers is allowed as two rows. Soft-delete filtered.
-            b.HasIndex(x => new { x.TenantId, x.Name })
-                .IsUnique()
-                .HasFilter("IsDeleted = 0");
+            // Layer-scoped uniqueness on (TenantId, Name) is enforced by ExportTemplateManager in the application/domain
+            // layer (#304), not by a DB index — see the DocumentType block above for the cross-DB rationale.
         });
 
         builder.Entity<Cabinet>(b =>
@@ -284,10 +279,9 @@ public static class DocumentAIDbContextModelCreatingExtensions
             // Nullable: cabinet selection helper description (#273), NULL = no description.
             b.Property(x => x.Description).HasMaxLength(CabinetConsts.MaxDescriptionLength);
 
-            // Unique constraint: (TenantId, Name), no duplicate names within a layer. Host and each tenant are independent universes. Soft-delete filtered.
-            b.HasIndex(x => new { x.TenantId, x.Name })
-                .IsUnique()
-                .HasFilter("IsDeleted = 0");
+            // Layer-scoped uniqueness on (TenantId, Name) is enforced by CabinetManager in the application/domain layer
+            // (#304), not by a DB index — see the DocumentType block above for the cross-DB rationale. Cabinet has no
+            // restore path, so the check considers active rows only.
         });
     }
 }

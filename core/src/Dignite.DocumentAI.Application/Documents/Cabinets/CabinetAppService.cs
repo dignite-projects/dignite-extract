@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dignite.DocumentAI.Permissions;
 using Microsoft.AspNetCore.Authorization;
-using Volo.Abp;
 using Volo.Abp.Domain.Entities;
 
 namespace Dignite.DocumentAI.Documents.Cabinets;
@@ -17,13 +16,16 @@ public class CabinetAppService : DocumentAIAppService, ICabinetAppService
 {
     private readonly ICabinetRepository _repository;
     private readonly IDocumentRepository _documentRepository;
+    private readonly CabinetManager _cabinetManager;
 
     public CabinetAppService(
         ICabinetRepository repository,
-        IDocumentRepository documentRepository)
+        IDocumentRepository documentRepository,
+        CabinetManager cabinetManager)
     {
         _repository = repository;
         _documentRepository = documentRepository;
+        _cabinetManager = cabinetManager;
     }
 
     public virtual async Task<List<CabinetDto>> GetListAsync()
@@ -37,7 +39,7 @@ public class CabinetAppService : DocumentAIAppService, ICabinetAppService
     [Authorize(DocumentAIPermissions.Cabinets.Create)]
     public virtual async Task<CabinetDto> CreateAsync(CreateCabinetDto input)
     {
-        await EnsureNameAvailableAsync(input.Name);
+        await _cabinetManager.CheckNameAvailableAsync(input.Name);
 
         var entity = new Cabinet(GuidGenerator.Create(), CurrentTenant.Id, input.Name, input.Description);
         await _repository.InsertAsync(entity, autoSave: true);
@@ -59,7 +61,7 @@ public class CabinetAppService : DocumentAIAppService, ICabinetAppService
         // check to avoid falsely treating itself as a conflict.
         if (!string.Equals(entity.Name, input.Name, StringComparison.Ordinal))
         {
-            await EnsureNameAvailableAsync(input.Name);
+            await _cabinetManager.CheckNameAvailableAsync(input.Name);
         }
 
         entity.Update(input.Name, input.Description);
@@ -94,21 +96,5 @@ public class CabinetAppService : DocumentAIAppService, ICabinetAppService
         }
 
         await _repository.DeleteAsync(entity);
-    }
-
-    /// <summary>
-    /// Checks cabinet-name uniqueness in the current layer, considering only active cabinets and not
-    /// soft-deleted ones. Cabinets do not have a recycle bin; soft delete means forgotten, so the name
-    /// can be reused by a new cabinet. The unique index <c>(TenantId, Name)</c> is filtered by
-    /// <c>IsDeleted = 0</c>, so soft-deleted cabinets do not participate in the active constraint.
-    /// </summary>
-    protected virtual async Task EnsureNameAvailableAsync(string name)
-    {
-        var existing = await _repository.FindByNameAsync(name);
-        if (existing != null)
-        {
-            throw new BusinessException(DocumentAIErrorCodes.Cabinet.NameAlreadyExists)
-                .WithData("Name", name);
-        }
     }
 }

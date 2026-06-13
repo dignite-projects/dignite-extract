@@ -19,15 +19,21 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
     private readonly IDocumentTypeRepository _repository;
     private readonly IDocumentRepository _documentRepository;
     private readonly IFieldDefinitionRepository _fieldDefinitionRepository;
+    private readonly DocumentTypeManager _documentTypeManager;
+    private readonly Fields.FieldDefinitionManager _fieldDefinitionManager;
 
     public DocumentTypeAppService(
         IDocumentTypeRepository repository,
         IDocumentRepository documentRepository,
-        IFieldDefinitionRepository fieldDefinitionRepository)
+        IFieldDefinitionRepository fieldDefinitionRepository,
+        DocumentTypeManager documentTypeManager,
+        Fields.FieldDefinitionManager fieldDefinitionManager)
     {
         _repository = repository;
         _documentRepository = documentRepository;
         _fieldDefinitionRepository = fieldDefinitionRepository;
+        _documentTypeManager = documentTypeManager;
+        _fieldDefinitionManager = fieldDefinitionManager;
     }
 
     public virtual async Task<List<DocumentTypeDto>> GetVisibleAsync()
@@ -70,21 +76,11 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
     [Authorize(DocumentAIPermissions.DocumentTypes.Create)]
     public virtual async Task<DocumentTypeDto> CreateAsync(CreateDocumentTypeDto input)
     {
-        // Strict single-layer duplicate check. TypeCode is a per-layer namespace; Host and each tenant are independent.
-        // The same TypeCode across layers is valid as two rows distinguished by TenantId. Downstream consumers use
-        // the (TenantId, DocumentTypeCode) tuple.
-        // Disable the ISoftDelete filter so soft-deleted records also participate in duplicate checks. Otherwise the path
-        // "delete -> recreate same TypeCode -> restore old record" can cause unique index conflicts or two active rows with the same (TenantId, TypeCode).
-        DocumentType? existing;
-        using (DataFilter.Disable<ISoftDelete>())
-        {
-            existing = await _repository.FindByTypeCodeAsync(input.TypeCode);
-        }
-        if (existing != null)
-        {
-            throw new BusinessException(DocumentAIErrorCodes.DocumentType.CodeAlreadyExists)
-                .WithData("TypeCode", input.TypeCode);
-        }
+        // Strict single-layer duplicate check, owned by the domain service (#304): TypeCode is a per-layer namespace;
+        // Host and each tenant are independent, so the same TypeCode across layers is valid as two rows distinguished by
+        // TenantId (downstream consumers use the (TenantId, DocumentTypeCode) tuple). The check is soft-delete-aware so the
+        // "delete -> recreate same TypeCode -> restore old record" path cannot produce two active rows.
+        await _documentTypeManager.CheckCodeAvailableAsync(input.TypeCode);
 
         var entity = new DocumentType(
             GuidGenerator.Create(),
@@ -110,21 +106,12 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
             throw new EntityNotFoundException(typeof(DocumentType), id);
         }
 
-        // Rename unlock (#207): run duplicate check only when TypeCode changes. Same-layer (TenantId, TypeCode) is unique;
-        // soft-deleted records occupy the name too, avoiding restore conflicts.
+        // Rename unlock (#207): run the domain duplicate check only when TypeCode changes. Same-layer (TenantId, TypeCode)
+        // is unique; soft-deleted records occupy the name too, avoiding restore conflicts.
         // Internal associations (Document / FieldDefinition / ExportTemplate) already use this type's immutable Id, so rename does not cascade to those tables.
         if (!string.Equals(input.TypeCode, entity.TypeCode, StringComparison.Ordinal))
         {
-            DocumentType? conflict;
-            using (DataFilter.Disable<ISoftDelete>())
-            {
-                conflict = await _repository.FindByTypeCodeAsync(input.TypeCode);
-            }
-            if (conflict != null)
-            {
-                throw new BusinessException(DocumentAIErrorCodes.DocumentType.CodeAlreadyExists)
-                    .WithData("TypeCode", input.TypeCode);
-            }
+            await _documentTypeManager.CheckCodeAvailableAsync(input.TypeCode);
         }
 
         entity.Update(input.TypeCode, input.DisplayName, input.Description, input.ConfidenceThreshold, input.Priority);
@@ -181,18 +168,8 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
             }
 
             // Defense: an active row with the same (TenantId, TypeCode) already exists. CreateAsync duplicate checks should prevent this,
-            // but extreme cases such as manual DB edits / seed bypass can still happen; avoid unique index conflicts.
-            var typeQueryable = await _repository.GetQueryableAsync();
-            var typeConflict = await AsyncExecuter.AnyAsync(
-                typeQueryable.Where(t =>
-                    t.TenantId == entity.TenantId &&
-                    t.TypeCode == entity.TypeCode &&
-                    !t.IsDeleted));
-            if (typeConflict)
-            {
-                throw new BusinessException(DocumentAIErrorCodes.DocumentType.RestoreConflict)
-                    .WithData("TypeCode", entity.TypeCode);
-            }
+            // but extreme cases such as manual DB edits / seed bypass can still happen; the domain check rejects it (#304).
+            await _documentTypeManager.CheckRestorableAsync(entity);
 
             entity.IsDeleted = false;
             entity.DeletionTime = null;
@@ -210,12 +187,9 @@ public class DocumentTypeAppService : DocumentAIAppService, IDocumentTypeAppServ
 
             foreach (var field in deletedFields)
             {
-                var nameConflict = await AsyncExecuter.AnyAsync(
-                    fieldQueryable.Where(f =>
-                        f.TenantId == entity.TenantId &&
-                        f.DocumentTypeId == entity.Id &&
-                        f.Name == field.Name &&
-                        !f.IsDeleted));
+                // Per-field duplicate check routes through the domain service (#304); cascade restore skips conflicts
+                // (logs a warning) instead of aborting the whole type restore.
+                var nameConflict = await _fieldDefinitionManager.HasActiveNameConflictAsync(entity.Id, field.Name);
                 if (nameConflict)
                 {
                     Logger.LogWarning(
