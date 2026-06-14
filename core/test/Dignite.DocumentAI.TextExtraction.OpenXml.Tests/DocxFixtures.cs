@@ -85,6 +85,9 @@ internal static class DocxFixtures
     /// <summary>A list item: text, zero-based nesting level, and whether the list is ordered (vs a bullet).</summary>
     public sealed record ListItemSpec(string Text, int Level, bool Ordered) : BlockSpec;
 
+    /// <summary>A list item on a numbering definition that only defines level 0 (to exercise the dangling-ilvl fallback).</summary>
+    public sealed record DanglingLevelSpec(string Text, int Level) : BlockSpec;
+
     /// <summary>A chart: title + category labels + a single named series of values (aligned to the categories).</summary>
     public sealed record ChartSpec(string Title, IReadOnlyList<string> Categories, string SeriesName, IReadOnlyList<string> Values) : BlockSpec;
 
@@ -188,6 +191,12 @@ internal static class DocxFixtures
             return this;
         }
 
+        public DocSpec DanglingLevelItem(string text, int level)
+        {
+            Blocks.Add(new DanglingLevelSpec(text, level));
+            return this;
+        }
+
         public DocSpec Chart(string title, IReadOnlyList<string> categories, string seriesName, IReadOnlyList<string> values)
         {
             Blocks.Add(new ChartSpec(title, categories, seriesName, values));
@@ -281,6 +290,10 @@ internal static class DocxFixtures
 
                     case ListItemSpec listItem:
                         body.Append(ListItemXml(listItem));
+                        break;
+
+                    case DanglingLevelSpec dangling:
+                        body.Append(ListItemParagraphXml(dangling.Text, dangling.Level, numId: 3));
                         break;
 
                     case ChartSpec chart:
@@ -525,17 +538,19 @@ internal static class DocxFixtures
                 <w:numbering xmlns:w="{NsW}">
                   <w:abstractNum w:abstractNumId="0">{Levels("bullet")}</w:abstractNum>
                   <w:abstractNum w:abstractNumId="1">{Levels("decimal")}</w:abstractNum>
+                  <w:abstractNum w:abstractNumId="2"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum>
                   <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
                   <w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>
+                  <w:num w:numId="3"><w:abstractNumId w:val="2"/></w:num>
                 </w:numbering>
                 """;
     }
 
-    private static string ListItemXml(ListItemSpec item)
-    {
-        var numId = item.Ordered ? 2 : 1;
-        return $"<w:p><w:pPr><w:numPr><w:ilvl w:val=\"{item.Level}\"/><w:numId w:val=\"{numId}\"/></w:numPr></w:pPr><w:r><w:t xml:space=\"preserve\">{Escape(item.Text)}</w:t></w:r></w:p>";
-    }
+    private static string ListItemXml(ListItemSpec item) =>
+        ListItemParagraphXml(item.Text, item.Level, item.Ordered ? 2 : 1);
+
+    private static string ListItemParagraphXml(string text, int level, int numId) =>
+        $"<w:p><w:pPr><w:numPr><w:ilvl w:val=\"{level}\"/><w:numId w:val=\"{numId}\"/></w:numPr></w:pPr><w:r><w:t xml:space=\"preserve\">{Escape(text)}</w:t></w:r></w:p>";
 
     private static string Escape(string text) => new System.Xml.Linq.XText(text).ToString();
 }

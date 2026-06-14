@@ -71,10 +71,11 @@ internal static class WordListNumbering
             return null;
         }
 
-        // Pick the requested level; fall back to the first defined level if that exact ilvl is absent.
+        // Use the exact requested level only. If that ilvl is absent (malformed / partial numbering) do NOT
+        // fall back to another level's format — that would silently flip a bullet into an ordered list (or
+        // vice versa). Returning null here lets Resolve default the item to a neutral bullet instead.
         var levelDefinition = abstractNum.Elements<W.Level>()
-                                  .FirstOrDefault(l => (l.LevelIndex?.Value ?? 0) == level)
-                              ?? abstractNum.Elements<W.Level>().FirstOrDefault();
+            .FirstOrDefault(l => (l.LevelIndex?.Value ?? 0) == level);
         return levelDefinition?.NumberingFormat?.Val?.Value;
     }
 }

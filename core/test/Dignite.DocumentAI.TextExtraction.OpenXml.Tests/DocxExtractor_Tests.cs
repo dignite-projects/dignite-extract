@@ -654,6 +654,21 @@ public class DocxExtractor_Tests
             Arg.Any<Stream>(), Arg.Any<OcrOptions>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Falls_back_to_bullet_when_the_list_level_is_undefined()
+    {
+        // numId 3's abstract definition only defines level 0; a list item at level 1 has no matching level
+        // definition and must default to a neutral bullet — not silently inherit level 0's "decimal" (which
+        // would render the item as an ordered "1.").
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .DanglingLevelItem("Orphan", level: 1));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("- Orphan");
+        result.Markdown.ShouldNotContain("1. Orphan");
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;
