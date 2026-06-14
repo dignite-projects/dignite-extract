@@ -75,8 +75,13 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
     /// <summary>EMU per pixel at 96 DPI (914400 EMU/inch ÷ 96). Used to size images for the decorative threshold.</summary>
     private const long EmuPerPixel96 = 9525;
 
-    /// <summary>Spaces of indentation per list-nesting level (w:ilvl) in the Markdown output.</summary>
-    private const int IndentSpacesPerListLevel = 2;
+    /// <summary>
+    /// Spaces of indentation per list-nesting level (w:ilvl). Must be at least the width of the widest
+    /// marker we emit (<c>"1. "</c> = 3) so a child under an <b>ordered</b> parent is still recognized as
+    /// nested by CommonMark — 2 spaces would make it a sibling and even split the ordered list, silently
+    /// corrupting both the hierarchy and the ordinal numbering. 3 also covers bullets (<c>"- "</c> = 2).
+    /// </summary>
+    private const int IndentSpacesPerListLevel = 3;
 
     /// <summary>
     /// Open settings that collapse OOXML markup-compatibility (<c>mc:AlternateContent</c>) to its single
@@ -239,6 +244,16 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
                 if (!string.IsNullOrWhiteSpace(renderedTable))
                 {
                     blocks.Add(renderedTable!);
+                }
+
+                // A Markdown table cell can't host a multi-line transcription / chart block, so a figure
+                // (image or chart) inside a cell is extracted as its own block AFTER the table — content is
+                // preserved (over its exact in-cell position) and a failure still trips the #268 signal,
+                // rather than being silently dropped. WordTableRenderer only emits the cells' w:t text.
+                foreach (var drawing in table.Descendants<W.Drawing>())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await HandleDrawingAsync(drawing, mainPart, blocks, state, cancellationToken);
                 }
 
                 break;

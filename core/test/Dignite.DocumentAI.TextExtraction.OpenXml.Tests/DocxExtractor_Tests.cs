@@ -582,10 +582,44 @@ public class DocxExtractor_Tests
 
         var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
 
-        // Two spaces of indentation per nesting level.
+        // Three spaces of indentation per nesting level (>= the widest marker "1. ", so ordered nesting works too).
         result.Markdown.ShouldContain("- Top");
-        result.Markdown.ShouldContain("  - Nested");
-        result.Markdown.ShouldContain("    - Deeper");
+        result.Markdown.ShouldContain("   - Nested");
+        result.Markdown.ShouldContain("      - Deeper");
+    }
+
+    [Fact]
+    public async Task Indents_a_child_under_an_ordered_parent_enough_to_nest()
+    {
+        // An ordered marker "1. " is 3 chars wide, so a child needs >= 3 spaces to be recognized as nested by
+        // CommonMark; 2 spaces would make it a sibling and split the ordered list (restarting "Second" at 1).
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .OrderedItem("First", level: 0)
+            .BulletItem("sub", level: 1)
+            .OrderedItem("Second", level: 0));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("1. First");
+        result.Markdown.ShouldContain("   - sub");
+        result.Markdown.ShouldContain("1. Second");
+    }
+
+    [Fact]
+    public async Task Extracts_an_image_inside_a_table_cell()
+    {
+        StubOcr("CELL_FIGURE");
+
+        // A Markdown table cell can't host a transcription block, so an image inside a cell is extracted as
+        // its own block after the table — not silently dropped (which would also leave IsComplete wrongly true).
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .TableWithImageInCell(Png(alt: null)));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("CELL_FIGURE");
+        await _ocr.Received(1).RecognizeAsync(
+            Arg.Any<Stream>(), Arg.Any<OcrOptions>(), Arg.Any<CancellationToken>());
     }
 
     private static int CountOccurrences(string haystack, string needle)

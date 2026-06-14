@@ -88,6 +88,9 @@ internal static class DocxFixtures
     /// <summary>A chart: title + category labels + a single named series of values (aligned to the categories).</summary>
     public sealed record ChartSpec(string Title, IReadOnlyList<string> Categories, string SeriesName, IReadOnlyList<string> Values) : BlockSpec;
 
+    /// <summary>A single-cell table whose cell contains an embedded image (to exercise figure-in-cell extraction).</summary>
+    public sealed record TableImageCellSpec(ImageSpec Image) : BlockSpec;
+
     public sealed class DocSpec
     {
         public List<BlockSpec> Blocks { get; } = new();
@@ -184,6 +187,12 @@ internal static class DocxFixtures
             Blocks.Add(new ChartSpec(title, categories, seriesName, values));
             return this;
         }
+
+        public DocSpec TableWithImageInCell(ImageSpec image)
+        {
+            Blocks.Add(new TableImageCellSpec(image));
+            return this;
+        }
     }
 
     public static byte[] Build(DocSpec spec)
@@ -262,6 +271,10 @@ internal static class DocxFixtures
                         chartPart.ChartSpace = new C.ChartSpace(ChartSpaceXml(chart));
                         chartPart.ChartSpace.Save();
                         body.Append(ChartDrawingXml(chartRelId));
+                        break;
+
+                    case TableImageCellSpec tableImage:
+                        body.Append(TableImageCellXml(tableImage.Image, AddImage(mainPart, tableImage.Image, ref imageRel)));
                         break;
                 }
             }
@@ -386,6 +399,9 @@ internal static class DocxFixtures
     /// <summary>A Heading1 paragraph anchoring a text box: a heading run followed by the text-box AlternateContent run.</summary>
     private static string HeadingTextBoxXml(string heading, string textBox) =>
         $"<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr><w:r><w:t xml:space=\"preserve\">{Escape(heading)}</w:t></w:r>{AltTextBoxRunXml(textBox)}</w:p>";
+
+    private static string TableImageCellXml(ImageSpec image, string relId) =>
+        $"<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"4000\"/></w:tblGrid><w:tr><w:tc><w:tcPr/><w:p><w:r>{InlineDrawingXml(image, relId)}</w:r></w:p></w:tc></w:tr></w:tbl>";
 
     private static string TableXml(TableSpec table)
     {
