@@ -100,6 +100,12 @@ internal static class DocxFixtures
     /// <summary>A paragraph carrying a legacy VML raster image (w:pict/v:imagedata) instead of DrawingML.</summary>
     public sealed record VmlImageSpec(ImageSpec Image) : BlockSpec;
 
+    /// <summary>A single-cell table whose cell wraps its paragraph in a content control (w:sdt).</summary>
+    public sealed record TableContentControlCellSpec(string Text) : BlockSpec;
+
+    /// <summary>A stack of nested content controls (w:sdt) Depth levels deep wrapping one paragraph (to exercise the depth cap).</summary>
+    public sealed record DeeplyNestedSdtSpec(int Depth, string Text) : BlockSpec;
+
     public sealed class DocSpec
     {
         public List<BlockSpec> Blocks { get; } = new();
@@ -220,6 +226,18 @@ internal static class DocxFixtures
             Blocks.Add(new VmlImageSpec(image));
             return this;
         }
+
+        public DocSpec TableWithContentControlCell(string text)
+        {
+            Blocks.Add(new TableContentControlCellSpec(text));
+            return this;
+        }
+
+        public DocSpec DeeplyNestedContentControl(int depth, string text)
+        {
+            Blocks.Add(new DeeplyNestedSdtSpec(depth, text));
+            return this;
+        }
     }
 
     public static byte[] Build(DocSpec spec)
@@ -314,6 +332,14 @@ internal static class DocxFixtures
 
                     case VmlImageSpec vmlImage:
                         body.Append(VmlImageXml(AddImage(mainPart, vmlImage.Image, ref imageRel)));
+                        break;
+
+                    case TableContentControlCellSpec tableCc:
+                        body.Append(TableContentControlCellXml(tableCc.Text));
+                        break;
+
+                    case DeeplyNestedSdtSpec deepSdt:
+                        body.Append(DeeplyNestedSdtXml(deepSdt.Depth, deepSdt.Text));
                         break;
                 }
             }
@@ -441,6 +467,20 @@ internal static class DocxFixtures
 
     private static string ContentControlXml(string text) =>
         $"<w:sdt><w:sdtPr/><w:sdtContent><w:p><w:r><w:t xml:space=\"preserve\">{Escape(text)}</w:t></w:r></w:p></w:sdtContent></w:sdt>";
+
+    private static string TableContentControlCellXml(string text) =>
+        $"<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"4000\"/></w:tblGrid><w:tr><w:tc><w:tcPr/><w:sdt><w:sdtPr/><w:sdtContent><w:p><w:r><w:t xml:space=\"preserve\">{Escape(text)}</w:t></w:r></w:p></w:sdtContent></w:sdt></w:tc></w:tr></w:tbl>";
+
+    private static string DeeplyNestedSdtXml(int depth, string text)
+    {
+        var inner = $"<w:p><w:r><w:t xml:space=\"preserve\">{Escape(text)}</w:t></w:r></w:p>";
+        for (var i = 0; i < depth; i++)
+        {
+            inner = $"<w:sdt><w:sdtPr/><w:sdtContent>{inner}</w:sdtContent></w:sdt>";
+        }
+
+        return inner;
+    }
 
     private static string VmlImageXml(string relId) =>
         $"<w:p><w:r><w:pict><v:shape id=\"vml{relId}\" style=\"width:100pt;height:100pt\"><v:imagedata r:id=\"{relId}\"/></v:shape></w:pict></w:r></w:p>";

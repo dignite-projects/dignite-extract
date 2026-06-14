@@ -86,6 +86,14 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
     private const int IndentSpacesPerListLevel = 3;
 
     /// <summary>
+    /// Hard cap on content-control / custom-XML block nesting depth walked recursively. Pathologically deep
+    /// (or malformed) nesting would otherwise risk a <see cref="System.StackOverflowException"/> — which is
+    /// uncatchable and would kill the worker. Past this depth the subtree is skipped and counted against the
+    /// #268 signal. Real documents nest only a handful of levels.
+    /// </summary>
+    private const int MaxBlockNestingDepth = 32;
+
+    /// <summary>
     /// Open settings that collapse OOXML markup-compatibility (<c>mc:AlternateContent</c>) to its single
     /// selected branch <b>before</b> parsing. Under the default <see cref="MarkupCompatibilityProcessMode.NoProcess"/>
     /// both branches stay in the tree, so a <c>Descendants</c> walk would read the SAME content twice: a
@@ -177,7 +185,7 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
 
                     try
                     {
-                        await RenderBlockAsync(element, mainPart!, blocks, state, cancellationToken);
+                        await RenderBlockAsync(element, mainPart!, blocks, state, depth: 0, cancellationToken);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
@@ -229,6 +237,7 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
         MainDocumentPart mainPart,
         List<string> blocks,
         ExtractionState state,
+        int depth,
         CancellationToken cancellationToken)
     {
         switch (element)
@@ -258,12 +267,12 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
             case W.SdtBlock sdt:
                 // Block-level content control (a form / template field wrapping paragraphs, tables, etc.).
                 // Recurse into its content so the wrapped body is not silently dropped.
-                await RenderChildBlocksAsync(sdt.SdtContentBlock, mainPart, blocks, state, cancellationToken);
+                await RenderChildBlocksAsync(sdt.SdtContentBlock, mainPart, blocks, state, depth, cancellationToken);
                 break;
 
             case W.CustomXmlBlock customXml:
                 // Block-level custom-XML wrapper around body content — recurse the same way.
-                await RenderChildBlocksAsync(customXml, mainPart, blocks, state, cancellationToken);
+                await RenderChildBlocksAsync(customXml, mainPart, blocks, state, depth, cancellationToken);
                 break;
 
             default:
@@ -378,6 +387,9 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
         // Legacy VML raster images (w:pict/v:imagedata) are not W.Drawing, so the DrawingML walk above
         // misses them. They reference PNG/JPEG bytes via an r:id (or o:relid) relationship — transcribe them
         // too rather than silently dropping the figure. (A vector-only VML shape has no imagedata relationship.)
+        // Known limitation: VML images are NOT decorative-size-filtered (a VML shape's size lives in its style
+        // attribute, not wp:extent), so a tiny VML icon may be transcribed where its DrawingML equivalent
+        // would be skipped by IsDecorative. VML in modern DOCX is rare, so this is accepted (see #318-area).
         foreach (var imageData in container.Descendants().Where(e => e.LocalName == "imagedata"))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -395,6 +407,7 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
         MainDocumentPart mainPart,
         List<string> blocks,
         ExtractionState state,
+        int depth,
         CancellationToken cancellationToken)
     {
         if (container is null)
@@ -402,10 +415,23 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
             return;
         }
 
+        if (depth >= MaxBlockNestingDepth)
+        {
+            // Pathological / malformed content-control nesting — stop recursing rather than risk an
+            // (uncatchable) StackOverflowException that would kill the worker. Count the dropped subtree (#268).
+            Logger.LogWarning("Content-control nesting exceeded depth {Max}; skipping the remaining subtree.", MaxBlockNestingDepth);
+            if (!string.IsNullOrWhiteSpace(container.InnerText))
+            {
+                state.FailedBlocks++;
+            }
+
+            return;
+        }
+
         foreach (var child in container.ChildElements)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await RenderBlockAsync(child, mainPart, blocks, state, cancellationToken);
+            await RenderBlockAsync(child, mainPart, blocks, state, depth + 1, cancellationToken);
         }
     }
 

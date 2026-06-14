@@ -70,13 +70,39 @@ internal static class WordTableRenderer
 
     private static string CellText(W.TableCell cell)
     {
-        // A cell holds block-level content (paragraphs). Join its direct paragraphs' text with a space — a
-        // Markdown table cell cannot contain a newline — and escape table-breaking characters once.
+        // Join the cell's paragraphs' text with a space — a Markdown table cell can't contain a newline — and
+        // escape table-breaking characters once. Use Descendants (not Elements) so paragraphs wrapped in a
+        // content control (w:sdt) or custom-XML inside the cell are still picked up; but skip paragraphs that
+        // belong to a NESTED table (a nested w:tbl's text is an accepted blind spot and must not bleed into
+        // this cell's own text).
         var paragraphs = cell
-            .Elements<W.Paragraph>()
+            .Descendants<W.Paragraph>()
+            .Where(p => !IsInNestedTable(p, cell))
             .Select(ParagraphPlainText)
             .Where(text => text.Length > 0);
         return MarkdownCell.Escape(string.Join(" ", paragraphs));
+    }
+
+    /// <summary>
+    /// Whether a paragraph belongs to a table nested inside <paramref name="cell"/> (a <c>w:tbl</c> sits
+    /// between the paragraph and the cell) rather than to the cell directly or via a content-control wrapper.
+    /// </summary>
+    private static bool IsInNestedTable(W.Paragraph paragraph, W.TableCell cell)
+    {
+        foreach (var ancestor in paragraph.Ancestors())
+        {
+            if (ReferenceEquals(ancestor, cell))
+            {
+                return false;
+            }
+
+            if (ancestor is W.Table)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string ParagraphPlainText(W.Paragraph paragraph)

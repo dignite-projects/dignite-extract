@@ -669,6 +669,33 @@ public class DocxExtractor_Tests
         result.Markdown.ShouldNotContain("1. Orphan");
     }
 
+    [Fact]
+    public async Task Extracts_content_control_text_inside_a_table_cell()
+    {
+        // A cell whose paragraph is wrapped in a content control (w:sdt) — common in form templates — must
+        // not render empty; its text must appear in the table.
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .TableWithContentControlCell("CELL_FORM_FIELD"));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("CELL_FORM_FIELD");
+    }
+
+    [Fact]
+    public async Task Caps_content_control_nesting_depth_without_crashing()
+    {
+        // Pathologically deep content-control nesting must not StackOverflow (uncatchable -> kills the
+        // worker); the walk stops at the depth cap and marks incomplete instead of crashing.
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .DeeplyNestedContentControl(depth: 40, text: "DEEP"));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.ShouldNotBeNull();
+        result.IsComplete.ShouldBeFalse();
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;
