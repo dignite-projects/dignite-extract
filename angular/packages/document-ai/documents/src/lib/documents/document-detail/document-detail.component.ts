@@ -483,7 +483,7 @@ export class DocumentDetailComponent implements OnInit {
   }
 
   goBack(): void {
-    this.router.navigate(['/documents']);
+    this.router.navigate(['/documents/list']);
   }
 
   delete(): void {
@@ -499,7 +499,7 @@ export class DocumentDetailComponent implements OnInit {
           .subscribe({
           next: () => {
             this.toaster.success('::Document:DeletedSuccessfully', '::Success');
-            this.router.navigate(['/documents']);
+            this.router.navigate(['/documents/list']);
           },
         });
       });

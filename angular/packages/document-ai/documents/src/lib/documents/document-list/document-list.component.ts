@@ -410,7 +410,7 @@ export class DocumentListComponent implements OnInit {
   }
 
   uploadNew(): void {
-    this.router.navigate(['/documents/upload']);
+    this.router.navigate(['/documents']);
   }
 
   delete(doc: DocumentListItemDto, event: Event): void {

@@ -21,7 +21,7 @@ export function provideDocuments(): EnvironmentProviders {
           layout: eLayoutType.application,
         },
         {
-          path: '/documents',
+          path: '/documents/list',
           name: '::Menu:DocumentList',
           iconClass: 'fas fa-list',
           parentName: '::Menu:Documents',
@@ -39,21 +39,12 @@ export function provideDocuments(): EnvironmentProviders {
           layout: eLayoutType.application,
         },
         {
-          path: '/documents/upload',
-          name: '::Menu:UploadDocument',
-          iconClass: 'fas fa-upload',
-          parentName: '::Menu:Documents',
-          requiredPolicy: DOCUMENT_AI_PERMISSIONS.Documents.Upload,
-          order: 3,
-          layout: eLayoutType.application,
-        },
-        {
           path: '/documents/types',
           name: '::Menu:DocumentTypes',
           iconClass: 'fas fa-tags',
           parentName: '::Menu:Documents',
           requiredPolicy: DOCUMENT_AI_PERMISSIONS.DocumentTypes.Default,
-          order: 4,
+          order: 3,
           layout: eLayoutType.application,
         },
         {
@@ -62,7 +53,7 @@ export function provideDocuments(): EnvironmentProviders {
           iconClass: 'fas fa-file-export',
           parentName: '::Menu:Documents',
           requiredPolicy: DOCUMENT_AI_PERMISSIONS.Documents.Templates.Default,
-          order: 5,
+          order: 4,
           layout: eLayoutType.application,
         },
         {
@@ -71,7 +62,7 @@ export function provideDocuments(): EnvironmentProviders {
           iconClass: 'fas fa-folder',
           parentName: '::Menu:Documents',
           requiredPolicy: DOCUMENT_AI_PERMISSIONS.Cabinets.Default,
-          order: 6,
+          order: 5,
           layout: eLayoutType.application,
         },
         {
@@ -80,7 +71,7 @@ export function provideDocuments(): EnvironmentProviders {
           iconClass: 'fas fa-trash-can',
           parentName: '::Menu:Documents',
           requiredPolicy: DOCUMENT_AI_PERMISSIONS.Documents.Restore,
-          order: 7,
+          order: 6,
           layout: eLayoutType.application,
         },
       ]);
