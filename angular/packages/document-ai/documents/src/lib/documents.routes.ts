@@ -8,14 +8,19 @@ export const DOCUMENTS_ROUTES: Routes = [
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: DOCUMENT_AI_PERMISSIONS.Documents.Default },
     loadComponent: () =>
+      import('./documents/document-home/document-home.component').then(c => c.DocumentHomeComponent),
+  },
+  {
+    path: 'list',
+    canActivate: [authGuard, permissionGuard],
+    data: { requiredPolicy: DOCUMENT_AI_PERMISSIONS.Documents.Default },
+    loadComponent: () =>
       import('./documents/document-list/document-list.component').then(c => c.DocumentListComponent),
   },
   {
     path: 'upload',
-    canActivate: [authGuard, permissionGuard],
-    data: { requiredPolicy: DOCUMENT_AI_PERMISSIONS.Documents.Upload },
-    loadComponent: () =>
-      import('./documents/document-upload/document-upload.component').then(c => c.DocumentUploadComponent),
+    pathMatch: 'full',
+    redirectTo: '',
   },
   {
     path: 'recycle',

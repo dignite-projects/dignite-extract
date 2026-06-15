@@ -150,13 +150,13 @@ export class DocumentUploadComponent implements OnInit {
             this.hasDoneWithErrors.set(true);
           } else {
             this.toaster.success('::Document:UploadedSuccessfully', '::Success');
-            this.router.navigate(['/documents']);
+            this.router.navigate(['/documents/list']);
           }
         },
       });
   }
 
   continueToDocuments(): void {
-    this.router.navigate(['/documents']);
+    this.router.navigate(['/documents/list']);
   }
 }

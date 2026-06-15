@@ -1,0 +1,47 @@
+<div class="document-home">
+  <div class="document-home-header container-fluid py-4 pb-0">
+    <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+      <div>
+        <h4 class="mb-1">
+          <i class="fas fa-file-alt me-2"></i>
+          Dignite Document AI
+        </h4>
+        <p class="text-muted mb-0">
+          Upload document content and turn it into Markdown, metadata, and type-bound fields for downstream consumers.
+        </p>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary" routerLink="/documents/list">
+          <i class="fas fa-list me-1"></i>
+          {{ '::Menu:DocumentList' | abpLocalization }}
+        </a>
+        @if (canReview) {
+          <a class="btn btn-outline-warning" routerLink="/documents/review">
+            <i class="fas fa-clipboard-check me-1"></i>
+            {{ '::Menu:DocumentReviewQueue' | abpLocalization }}
+          </a>
+        }
+      </div>
+    </div>
+  </div>
+
+  @if (canUpload) {
+    <lib-document-upload />
+  } @else {
+    <div class="container py-4">
+      <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+          <i class="fas fa-lock fa-2x text-muted mb-3 d-block"></i>
+          <h5 class="mb-2">{{ '::Document:Documents' | abpLocalization }}</h5>
+          <p class="text-muted mb-3">
+            You can browse documents, but this account is not allowed to upload new files.
+          </p>
+          <a class="btn btn-primary" routerLink="/documents/list">
+            <i class="fas fa-list me-1"></i>
+            {{ '::Menu:DocumentList' | abpLocalization }}
+          </a>
+        </div>
+      </div>
+    </div>
+  }
+</div>
