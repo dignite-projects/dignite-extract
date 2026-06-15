@@ -29,8 +29,12 @@
         <Project Path="core/test/Dignite.DocumentAI.Application.Tests/Dignite.DocumentAI.Application.Tests.csproj" />
         <Project Path="core/test/Dignite.DocumentAI.Mcp.Tests/Dignite.DocumentAI.Mcp.Tests.csproj" />
         <Project Path="core/test/Dignite.DocumentAI.Ocr.VisionLlm.Tests/Dignite.DocumentAI.Ocr.VisionLlm.Tests.csproj" />
+        <Project Path="core/test/Dignite.DocumentAI.Ocr.PaddleOcr.Tests/Dignite.DocumentAI.Ocr.PaddleOcr.Tests.csproj" />
+        <Project Path="core/test/Dignite.DocumentAI.Ocr.AzureDocumentIntelligence.Tests/Dignite.DocumentAI.Ocr.AzureDocumentIntelligence.Tests.csproj" />
+        <Project Path="core/test/Dignite.DocumentAI.TextExtraction.Tests/Dignite.DocumentAI.TextExtraction.Tests.csproj" />
         <Project Path="core/test/Dignite.DocumentAI.TextExtraction.Pdf.Tests/Dignite.DocumentAI.TextExtraction.Pdf.Tests.csproj" />
         <Project Path="core/test/Dignite.DocumentAI.TextExtraction.OpenXml.Tests/Dignite.DocumentAI.TextExtraction.OpenXml.Tests.csproj" />
+        <Project Path="core/test/Dignite.DocumentAI.HttpApi.Tests/Dignite.DocumentAI.HttpApi.Tests.csproj" />
     </Folder>
 
     <Folder Name="/host/" />

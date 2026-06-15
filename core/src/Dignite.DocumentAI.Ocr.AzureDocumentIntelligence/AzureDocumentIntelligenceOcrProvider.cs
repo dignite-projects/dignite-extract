@@ -58,14 +58,23 @@ public class AzureDocumentIntelligenceOcrProvider : IOcrProvider, ITransientDepe
         ocrResult.NativePayloadSchemaName = "AzureDocumentIntelligence.AnalyzeResult";
     }
 
+    // Test seam: lets a stubbed DocumentIntelligenceClient (e.g. one configured with a fake
+    // HttpPipelineTransport) be substituted so the provider can be exercised without contacting Azure.
+    // Production builds the real client from the configured endpoint + key. Kept protected virtual per the
+    // module-extensibility convention; it does not change the IOcrProvider contract or any egress boundary.
+    protected virtual DocumentIntelligenceClient CreateClient()
+    {
+        return new DocumentIntelligenceClient(
+            new Uri(_options.Endpoint),
+            new AzureKeyCredential(_options.ApiKey));
+    }
+
     private async Task<(AnalyzeResult Result, BinaryData RawResponse)> AnalyzeAsync(
         Stream fileStream,
         string modelId,
         CancellationToken cancellationToken)
     {
-        var client = new DocumentIntelligenceClient(
-            new Uri(_options.Endpoint),
-            new AzureKeyCredential(_options.ApiKey));
+        var client = CreateClient();
 
         BinaryData binaryData;
         using (var ms = new MemoryStream())
