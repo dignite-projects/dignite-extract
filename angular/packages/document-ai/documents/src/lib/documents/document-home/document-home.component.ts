@@ -21,4 +21,7 @@ export class DocumentHomeComponent {
   readonly canReview = this.permissionService.getGrantedPolicy(
     DOCUMENT_AI_PERMISSIONS.Documents.ConfirmClassification,
   );
+  readonly canViewCabinets = this.permissionService.getGrantedPolicy(
+    DOCUMENT_AI_PERMISSIONS.Cabinets.Default,
+  );
 }

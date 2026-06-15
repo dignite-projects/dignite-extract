@@ -1,26 +1,62 @@
+.document-upload-card {
+  border: 1px solid var(--bs-border-color);
+}
+
+.cabinet-select {
+  min-width: min(100%, 18rem);
+}
+
 .drop-zone {
   border: 2px dashed #dee2e6;
   border-radius: 0.5rem;
   background-color: #f8f9fa;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
-  cursor: pointer;
-  min-height: 200px;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+  min-height: 24rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 1.5rem;
 
   &.drag-over {
     border-color: var(--bs-primary, #0d6efd);
     background-color: rgba(13, 110, 253, 0.05);
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.08);
   }
 
-  &.uploading {
+  &.uploading,
+  &.has-results {
     cursor: not-allowed;
-    opacity: 0.8;
   }
+}
 
-  &:hover:not(.uploading) {
-    border-color: #adb5bd;
-    background-color: #f1f3f5;
-  }
+.upload-icon {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(13, 110, 253, 0.08);
+  color: var(--bs-primary, #0d6efd);
+  font-size: 1.8rem;
+}
+
+.upload-queue {
+  max-height: 24rem;
+  overflow: auto;
+}
+
+.status-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+}
+
+.min-width-0 {
+  min-width: 0;
 }

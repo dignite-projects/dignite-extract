@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Injector, OnInit, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LocalizationPipe, PermissionService } from '@abp/ng.core';
@@ -20,9 +20,11 @@ import {
 const MAX_CONCURRENT_UPLOADS = 3;
 
 interface FileUploadState {
+  key: string;
   name: string;
   done: boolean;
   error: boolean;
+  documentId?: string;
   errorMessage?: string;
 }
 
@@ -30,16 +32,20 @@ interface FileUploadState {
   selector: 'lib-document-upload',
   templateUrl: './document-upload.component.html',
   styleUrls: ['./document-upload.component.scss'],
-  imports: [CommonModule, FormsModule, LocalizationPipe],
+  imports: [CommonModule, FormsModule, LocalizationPipe, RouterModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DocumentUploadComponent implements OnInit {
   private readonly documentUploadService = inject(DocumentUploadService);
   private readonly cabinetService = inject(CabinetService);
-  private readonly router = inject(Router);
   private readonly toaster = inject(ToasterService);
   private readonly permissionService = inject(PermissionService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+
+  // Primary file-picker trigger; used to restore focus after the result queue is
+  // cleared, because the button the user just clicked is removed from the DOM.
+  private readonly browseButton = viewChild<ElementRef<HTMLButtonElement>>('browseButton');
 
   // Cabinet selection requires Cabinets.Default permission because backend getList is [Authorize].
   // Without permission, hide the dropdown and upload as unclassified.
@@ -54,8 +60,21 @@ export class DocumentUploadComponent implements OnInit {
 
   isDragOver = signal(false);
   isUploading = signal(false);
-  hasDoneWithErrors = signal(false);
   uploadingFiles = signal<FileUploadState[]>([]);
+
+  readonly hasUploadResults = computed(
+    () =>
+      this.uploadingFiles().length > 0 &&
+      !this.isUploading() &&
+      this.uploadingFiles().every(file => file.done || file.error),
+  );
+  readonly hasUploadErrors = computed(
+    () => this.hasUploadResults() && this.uploadingFiles().some(file => file.error),
+  );
+  readonly successfulUploadCount = computed(
+    () => this.uploadingFiles().filter(file => file.done).length,
+  );
+  readonly canAcceptFiles = computed(() => !this.isUploading() && !this.hasUploadResults());
 
   ngOnInit(): void {
     if (this.canViewCabinets) {
@@ -71,6 +90,8 @@ export class DocumentUploadComponent implements OnInit {
   onDragOver(event: DragEvent): void {
     event.preventDefault();
     event.stopPropagation();
+    if (!this.canAcceptFiles()) return;
+
     this.isDragOver.set(true);
   }
 
@@ -84,6 +105,7 @@ export class DocumentUploadComponent implements OnInit {
     event.preventDefault();
     event.stopPropagation();
     this.isDragOver.set(false);
+    if (!this.canAcceptFiles()) return;
 
     const files = event.dataTransfer?.files;
     if (files && files.length > 0) {
@@ -99,7 +121,25 @@ export class DocumentUploadComponent implements OnInit {
     }
   }
 
+  openFilePicker(input: HTMLInputElement): void {
+    if (!this.canAcceptFiles()) return;
+
+    input.click();
+  }
+
+  resetQueue(): void {
+    this.uploadingFiles.set([]);
+    this.isDragOver.set(false);
+    // Restore focus to the primary trigger once the empty state re-renders;
+    // the button the user just clicked is removed when the queue is cleared.
+    afterNextRender(() => this.browseButton()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
+  }
+
   private uploadFiles(files: File[]): void {
+    if (!this.canAcceptFiles()) return;
+
     // Mirror the backend fail-closed gate (#221): MIME + extension whitelist, then size.
     const valid = files.filter(f => {
       if (!isAllowedUpload(f)) {
@@ -116,8 +156,14 @@ export class DocumentUploadComponent implements OnInit {
     if (valid.length === 0) return;
 
     this.isUploading.set(true);
-    this.hasDoneWithErrors.set(false);
-    this.uploadingFiles.set(valid.map(f => ({ name: f.name, done: false, error: false })));
+    this.uploadingFiles.set(
+      valid.map((file, index) => ({
+        key: `${file.name}-${file.lastModified}-${file.size}-${index}`,
+        name: file.name,
+        done: false,
+        error: false,
+      })),
+    );
 
     const indexed = valid.map((file, idx) => ({ file, idx }));
     from(indexed)
@@ -125,10 +171,15 @@ export class DocumentUploadComponent implements OnInit {
         mergeMap(
           ({ file, idx }) =>
             this.documentUploadService.upload(file, this.selectedCabinetId() || undefined).pipe(
-              map(() => ({ idx, success: true, errorMessage: undefined as string | undefined })),
+              map(document => ({
+                idx,
+                success: true,
+                documentId: document.id,
+                errorMessage: undefined as string | undefined,
+              })),
               catchError(err => {
                 const errorMessage: string | undefined = err?.error?.error?.message;
-                return of({ idx, success: false, errorMessage });
+                return of({ idx, success: false, documentId: undefined, errorMessage });
               }),
             ),
           MAX_CONCURRENT_UPLOADS,
@@ -136,27 +187,28 @@ export class DocumentUploadComponent implements OnInit {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: ({ idx, success, errorMessage }) => {
+        next: ({ idx, success, documentId, errorMessage }) => {
           this.uploadingFiles.update(list =>
             list.map((item, j) =>
-              j === idx ? { ...item, done: success, error: !success, errorMessage } : item,
+              j === idx
+                ? {
+                    ...item,
+                    done: success,
+                    error: !success,
+                    documentId: success ? documentId : undefined,
+                    errorMessage,
+                  }
+                : item,
             ),
           );
         },
         complete: () => {
           this.isUploading.set(false);
           const hasError = this.uploadingFiles().some(f => f.error);
-          if (hasError) {
-            this.hasDoneWithErrors.set(true);
-          } else {
+          if (!hasError) {
             this.toaster.success('::Document:UploadedSuccessfully', '::Success');
-            this.router.navigate(['/documents/list']);
           }
         },
       });
-  }
-
-  continueToDocuments(): void {
-    this.router.navigate(['/documents/list']);
   }
 }
