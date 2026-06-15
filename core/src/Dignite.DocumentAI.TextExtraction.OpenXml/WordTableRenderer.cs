@@ -80,7 +80,7 @@ internal static class WordTableRenderer
             .Where(p => !IsInNestedTable(p, cell))
             .Select(ParagraphPlainText)
             .Where(text => text.Length > 0);
-        return MarkdownCell.Escape(string.Join(" ", paragraphs));
+        return MarkdownText.EscapeCell(string.Join(" ", paragraphs));
     }
 
     /// <summary>

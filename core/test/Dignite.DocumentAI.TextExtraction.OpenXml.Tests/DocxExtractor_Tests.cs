@@ -103,6 +103,109 @@ public class DocxExtractor_Tests
     }
 
     [Fact]
+    public async Task Escapes_a_body_paragraph_that_begins_with_a_block_marker()
+    {
+        // #320 case 1: literal document text that happens to begin with a block marker must not be re-parsed
+        // as a heading / list / blockquote / ordered item.
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .Paragraph("# Not a heading")
+            .Paragraph("- Not a list")
+            .Paragraph("> Not a quote")
+            .Paragraph("1. Not ordered"));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("\\# Not a heading");
+        result.Markdown.ShouldContain("\\- Not a list");
+        result.Markdown.ShouldContain("\\> Not a quote");
+        result.Markdown.ShouldContain("1\\. Not ordered");
+    }
+
+    [Fact]
+    public async Task Escapes_a_marker_on_a_soft_break_continuation_line()
+    {
+        // #320 case 2: a w:br continuation that starts with "- " would otherwise split into a sibling list item.
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .SoftBreak("Intro line", "- looks like a sub-item"));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("Intro line\n\\- looks like a sub-item");
+    }
+
+    [Fact]
+    public async Task Escapes_literal_asterisks_so_an_emphasis_span_is_not_mis_terminated()
+    {
+        // #320 case 3: a bold run whose text contains '*' must render as "**a\*b**", not the broken "**a*b**".
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .Runs(new DocxFixtures.RunSpec("a*b", Bold: true)));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("**a\\*b**");
+    }
+
+    [Fact]
+    public async Task Escapes_inline_brackets_so_a_paragraph_cannot_inject_a_link()
+    {
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .Paragraph("See [the site](http://evil.example) now"));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("See \\[the site\\](http://evil.example) now");
+    }
+
+    [Fact]
+    public async Task Escapes_special_characters_in_heading_text()
+    {
+        // #320 case 4: the "# " prefix is generated structure (kept), but a link in the heading TEXT is escaped.
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .Heading("Clause [9](http://x)", 1));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("# Clause \\[9\\](http://x)");
+    }
+
+    [Fact]
+    public async Task Does_not_over_escape_ordinary_paragraph_text()
+    {
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .Paragraph("The fee is 3.14 per unit - a fair price."));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("The fee is 3.14 per unit - a fair price.");
+    }
+
+    [Fact]
+    public async Task Escapes_metacharacters_in_an_image_caption()
+    {
+        // #320: alt-text is author-controlled source text; a bracketed link in it must not become a clickable
+        // link inside the bold caption.
+        StubOcr("TRANSCRIPT");
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .Image(Png(alt: "See [details](http://evil.example)")));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("**See \\[details\\](http://evil.example)**");
+    }
+
+    [Fact]
+    public async Task Escapes_metacharacters_in_a_hyperlink_label()
+    {
+        // #320: a hyperlink's display text is source text; a literal '*' in it must not render as emphasis.
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .HyperlinkParagraph("click *now*", "http://example.com/page"));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("[click \\*now\\*](http://example.com/page)");
+    }
+
+    [Fact]
     public async Task Inlines_image_transcription_at_its_reading_position()
     {
         StubOcr("BRAVO");

@@ -103,13 +103,14 @@ internal static class ChartRenderer
         var title = ReadTitle(chartSpace);
         if (!string.IsNullOrWhiteSpace(title))
         {
-            // Collapse newlines so a multi-line / pipe-bearing title cannot break the bold run or the
-            // table header directly below it.
-            sb.Append("**").Append(MarkdownCell.Inline(title)).Append("**\n\n");
+            // Collapse newlines (InlineLabel) and inline-escape (EscapeInline) so a multi-line / pipe-bearing
+            // / metacharacter-bearing title cannot break the bold run, leak into the table header below, or
+            // inject a link/emphasis.
+            sb.Append("**").Append(MarkdownText.EscapeInline(MarkdownText.InlineLabel(title))).Append("**\n\n");
         }
 
         // Header: leading category column + one column per series.
-        sb.Append("| Category | ").Append(string.Join(" | ", series.Select(s => MarkdownCell.Escape(s.Name)))).Append(" |\n");
+        sb.Append("| Category | ").Append(string.Join(" | ", series.Select(s => MarkdownText.EscapeCell(s.Name)))).Append(" |\n");
         sb.Append("| --- |").Append(string.Concat(series.Select(_ => " --- |"))).Append('\n');
 
         foreach (var idx in rowIndices)
@@ -117,9 +118,9 @@ internal static class ChartRenderer
             var label = categories.TryGetValue(idx, out var cat) && !string.IsNullOrWhiteSpace(cat)
                 ? cat
                 : (idx + 1).ToString();
-            sb.Append("| ").Append(MarkdownCell.Escape(label)).Append(" | ");
+            sb.Append("| ").Append(MarkdownText.EscapeCell(label)).Append(" | ");
             sb.Append(string.Join(" | ", series.Select(s =>
-                s.Values.TryGetValue(idx, out var v) ? MarkdownCell.Escape(v) : string.Empty)));
+                s.Values.TryGetValue(idx, out var v) ? MarkdownText.EscapeCell(v) : string.Empty)));
             sb.Append(" |\n");
         }
 

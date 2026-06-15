@@ -322,7 +322,9 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
                 var oneLine = string.Join(
                     " ",
                     text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-                blocks.Add(new string('#', level) + " " + oneLine);
+                // Escape the heading text so a literal "#"/"[...]"/"*" in it does not extend the ATX run or
+                // inject a link/emphasis (the "# " prefix we add is generated structure, kept intact).
+                blocks.Add(new string('#', level) + " " + MarkdownText.EscapeBlockText(oneLine));
             }
         }
         else
@@ -577,10 +579,11 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
         }
 
         // Caption (alt-text) is author-controlled free text (often multi-line), so collapse newlines via
-        // MarkdownCell.Inline so the bold caption can't break the OCR block (often a table) directly below it.
+        // MarkdownText.InlineLabel AND inline-escape via MarkdownText.EscapeInline so the bold caption can't
+        // break the OCR block (often a table) below it, nor inject a link/emphasis from a literal [..](..)/*.
         var markdown = string.IsNullOrWhiteSpace(caption)
             ? transcription
-            : "**" + MarkdownCell.Inline(caption) + "**\n\n" + transcription;
+            : "**" + MarkdownText.EscapeInline(MarkdownText.InlineLabel(caption)) + "**\n\n" + transcription;
 
         blocks.Add(markdown);
     }
@@ -747,7 +750,9 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
             }
         }
 
-        return sb.ToString().Trim();
+        // Text-box text is verbatim document content emitted as its own block, so escape it like a paragraph:
+        // a line that begins with "# "/"- "/"> " or contains "*"/"[" must not be re-parsed as structure.
+        return MarkdownText.EscapeBlockText(sb.ToString().Trim());
     }
 
     private static string? AltTextOf(W.Drawing drawing)

@@ -63,5 +63,5 @@ internal static class DrawingTableRenderer
     }
 
     private static string CellText(D.TableCell cell)
-        => MarkdownCell.Escape(string.Join(" ", cell.Descendants<D.Text>().Select(t => t.InnerText)));
+        => MarkdownText.EscapeCell(string.Join(" ", cell.Descendants<D.Text>().Select(t => t.InnerText)));
 }

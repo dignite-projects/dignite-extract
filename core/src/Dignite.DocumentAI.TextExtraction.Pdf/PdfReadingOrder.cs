@@ -204,7 +204,11 @@ internal static class PdfReadingOrder
         {
             if (!consumedLines.Contains(i))
             {
-                items.Add(Item.ForText(lines[i].Bounds, lines[i].Text));
+                // Inline-escape the digital-text-layer line so a "*"/"`"/"[" in the source cannot open an
+                // emphasis / code / link span. The leading BLOCK marker is escaped later, once per folded
+                // paragraph (FlushParagraph), since only a paragraph's first line sits at line start. A figure
+                // transcription is OCR-provider Markdown (intentional structure) and is never escaped.
+                items.Add(Item.ForText(lines[i].Bounds, MarkdownText.EscapeInline(lines[i].Text)));
             }
         }
 
@@ -239,7 +243,11 @@ internal static class PdfReadingOrder
         {
             if (paragraph.Count > 0)
             {
-                blocks.Add(string.Join(" ", paragraph));
+                // Lines were inline-escaped at item creation; now neutralize a leading block marker on the
+                // folded paragraph (e.g. a contract line "1. Definitions" / "- clause" / "# heading" that
+                // would otherwise be re-parsed as a list / heading). The lines are space-joined into one
+                // output line, so only its start is a line-start position.
+                blocks.Add(MarkdownText.EscapeLineStarts(string.Join(" ", paragraph)));
                 paragraph.Clear();
             }
 
@@ -251,8 +259,10 @@ internal static class PdfReadingOrder
             if (item.IsFigure)
             {
                 FlushParagraph();
+                // The caption is a digital-text-layer line bound to this figure, so escape it; item.Text is
+                // the OCR transcription (already Markdown) and is emitted verbatim.
                 blocks.Add(item.Caption is { Length: > 0 } caption
-                    ? caption + "\n\n" + item.Text
+                    ? MarkdownText.EscapeBlockText(caption) + "\n\n" + item.Text
                     : item.Text);
                 continue;
             }

@@ -387,12 +387,13 @@ public class PptxExtractor : IMarkdownTextProvider, ITransientDependency
 
         // Native alt-text (p:cNvPr/@descr, fallback @title) is a real caption signal — strictly better
         // than PDF's nearest-text heuristic. Render it as the figure block's label. Alt-text is
-        // author-controlled free text (often multi-line), so collapse newlines via MarkdownCell.Inline so
-        // the bold caption can't break the OCR block (often a table) directly below it.
+        // author-controlled free text (often multi-line), so collapse newlines via MarkdownText.InlineLabel
+        // AND inline-escape via MarkdownText.EscapeInline so the bold caption can't break the OCR block (often
+        // a table) below it, nor inject a link/emphasis from a literal [..](..)/*.
         var caption = AltTextOf(picture);
         var markdown = string.IsNullOrWhiteSpace(caption)
             ? transcription
-            : "**" + MarkdownCell.Inline(caption) + "**\n\n" + transcription;
+            : "**" + MarkdownText.EscapeInline(MarkdownText.InlineLabel(caption)) + "**\n\n" + transcription;
 
         blocks.Add(new SlideReadingOrder.SlideBlock(y, x, state.Sequence++, markdown));
     }
@@ -570,9 +571,12 @@ public class PptxExtractor : IMarkdownTextProvider, ITransientDependency
             return string.Empty;
         }
 
+        // Each paragraph is verbatim slide text emitted into Markdown, so escape it: a line beginning with
+        // "# "/"- "/"> "/"1." or containing "*"/"[" must not be re-parsed as a heading / list / link. A Title
+        // placeholder is escaped here too, then gets its generated "## " prefix in HandleTextShape.
         var paragraphs = body
             .Elements<D.Paragraph>()
-            .Select(ParagraphText)
+            .Select(p => MarkdownText.EscapeBlockText(ParagraphText(p)))
             .Where(line => line.Length > 0);
 
         // Join paragraphs with a blank line so each stays a distinct Markdown paragraph. A single newline

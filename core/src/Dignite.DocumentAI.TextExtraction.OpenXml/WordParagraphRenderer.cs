@@ -83,7 +83,11 @@ internal static class WordParagraphRenderer
         public string ToMarkdown()
         {
             Flush();
-            return _sb.ToString().Trim();
+            // Inline escaping already happened per run (AppendRun); now neutralize a leading BLOCK marker on
+            // each emitted line — the paragraph's own first line and any w:br continuation that begins with
+            // "# " / "- " / "> " / "1." — so it is not re-parsed as a heading / list / blockquote. A generated
+            // hyperlink ([label](url), appended outside AppendRun) starts with "[" and is left intact.
+            return MarkdownText.EscapeLineStarts(_sb.ToString().Trim());
         }
 
         private void AppendRun(W.Run run)
@@ -93,6 +97,13 @@ internal static class WordParagraphRenderer
             {
                 return;
             }
+
+            // Escape inline-significant characters (* _ ` [ ]) in the raw run text BEFORE it is wrapped in
+            // emphasis markers, so a literal "a*b" cannot mis-terminate as "**a*b**" and a "[x](y)" in the
+            // document cannot inject a link. The "**"/"*" we add in Emphasize is never itself escaped because
+            // it is added AFTER this point. Leading block markers (#, -, >, 1.) are handled once per line in
+            // ToMarkdown, not here.
+            text = MarkdownText.EscapeInline(text);
 
             var rPr = run.RunProperties;
             var bold = IsOn(rPr?.Bold);
@@ -135,7 +146,9 @@ internal static class WordParagraphRenderer
             }
 
             var url = ResolveUrl(link.Id?.Value);
-            return url is null ? text : FormatLink(text, url);
+            // An internal anchor (no resolvable URL) renders as plain display text, so inline-escape it like
+            // any run; a resolvable URL goes through FormatLink, which inline-escapes the label itself.
+            return url is null ? MarkdownText.EscapeInline(text) : FormatLink(text, url);
         }
 
         private string? ResolveUrl(string? id)
@@ -152,8 +165,10 @@ internal static class WordParagraphRenderer
     }
 
     /// <summary>
-    /// Builds a Markdown link, escaping the label so a <c>[</c>/<c>]</c> in the display text cannot close it
-    /// early, and using the angle-bracket destination form when the URL contains whitespace or parentheses.
+    /// Builds a Markdown link, inline-escaping the label via <c>MarkdownText.EscapeInline</c> so a
+    /// <c>[</c>/<c>]</c>/<c>*</c>/<c>`</c>/<c>&lt;</c> in the display text cannot close the link early or
+    /// inject emphasis / a nested link, and using the angle-bracket destination form when the URL contains
+    /// whitespace or parentheses.
     /// A literal space in the destination — which <c>System.Uri.ToString()</c> can reintroduce by decoding
     /// <c>%20</c> — otherwise makes CommonMark not render the link at all; an unbalanced <c>)</c> would
     /// truncate the destination. The angle-bracket form takes any character except a literal <c>&lt;</c>/<c>&gt;</c>,
@@ -161,7 +176,7 @@ internal static class WordParagraphRenderer
     /// </summary>
     private static string FormatLink(string text, string url)
     {
-        var label = text.Replace("\\", "\\\\").Replace("[", "\\[").Replace("]", "\\]");
+        var label = MarkdownText.EscapeInline(text);
         var destination = NeedsAngleBrackets(url)
             ? "<" + url.Replace("<", "%3C").Replace(">", "%3E") + ">"
             : url;

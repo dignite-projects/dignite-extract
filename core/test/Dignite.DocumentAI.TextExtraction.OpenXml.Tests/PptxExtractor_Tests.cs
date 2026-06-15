@@ -52,6 +52,33 @@ public class PptxExtractor_Tests
         => new(TinyPng.CreateSolid(48, 48), "image/png", alt, x, y, extent, extent);
 
     [Fact]
+    public async Task Escapes_markdown_metacharacters_in_slide_text()
+    {
+        // #320: literal slide text is escaped; the generated "## " title prefix is kept as real structure.
+        var pptx = PptxFixtures.Build(new PptxFixtures.SlideSpec()
+            .Text("# Roadmap", isTitle: true, x: 100, y: 100)
+            .Text("- 50% *growth* in [Q1](http://x)", x: 100, y: 1_000_000));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(pptx), PptxContext());
+
+        result.Markdown.ShouldContain("## \\# Roadmap");
+        result.Markdown.ShouldContain("\\- 50% \\*growth\\* in \\[Q1\\](http://x)");
+    }
+
+    [Fact]
+    public async Task Escapes_metacharacters_in_an_image_caption()
+    {
+        // #320: PPTX picture alt-text is escaped like the DOCX/PDF captions, so it can't inject a link.
+        StubOcr("TRANSCRIPT");
+        var pptx = PptxFixtures.Build(new PptxFixtures.SlideSpec()
+            .Image(Png(alt: "See [details](http://evil.example)", x: 100, y: 100)));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(pptx), PptxContext());
+
+        result.Markdown.ShouldContain("**See \\[details\\](http://evil.example)**");
+    }
+
+    [Fact]
     public async Task Inlines_image_transcription_at_its_reading_position()
     {
         StubOcr("BRAVO");

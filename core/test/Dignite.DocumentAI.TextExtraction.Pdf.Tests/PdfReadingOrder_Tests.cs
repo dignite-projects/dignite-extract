@@ -228,6 +228,58 @@ public class PdfReadingOrder_Tests
         md.ShouldContain("T");
     }
 
+    [Fact]
+    public void Render_escapes_a_leading_block_marker_on_a_paragraph_line()
+    {
+        // #320 (PDF path): a contract line like "1. Definitions" / "- clause" / "# heading" must not be
+        // re-parsed as a list / heading by the downstream chunker.
+        var lines = new List<PdfReadingOrder.TextLine>
+        {
+            new(new PdfRectangle(0, 700, 200, 712), "1. Definitions")
+        };
+
+        PdfReadingOrder.Render(lines, Array.Empty<PdfReadingOrder.Figure>())
+            .ShouldBe("1\\. Definitions");
+    }
+
+    [Fact]
+    public void Render_escapes_inline_metacharacters_in_a_text_layer_line()
+    {
+        var lines = new List<PdfReadingOrder.TextLine>
+        {
+            new(new PdfRectangle(0, 700, 200, 712), "see [ref](http://x) and *note*")
+        };
+
+        PdfReadingOrder.Render(lines, Array.Empty<PdfReadingOrder.Figure>())
+            .ShouldBe("see \\[ref\\](http://x) and \\*note\\*");
+    }
+
+    [Fact]
+    public void Render_does_not_escape_the_ocr_transcription_of_a_figure()
+    {
+        // A figure transcription is OCR-provider Markdown (here, a table); it is intentional structure and
+        // must be emitted verbatim, never escaped.
+        var figures = new List<PdfReadingOrder.Figure>
+        {
+            new(new PdfRectangle(0, 400, 200, 520), "| a | b |\n| --- | --- |\n| 1 | 2 |")
+        };
+
+        PdfReadingOrder.Render(Array.Empty<PdfReadingOrder.TextLine>(), figures)
+            .ShouldBe("| a | b |\n| --- | --- |\n| 1 | 2 |");
+    }
+
+    [Fact]
+    public void Render_does_not_over_escape_ordinary_text()
+    {
+        var lines = new List<PdfReadingOrder.TextLine>
+        {
+            new(new PdfRectangle(0, 700, 200, 712), "Clause 3.14 applies - see above")
+        };
+
+        PdfReadingOrder.Render(lines, Array.Empty<PdfReadingOrder.Figure>())
+            .ShouldBe("Clause 3.14 applies - see above");
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;
