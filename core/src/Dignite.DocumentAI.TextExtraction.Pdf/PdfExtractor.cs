@@ -140,7 +140,6 @@ public class PdfExtractor : IMarkdownTextProvider, ITransientDependency
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var lines = PdfReadingOrder.GroupWordsIntoLines(pageContent.Words);
                 var figures = new List<PdfReadingOrder.Figure>();
 
                 List<IPdfImage> images;
@@ -244,7 +243,7 @@ public class PdfExtractor : IMarkdownTextProvider, ITransientDependency
                     }
                 }
 
-                var pageMarkdown = PdfReadingOrder.Render(lines, figures);
+                var pageMarkdown = PdfReadingOrder.RenderPage(pageContent.Words, figures);
                 if (!string.IsNullOrWhiteSpace(pageMarkdown))
                 {
                     pageMarkdowns.Add(pageMarkdown);

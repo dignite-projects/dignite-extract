@@ -4,18 +4,31 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.DocumentLayoutAnalysis.PageSegmenter;
+using UglyToad.PdfPig.DocumentLayoutAnalysis.ReadingOrderDetector;
+using DlaTextBlock = UglyToad.PdfPig.DocumentLayoutAnalysis.TextBlock;
 
 namespace Dignite.DocumentAI.TextExtraction.Pdf;
 
 /// <summary>
-/// Light-path layout reconstruction for a single PDF page: groups the text layer into visual lines,
-/// interleaves embedded-figure transcriptions at their reading position, and (optionally) binds a
-/// figure to its nearest caption line.
+/// Layout reconstruction for a single PDF page: segments the text layer into column/region blocks,
+/// orders the blocks into reading order, groups each block into visual lines, interleaves
+/// embedded-figure transcriptions at their reading position, and (optionally) binds a figure to its
+/// nearest caption line.
 /// <para>
 /// PDF user space has a bottom-left origin (Y increases upward), so "top of the page" = the highest
-/// <see cref="PdfRectangle.Top"/>; reading order is <c>Top</c> descending, then <c>Left</c> ascending.
-/// This is the deliberately simple "sort by bbox top/left" approach (#301): it does not reconstruct
-/// tables or multi-column flow, and that is an accepted Phase-1 limitation.
+/// <see cref="PdfRectangle.Top"/>.
+/// </para>
+/// <para>
+/// <b>Column-aware reading order (#310 Phase A).</b> <see cref="RenderPage"/> uses PdfPig's
+/// <c>DocumentLayoutAnalysis</c> (<see cref="RecursiveXYCut"/> page segmenter +
+/// <see cref="UnsupervisedReadingOrderDetector"/>) to order blocks before linearizing, so a multi-column
+/// label/body page no longer splices a left-column label into the middle of a right-column sentence —
+/// the failure mode of a flat <c>Top</c>-descending sort. Within a single block the order is still
+/// <c>Top</c> descending then <c>Left</c> ascending (see <see cref="Render"/>), which is correct for one
+/// column. Reconstructing a table's row of cells into a Markdown table row (so a wrapped cell is not
+/// split across other cells) is <b>deferred to Phase B (v0.3.0)</b>; this round is column/reading-order
+/// only. The flat path remains as a non-lossy fallback when segmentation finds a single region or faults.
 /// </para>
 /// <para>
 /// Caption association is <b>placement/labeling only</b>: a caption is never sent into the OCR call.
@@ -256,6 +269,157 @@ internal static class PdfReadingOrder
         FlushParagraph();
 
         return string.Join("\n\n", blocks);
+    }
+
+    /// <summary>
+    /// Renders a page to Markdown with column-aware reading order (#310 Phase A): segments the page's
+    /// words into layout blocks (<see cref="RecursiveXYCut"/>), orders the blocks
+    /// (<see cref="UnsupervisedReadingOrderDetector"/>, column-wise), then renders each block in reading
+    /// order through the single-region <see cref="Render(IReadOnlyList{TextLine}, IReadOnlyList{Figure})"/>
+    /// path (line grouping + caption binding + paragraph folding) and joins the blocks. Embedded figures
+    /// are merged into the block order by their placement bbox (nearest block by squared centroid
+    /// distance), so figure inlining + caption association (#301) keep working on the column-aware order.
+    /// <para>
+    /// <b>Caption binding is per-block here.</b> Because each block is rendered through its own
+    /// <see cref="Render(IReadOnlyList{TextLine}, IReadOnlyList{Figure})"/> pass, a figure binds a caption
+    /// only from <i>its own</i> block. In the normal case a figure and its caption sit together in the
+    /// same column/block, so this is unchanged from #301; the only degradation is the rare multi-column
+    /// case where a figure's caption lands in a different block — the caption then stays as body text and
+    /// the figure renders unlabeled. This is non-lossy (no text is dropped) and accepted for Phase A.
+    /// </para>
+    /// <para>
+    /// <b>Non-lossy fallback.</b> When the page is a single region, segmentation faults, or a block layout
+    /// would drop a word, this returns the flat single-region rendering instead — layout analysis is a
+    /// best-effort quality improvement, never a correctness dependency, so no content is ever lost.
+    /// </para>
+    /// </summary>
+    public static string RenderPage(IReadOnlyList<Word> words, IReadOnlyList<Figure> figures)
+    {
+        IReadOnlyList<DlaTextBlock> orderedBlocks;
+        try
+        {
+            orderedBlocks = SegmentIntoReadingOrder(words);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Any segmenter/reading-order fault degrades to the flat path: the page still renders and no
+            // content is lost (the digital text layer is the channel's primary, non-negotiable payload).
+            // A cancellation is NOT swallowed — it propagates so a host/job shutdown aborts promptly.
+            return Render(GroupWordsIntoLines(words), figures);
+        }
+
+        // A single region (or no/one-block segmentation) is exactly the #301 behavior — render the whole
+        // page as one column. This is also the path the existing single-column fixtures take.
+        if (orderedBlocks.Count <= 1)
+        {
+            return Render(GroupWordsIntoLines(words), figures);
+        }
+
+        // Non-lossy guard: RecursiveXYCut partitions every word into a leaf, so block words should account
+        // for every meaningful input word. If a word went missing, discard the block layout and fall back
+        // rather than emit a page that silently dropped contract text.
+        var inputMeaningful = words.Count(w => !string.IsNullOrWhiteSpace(w.Text));
+        var blockMeaningful = orderedBlocks.Sum(
+            block => block.TextLines.Sum(line => line.Words.Count(w => !string.IsNullOrWhiteSpace(w.Text))));
+        if (blockMeaningful < inputMeaningful)
+        {
+            return Render(GroupWordsIntoLines(words), figures);
+        }
+
+        // Attach each figure to the block it reads with (nearest block centroid) so figure inlining +
+        // caption binding run within that block's single-region stream.
+        var figuresByBlock = AssignFiguresToBlocks(orderedBlocks, figures);
+
+        var rendered = new List<string>(orderedBlocks.Count);
+        for (var b = 0; b < orderedBlocks.Count; b++)
+        {
+            // Re-group the block's words into visual lines with the existing robust clustering (rather than
+            // the segmenter's own lines), so tall-glyph / CJK handling and paragraph folding are unchanged.
+            var blockWords = orderedBlocks[b].TextLines.SelectMany(line => line.Words).ToList();
+            var blockLines = GroupWordsIntoLines(blockWords);
+            var blockFigures = figuresByBlock[b];
+            if (blockLines.Count == 0 && blockFigures.Count == 0)
+            {
+                continue;
+            }
+
+            var blockMarkdown = Render(blockLines, blockFigures);
+            if (!string.IsNullOrWhiteSpace(blockMarkdown))
+            {
+                rendered.Add(blockMarkdown);
+            }
+        }
+
+        return string.Join("\n\n", rendered);
+    }
+
+    /// <summary>
+    /// Segments a page's words into layout blocks and returns them in reading order. Uses
+    /// <see cref="RecursiveXYCut"/> — a top-down "Manhattan layout" segmenter that cuts the page along
+    /// whitespace valleys wider than the dominant font metrics, separating columns (vertical gutter cut)
+    /// and paragraphs (horizontal line-gap cut). This fits the column/table-structured target corpus
+    /// (contracts / invoices) better than the bottom-up Docstrum clustering. Blocks are ordered by
+    /// <see cref="UnsupervisedReadingOrderDetector"/> in <see cref="UnsupervisedReadingOrderDetector.SpatialReasoningRules.ColumnWise"/>
+    /// mode (read each column top-to-bottom, then move right), which keeps a column's lines contiguous.
+    /// Returns an empty list when there are no meaningful words.
+    /// </summary>
+    private static IReadOnlyList<DlaTextBlock> SegmentIntoReadingOrder(IReadOnlyList<Word> words)
+    {
+        // The segmenter needs glyph geometry; whitespace-only tokens carry none and only add noise.
+        var meaningful = words.Where(w => !string.IsNullOrWhiteSpace(w.Text)).ToList();
+        if (meaningful.Count == 0)
+        {
+            return Array.Empty<DlaTextBlock>();
+        }
+
+        var blocks = new RecursiveXYCut().GetBlocks(meaningful);
+        if (blocks.Count <= 1)
+        {
+            return blocks;
+        }
+
+        return new UnsupervisedReadingOrderDetector(
+                T: 5,
+                spatialReasoningRule: UnsupervisedReadingOrderDetector.SpatialReasoningRules.ColumnWise,
+                useRenderingOrder: false)
+            .Get(blocks)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Buckets figures by the block they read with: each figure is assigned to the block whose bounding
+    /// box is nearest by squared centroid distance. Every figure lands in exactly one bucket (no figure is
+    /// dropped); <paramref name="blocks"/> is expected to be non-empty.
+    /// </summary>
+    private static IReadOnlyList<List<Figure>> AssignFiguresToBlocks(
+        IReadOnlyList<DlaTextBlock> blocks, IReadOnlyList<Figure> figures)
+    {
+        var byBlock = new List<List<Figure>>(blocks.Count);
+        for (var b = 0; b < blocks.Count; b++)
+        {
+            byBlock.Add(new List<Figure>());
+        }
+
+        foreach (var figure in figures)
+        {
+            var (fx, fy) = Centroid(figure.Bounds);
+            var best = 0;
+            var bestDistance = double.MaxValue;
+            for (var b = 0; b < blocks.Count; b++)
+            {
+                var (bx, by) = Centroid(blocks[b].BoundingBox);
+                var distance = Sq(bx - fx) + Sq(by - fy);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = b;
+                }
+            }
+
+            byBlock[best].Add(figure);
+        }
+
+        return byBlock;
     }
 
     private static bool LooksLikeCaption(string text) => CaptionPattern.IsMatch(text);

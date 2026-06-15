@@ -49,4 +49,24 @@ internal static class PdfFixtures
 
         return builder.Build();
     }
+
+    /// <summary>
+    /// Builds a single-page PDF with text placed at explicit (X, baseline) positions — needed to lay out
+    /// multi-column fixtures (e.g. a left-column label beside a right-column body) that the column-aware
+    /// reading order (#310) must keep from interleaving.
+    /// </summary>
+    public static byte[] BuildPositioned(
+        IReadOnlyList<(string Text, double X, double BaselineY)> texts)
+    {
+        var builder = new PdfDocumentBuilder();
+        var font = builder.AddStandard14Font(Standard14Font.Helvetica);
+        var page = builder.AddPage(PageWidth, PageHeight);
+
+        foreach (var (text, x, baselineY) in texts)
+        {
+            page.AddText(text, 12, new PdfPoint(x, baselineY), font);
+        }
+
+        return builder.Build();
+    }
 }

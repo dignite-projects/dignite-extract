@@ -371,4 +371,36 @@ public class PdfExtractor_Tests
             Arg.Any<Stream>(), Arg.Any<OcrOptions>(), Arg.Any<CancellationToken>());
         result.Markdown.ShouldContain("RE_OCRED_BACKGROUND");
     }
+
+    [Fact]
+    public async Task Two_column_label_body_page_keeps_the_right_column_sentence_contiguous()
+    {
+        // #310 Phase A: a left-column label sits vertically between the two wrapped lines of a
+        // right-column body sentence. A flat top→bottom sort interleaves the label into the sentence
+        // ("alpha beta LABEL gamma delta"); column-aware segmentation must keep the body contiguous.
+        var pdf = PdfFixtures.BuildPositioned(new[]
+        {
+            ("LABEL", 50.0, 503.0),       // left column
+            ("alpha beta", 300.0, 508.0), // right column, first wrapped line (just above the label)
+            ("gamma delta", 300.0, 498.0) // right column, second wrapped line (just below the label)
+        });
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(pdf), PdfContext());
+
+        // All content is present (non-lossy).
+        result.Markdown.ShouldContain("LABEL");
+        result.Markdown.ShouldContain("alpha beta");
+        result.Markdown.ShouldContain("gamma delta");
+
+        // The body sentence is not interrupted by the label: nothing between its first and last word is
+        // the label. (The flat sort would place "LABEL" between "beta" and "gamma".)
+        var firstBodyWord = result.Markdown.IndexOf("alpha", StringComparison.Ordinal);
+        var lastBodyWord = result.Markdown.IndexOf("delta", StringComparison.Ordinal);
+        firstBodyWord.ShouldBeGreaterThanOrEqualTo(0);
+        lastBodyWord.ShouldBeGreaterThan(firstBodyWord);
+        // The left-column label must not be spliced into the right-column sentence.
+        result.Markdown
+            .Substring(firstBodyWord, lastBodyWord - firstBodyWord)
+            .ShouldNotContain("LABEL");
+    }
 }
