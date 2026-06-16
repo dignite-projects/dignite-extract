@@ -189,5 +189,88 @@
         </div>
       </div>
     </div>
+
+    <!-- Filtered-entry navigation (#335): jump into the document list by cabinet or by document type.
+         Secondary to upload, so it sits below the main row. No per-entity counts. -->
+    @if (showCabinetSection()) {
+      <section class="mt-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h2 class="h5 mb-0">{{ '::Document:Home:CabinetsSection' | abpLocalization }}</h2>
+          @if (cabinets().length > 0) {
+            <a class="small" routerLink="/documents/cabinets">
+              {{ '::Document:Home:ManageCabinets' | abpLocalization }}
+            </a>
+          }
+        </div>
+
+        @if (cabinets().length > 0) {
+          <div class="home-chip-grid">
+            @for (cabinet of cabinets(); track cabinet.id) {
+              <a
+                class="home-chip"
+                routerLink="/documents/list"
+                [queryParams]="{ cabinetId: cabinet.id }"
+              >
+                <i class="fas fa-folder text-warning"></i>
+                <span class="text-truncate">{{ cabinet.name }}</span>
+              </a>
+            }
+          </div>
+        } @else if (!cabinetsLoading()) {
+          <div class="card shadow-sm">
+            <div class="card-body text-center text-muted py-4">
+              <i class="fas fa-folder-open d-block mb-2 fs-4"></i>
+              <div class="mb-2">{{ '::Document:Home:CabinetsEmpty' | abpLocalization }}</div>
+              @if (canCreateCabinet) {
+                <a class="btn btn-sm btn-outline-primary" routerLink="/documents/cabinets">
+                  {{ '::Document:Home:CreateCabinet' | abpLocalization }}
+                </a>
+              }
+            </div>
+          </div>
+        }
+      </section>
+    }
+
+    @if (showTypeSection()) {
+      <section class="mt-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h2 class="h5 mb-0">{{ '::Document:Home:TypesSection' | abpLocalization }}</h2>
+          @if (canManageTypes && documentTypes().length > 0) {
+            <a class="small" routerLink="/documents/types">
+              {{ '::Document:Home:ManageTypes' | abpLocalization }}
+            </a>
+          }
+        </div>
+
+        @if (documentTypes().length > 0) {
+          <div class="home-chip-grid">
+            @for (type of documentTypes(); track type.id) {
+              <a
+                class="home-chip"
+                routerLink="/documents/list"
+                [queryParams]="{ documentTypeCode: type.typeCode }"
+              >
+                <i class="fas fa-tags text-info"></i>
+                <span class="text-truncate">{{ type.displayName }}</span>
+                <code class="home-chip-code">{{ type.typeCode }}</code>
+              </a>
+            }
+          </div>
+        } @else if (!typesLoading()) {
+          <div class="card shadow-sm">
+            <div class="card-body text-center text-muted py-4">
+              <i class="fas fa-tags d-block mb-2 fs-4"></i>
+              <div class="mb-2">{{ '::Document:Home:TypesEmpty' | abpLocalization }}</div>
+              @if (canCreateType) {
+                <a class="btn btn-sm btn-outline-primary" routerLink="/documents/types">
+                  {{ '::Document:Home:CreateType' | abpLocalization }}
+                </a>
+              }
+            </div>
+          </div>
+        }
+      </section>
+    }
   </div>
 </div>

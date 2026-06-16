@@ -12,8 +12,12 @@ import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { LocalizationPipe, PermissionService } from '@abp/ng.core';
 import {
+  CabinetDto,
+  CabinetService,
   DocumentStatisticsDto,
   DocumentStatisticsService,
+  DocumentTypeDto,
+  DocumentTypeService,
   DOCUMENT_AI_PERMISSIONS,
 } from '@dignite/document-ai';
 import { EMPTY, Subject } from 'rxjs';
@@ -31,6 +35,8 @@ import { formatBytes } from '../../shared/format-bytes';
 export class DocumentHomeComponent implements OnInit {
   private readonly permissionService = inject(PermissionService);
   private readonly statisticsService = inject(DocumentStatisticsService);
+  private readonly cabinetService = inject(CabinetService);
+  private readonly documentTypeService = inject(DocumentTypeService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly canUpload = this.permissionService.getGrantedPolicy(
@@ -41,6 +47,37 @@ export class DocumentHomeComponent implements OnInit {
   );
   readonly canViewCabinets = this.permissionService.getGrantedPolicy(
     DOCUMENT_AI_PERMISSIONS.Cabinets.Default,
+  );
+  readonly canCreateCabinet = this.permissionService.getGrantedPolicy(
+    DOCUMENT_AI_PERMISSIONS.Cabinets.Create,
+  );
+  readonly canManageTypes = this.permissionService.getGrantedPolicy(
+    DOCUMENT_AI_PERMISSIONS.DocumentTypes.Default,
+  );
+  readonly canCreateType = this.permissionService.getGrantedPolicy(
+    DOCUMENT_AI_PERMISSIONS.DocumentTypes.Create,
+  );
+
+  // Filtered-entry navigation (#335): cabinets and visible document types as quick links into the
+  // document list. No per-entity counts — navigation, not a dashboard. Cabinet list is gated by
+  // Cabinets.Default; document types are visible to any Documents.Default operator (GetVisible is
+  // decoupled from DocumentTypes.Default, #223).
+  readonly cabinets = signal<CabinetDto[]>([]);
+  readonly documentTypes = signal<DocumentTypeDto[]>([]);
+  // Loading starts true only when a fetch will actually run, so the empty state never flashes first.
+  readonly cabinetsLoading = signal(this.canViewCabinets);
+  readonly typesLoading = signal(true);
+
+  // Show a section while it is still loading (avoids a layout pop), when it has items, or when the
+  // user can create the first one (actionable empty state). A plain viewer with neither items nor
+  // create rights sees nothing instead of a dead "empty" box.
+  readonly showCabinetSection = computed(
+    () =>
+      this.canViewCabinets &&
+      (this.cabinetsLoading() || this.cabinets().length > 0 || this.canCreateCabinet),
+  );
+  readonly showTypeSection = computed(
+    () => this.typesLoading() || this.documentTypes().length > 0 || this.canCreateType,
   );
 
   readonly stats = signal<DocumentStatisticsDto | null>(null);
@@ -94,9 +131,45 @@ export class DocumentHomeComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadStatistics();
+    if (this.canViewCabinets) {
+      this.loadCabinets();
+    }
+    this.loadDocumentTypes();
   }
 
   loadStatistics(): void {
     this.reload$.next();
+  }
+
+  private loadCabinets(): void {
+    this.cabinetService
+      .getList()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: list => {
+          this.cabinets.set(list);
+          this.cabinetsLoading.set(false);
+        },
+        error: () => {
+          this.cabinets.set([]);
+          this.cabinetsLoading.set(false);
+        },
+      });
+  }
+
+  private loadDocumentTypes(): void {
+    this.documentTypeService
+      .getVisible()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: list => {
+          this.documentTypes.set(list);
+          this.typesLoading.set(false);
+        },
+        error: () => {
+          this.documentTypes.set([]);
+          this.typesLoading.set(false);
+        },
+      });
   }
 }

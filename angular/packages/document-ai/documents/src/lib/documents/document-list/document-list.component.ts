@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule, formatDate } from '@angular/common';
-import { Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import {
   ListService,
@@ -79,6 +79,7 @@ export class DocumentListComponent implements OnInit {
   private readonly fieldDefinitionService = inject(FieldDefinitionService);
   private readonly cabinetService = inject(CabinetService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toaster = inject(ToasterService);
   private readonly permissionService = inject(PermissionService);
@@ -137,6 +138,9 @@ export class DocumentListComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // Seed filters from query params first so the overview cards (#335) can deep-link into a
+    // cabinet- or type-filtered list before the initial load runs.
+    this.applyQueryParamFilters();
     this.hookListQuery();
     // Document types drive the type filter, the dynamic extracted-field columns, and
     // the confirm-classification picker. Every Documents.Default user needs them, and
@@ -153,6 +157,22 @@ export class DocumentListComponent implements OnInit {
 
   refresh(): void {
     this.list.getWithoutPageReset();
+  }
+
+  // Overview deep-links (#335) carry cabinetId / documentTypeCode in the URL. Seed the matching
+  // filter signals once on load; the top dropdowns are bound to the same signals so they reflect the
+  // applied value, and loadDocumentTypes() picks up a seeded typeFilter to load its field columns. The
+  // URL is a one-time seed — dropdown changes afterwards are not written back to the URL.
+  private applyQueryParamFilters(): void {
+    const params = this.route.snapshot.queryParamMap;
+    const cabinetId = params.get('cabinetId');
+    if (cabinetId) {
+      this.cabinetFilter.set(cabinetId);
+    }
+    const typeCode = params.get('documentTypeCode');
+    if (typeCode) {
+      this.typeFilter.set(typeCode);
+    }
   }
 
   onLifecycleFilterChange(value: DocumentLifecycleStatus | undefined): void {
