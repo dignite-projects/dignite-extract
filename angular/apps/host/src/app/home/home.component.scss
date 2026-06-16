@@ -1,166 +1,119 @@
-/* Styles for the home component */
-.card-bg-image {
-  position: absolute;
-  width: 630px;
-  height: auto;
-  bottom: 0;
-  right: 0;
-  z-index: 1;
+.host-home-shell {
+  max-width: 1320px;
+  margin: 0 auto;
 }
 
-.starting-content {
-  position: relative;
-  z-index: 2;
+.host-hero {
+  background:
+    radial-gradient(circle at 88% 10%, rgba(var(--bs-primary-rgb), 0.12), transparent 28rem),
+    linear-gradient(135deg, var(--bs-body-bg), var(--bs-tertiary-bg, #f8f9fa));
 }
 
-
-.getting-started-hero-card .card-body {
-  position: relative;
+.section-kicker {
+  color: var(--bs-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.abp-support {
-  width: 178px;
-  height: 30px;
-  background-image: url('/assets/images/getting-started/abp-support.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
+.hero-copy {
+  max-width: 44rem;
 }
 
-.abp-community {
-  width: 215px;
-  height: 30px;
-  background-image: url('/assets/images/getting-started/abp-community.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
+.context-panel {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  background-color: rgba(var(--bs-body-bg-rgb), 0.78);
+  padding: 1.25rem;
 }
 
-.abp-blog {
-  width: 142px;
-  height: 30px;
-  background-image: url('/assets/images/getting-started/abp-blog.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
+.signed-in-panel {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
-.abp-studio {
-  width: 146px;
-  height: 30px;
-  background-image: url('/assets/images/getting-started/abp-studio.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
+.user-mark,
+.entry-icon,
+.boundary-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
 }
 
-.abp-suite {
-  width: 132px;
-  height: 30px;
-  background-image: url('/assets/images/getting-started/abp-suite.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
+.user-mark {
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 0.75rem;
+  background-color: var(--bs-primary);
+  color: var(--bs-white);
+  font-weight: 700;
 }
 
-.logo-x {
-  width: 20px;
-  height: 20px;
-  background-image: url('/assets/images/getting-started/x.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
+.boundary-icon {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.625rem;
+  background-color: rgba(var(--bs-primary-rgb), 0.1);
+  color: var(--bs-primary);
 }
 
-.entity-famework-core {
-  width: 84px;
-  height: 24px;
-  background-image: url('/assets/images/getting-started/entity-famework-core-dark.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
-}
+.entry-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1.125rem;
+  color: inherit;
+  text-decoration: none;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 
-.mongo-db {
-  width: 85px;
-  height: 24px;
-  background-image: url('/assets/images/getting-started/mongo-db-dark.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
-}
-
-.blazor {
-  width: 65px;
-  height: 20px;
-  background-image: url('/assets/images/getting-started/blazor-dark.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
-}
-
-.angular {
-  width: 82px;
-  height: 20px;
-  background-image: url('/assets/images/getting-started/angular-dark.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
-}
-
-.mvc-razor-pages {
-  width: 95px;
-  height: 20px;
-  background-image: url('/assets/images/getting-started/mvc-razor-pages-dark.svg');
-  background-size: contain;
-  background-repeat: no-repeat;
-}
-
-:host-context(.lpx-theme-dark) {
-  .abp-support {
-    background-image: url('/assets/images/getting-started/abp-support-white.svg');
+  &:hover,
+  &:focus-visible {
+    color: inherit;
+    border-color: rgba(var(--bs-primary-rgb), 0.65);
+    box-shadow: 0 0.75rem 2rem rgba(var(--bs-primary-rgb), 0.12) !important;
+    transform: translateY(-2px);
   }
 
-  .abp-community {
-    background-image: url('/assets/images/getting-started/abp-community-white.svg');
-  }
-
-  .abp-blog {
-    background-image: url('/assets/images/getting-started/abp-blog-white.svg');
-  }
-
-  .logo-x {
-    background-image: url('/assets/images/getting-started/x-white.svg');
-  }
-
-  .abp-studio {
-    background-image: url('/assets/images/getting-started/abp-studio-white.svg');
-  }
-
-  .abp-suite {
-    background-image: url('/assets/images/getting-started/abp-suite-white.svg');
-  }
-
-  .entity-famework-core {
-    background-image: url('/assets/images/getting-started/entity-famework-core.svg');
-  }
-
-  .mongo-db {
-    background-image: url('/assets/images/getting-started/mongo-db.svg');
-  }
-
-  .blazor {
-    background-image: url('/assets/images/getting-started/blazor.svg');
-  }
-
-  .angular {
-    background-image: url('/assets/images/getting-started/angular.svg');
-  }
-
-  .mvc-razor-pages {
-    background-image: url('/assets/images/getting-started/mvc-razor-pages.svg');
+  &:active {
+    transform: translateY(0);
   }
 }
 
-
-@media (min-width: 1199px) {
-  .h-lg-100 {
-    height: 100% !important;
-  }
+.entry-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.625rem;
 }
 
-@media (min-width: 768px) {
-  .h-md-100 {
-    height: 100% !important;
+.entry-title {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-weight: 700;
+}
+
+.entry-description {
+  display: block;
+  color: var(--bs-secondary-color);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.entry-arrow {
+  color: var(--bs-secondary-color);
+}
+
+@media (max-width: 575.98px) {
+  .entry-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .entry-arrow {
+    display: none;
   }
 }
