@@ -101,6 +101,24 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// </summary>
     public virtual DocumentTextExtractionMetadata? ExtractionMetadata { get; private set; }
 
+    // === Scenario B sub-document back-reference (#306) ===
+
+    /// <summary>
+    /// When this document was derived from an embedded figure of another document (#306, Scenario B), the id of
+    /// that <b>source</b> document; <c>null</c> for normally-uploaded documents. A peer back-reference
+    /// (reference-by-id, no navigation property, no FK cascade): the derived document has a fully independent
+    /// lifecycle and outlives the source. Exposed at the egress so downstream can follow it for provenance.
+    /// </summary>
+    public virtual Guid? OriginDocumentId { get; private set; }
+
+    /// <summary>
+    /// Content-derived stable key of the source figure this document was derived from (#306): the SHA-256 of the
+    /// figure bytes, equal to this document's <c>FileOrigin.ContentHash</c>. NOT bbox (which drifts, #210). Unique
+    /// together with <see cref="OriginDocumentId"/> so re-extraction / routing retry never duplicate-spawn.
+    /// <c>null</c> for normally-uploaded documents.
+    /// </summary>
+    public virtual string? OriginFigureKey { get; private set; }
+
     // --- Aggregate-internal field value collection (field architecture v2 / Issue #206) ---
 
     private readonly List<DocumentExtractedField> _extractedFieldValues = new();
@@ -130,6 +148,29 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         FileOrigin = Check.NotNull(fileOrigin, nameof(fileOrigin));
         CabinetId = cabinetId;
         LifecycleStatus = DocumentLifecycleStatus.Uploaded;
+    }
+
+    /// <summary>
+    /// Creates a <b>derived</b> document spawned from an embedded figure of <paramref name="originDocumentId"/>
+    /// (#306, Scenario B). It is a normal peer <see cref="Document"/> that runs the full pipeline + egress; the
+    /// only difference is the back-reference (<see cref="OriginDocumentId"/> / <see cref="OriginFigureKey"/>).
+    /// <paramref name="originFigureKey"/> equals <paramref name="fileOrigin"/>'s <c>ContentHash</c> (the figure
+    /// content hash), tying storage and routing idempotency together.
+    /// </summary>
+    public static Document CreateDerived(
+        Guid id,
+        Guid? tenantId,
+        FileOrigin fileOrigin,
+        Guid originDocumentId,
+        string originFigureKey)
+    {
+        var document = new Document(id, tenantId, fileOrigin)
+        {
+            OriginDocumentId = Check.NotDefaultOrNull<Guid>(originDocumentId, nameof(originDocumentId)),
+            OriginFigureKey = Check.NotNullOrWhiteSpace(
+                originFigureKey, nameof(originFigureKey), DocumentConsts.MaxOriginFigureKeyLength)
+        };
+        return document;
     }
 
     // --- Write methods (called by DocumentPipelineRunManager when a pipeline completes) ---

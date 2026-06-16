@@ -37,4 +37,12 @@ public class DocumentReadyEto
     public required DateTime EventTime { get; init; }
 
     public string? DocumentTypeCode { get; init; }
+
+    /// <summary>
+    /// Provenance link for a Scenario B sub-document (#306): when this document was derived from an embedded
+    /// figure of another document, the id of that source document; <c>null</c> for normally-uploaded documents.
+    /// Downstream may follow it to associate the derived document with its source. New optional field; defaults
+    /// to <c>null</c> for producers / consumers that predate it.
+    /// </summary>
+    public Guid? OriginDocumentId { get; init; }
 }

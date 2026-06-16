@@ -100,4 +100,27 @@ public class DocumentFigure : CreationAuditedAggregateRoot<Guid>, IMultiTenant
         PageNumber = pageNumber;
         Status = DocumentFigureStatus.Pending;
     }
+
+    /// <summary>
+    /// Records that sub-document routing spawned a derived <see cref="Document"/> from this candidate (#306):
+    /// links the derived document and moves <see cref="Status"/> to <see cref="DocumentFigureStatus.Spawned"/>.
+    /// Idempotent re-routing is guarded upstream by the unique <c>(OriginDocumentId, OriginFigureKey)</c> index
+    /// on the derived document.
+    /// </summary>
+    public void MarkSpawned(Guid routedDocumentId)
+    {
+        RoutedDocumentId = Check.NotDefaultOrNull<Guid>(routedDocumentId, nameof(routedDocumentId));
+        Status = DocumentFigureStatus.Spawned;
+    }
+
+    /// <summary>
+    /// Records that the routing gate judged this figure not itself a document of any candidate type (#306):
+    /// moves <see cref="Status"/> to <see cref="DocumentFigureStatus.NotADocument"/>. The caller deletes the
+    /// candidate crop blob separately; the row is kept as an audit + idempotency marker so a re-run does not
+    /// re-evaluate it.
+    /// </summary>
+    public void MarkNotADocument()
+    {
+        Status = DocumentFigureStatus.NotADocument;
+    }
 }

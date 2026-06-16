@@ -111,18 +111,22 @@ public class EtoContract_Tests
     [Fact]
     public void DocumentReadyEto_RoundTrips_Through_SystemTextJson()
     {
+        var originDocumentId = Guid.NewGuid();
         var eto = new DocumentReadyEto
         {
             DocumentId = Guid.NewGuid(),
             TenantId = null,
             EventTime = SampleEventTime,
-            DocumentTypeCode = "contract.general"
+            DocumentTypeCode = "contract.general",
+            // #306: provenance link for a Scenario B sub-document. Non-null so a serialization regression is caught.
+            OriginDocumentId = originDocumentId
         };
 
         var roundTrip = RoundTrip(eto);
 
         roundTrip.DocumentTypeCode.ShouldBe("contract.general");
         roundTrip.EventTime.ShouldBe(eto.EventTime);
+        roundTrip.OriginDocumentId.ShouldBe(originDocumentId);
     }
 
     [Fact]

@@ -15,6 +15,12 @@ public class DocumentDto : EntityDto<Guid>
     /// <summary>Owning cabinet (#194). null means uncategorized. The frontend maps cabinet names from the cabinet list.</summary>
     public Guid? CabinetId { get; set; }
 
+    /// <summary>
+    /// Provenance link for a Scenario B sub-document (#306): when this document was derived from an embedded
+    /// figure of another document, the id of that source document; <c>null</c> for normally-uploaded documents.
+    /// </summary>
+    public Guid? OriginDocumentId { get; set; }
+
     public string? DocumentTypeCode { get; set; }
     public DocumentLifecycleStatus LifecycleStatus { get; set; }
     public DocumentReviewDisposition ReviewDisposition { get; set; }

@@ -8,6 +8,7 @@ using Dignite.DocumentAI.Abstractions.TextExtraction;
 using Dignite.DocumentAI.Ai;
 using Dignite.DocumentAI.Documents;
 using Dignite.DocumentAI.Documents.Cabinets;
+using Dignite.DocumentAI.Documents.Pipelines.Routing;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -28,6 +29,9 @@ namespace Dignite.DocumentAI.Documents.Pipelines.TextExtraction;
 public class DocumentTextExtractionBackgroundJob
     : DocumentPipelineBackgroundJobBase<DocumentTextExtractionJobArgs>, ITransientDependency
 {
+    /// <summary>Provider name recorded for a derived sub-document whose Markdown is seeded from the source figure's transcription (#306), instead of re-OCR'ing the crop.</summary>
+    private const string ScenarioBSeedProviderName = "ScenarioB-FigureSeed";
+
     private readonly DocumentPipelineJobScheduler _pipelineJobScheduler;
     private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly ITextExtractor _textExtractor;
@@ -95,18 +99,37 @@ public class DocumentTextExtractionBackgroundJob
         IReadOnlyList<FigureCandidate> figureCandidates = Array.Empty<FigureCandidate>();
         try
         {
-            // The caller owns the blob stream. With the FileSystem provider this is a FileStream holding an OS file handle,
-            // so it must be disposed, consistent with DocumentAppService.GetBlobAsync disposeStream:true.
-            // Use await using so it is released when this try block (External phase) ends; CompleteRunAsync no longer needs it.
-            await using var blobStream = await _blobContainer.GetAsync(workItem.BlobName);
-            var ctx = new TextExtractionContext
+            TextExtractionResult result;
+            if (workItem.SeedMarkdown != null)
             {
-                ContentType = workItem.ContentType,
-                FileExtension = Path.GetExtension(workItem.OriginalFileName ?? string.Empty),
-                LanguageHints = { "ja", "en" }
-            };
+                // #306 derived sub-document: seed Markdown from the source figure's transcription instead of
+                // re-OCR'ing the crop. The crop is the exact bytes the figure OCR already transcribed via the
+                // same IOcrProvider, so re-OCR would reproduce the same text — seeding is equivalent and saves
+                // one OCR call. A crop is a single image, so no embedded figures are surfaced and no recursive
+                // sub-document routing occurs.
+                result = new TextExtractionResult
+                {
+                    Markdown = workItem.SeedMarkdown,
+                    UsedOcr = false,
+                    ProviderName = ScenarioBSeedProviderName,
+                    IsComplete = true
+                };
+            }
+            else
+            {
+                // The caller owns the blob stream. With the FileSystem provider this is a FileStream holding an OS file handle,
+                // so it must be disposed, consistent with DocumentAppService.GetBlobAsync disposeStream:true.
+                // Use await using so it is released when this try block (External phase) ends; CompleteRunAsync no longer needs it.
+                await using var blobStream = await _blobContainer.GetAsync(workItem.BlobName);
+                var ctx = new TextExtractionContext
+                {
+                    ContentType = workItem.ContentType,
+                    FileExtension = Path.GetExtension(workItem.OriginalFileName ?? string.Empty),
+                    LanguageHints = { "ja", "en" }
+                };
 
-            var result = await _textExtractor.ExtractAsync(blobStream, ctx, _cancellationTokenProvider.Token);
+                result = await _textExtractor.ExtractAsync(blobStream, ctx, _cancellationTokenProvider.Token);
+            }
 
             var title = await TryGenerateTitleAsync(result.Markdown, _cancellationTokenProvider.Token)
                 ?? MarkdownTitleExtractor.ExtractTitle(result.Markdown)
@@ -152,13 +175,26 @@ public class DocumentTextExtractionBackgroundJob
             document, args.PipelineRunId, DocumentAIPipelines.TextExtraction);
         await DocumentRepository.UpdateAsync(document, autoSave: true);
 
+        // #306: a derived sub-document (OriginDocumentId set) seeds its Markdown from the source figure's
+        // transcription rather than re-OCR'ing the crop. Load it inside this UoW; null (not derived, or the
+        // candidate is missing/empty) falls back to the normal OCR path in ExecuteAsync.
+        string? seedMarkdown = null;
+        if (document.OriginDocumentId.HasValue && !string.IsNullOrEmpty(document.OriginFigureKey))
+        {
+            var figure = await _documentFigureRepository.FirstOrDefaultAsync(
+                f => f.SourceDocumentId == document.OriginDocumentId.Value && f.ContentHash == document.OriginFigureKey);
+            var transcription = figure?.Transcription;
+            seedMarkdown = string.IsNullOrEmpty(transcription) ? null : transcription;
+        }
+
         await uow.CompleteAsync();
 
         return new TextExtractionWorkItem(
             run.Id,
             document.FileOrigin.BlobName,
             document.FileOrigin.ContentType,
-            document.FileOrigin.OriginalFileName);
+            document.FileOrigin.OriginalFileName,
+            seedMarkdown);
     }
 
     private async Task CompleteRunAsync(
@@ -196,6 +232,15 @@ public class DocumentTextExtractionBackgroundJob
                 candidate.ContentType,
                 candidate.Transcription,
                 candidate.PageNumber));
+        }
+
+        // #306: hand the persisted candidates to sub-document routing (a separate, independently-retried job).
+        // Enqueued in this same UoW so the candidates and the routing job commit atomically; no candidates -> no
+        // routing job. A derived sub-document is itself seeded (no figures), so it never re-enqueues routing.
+        if (figureCandidates.Count > 0)
+        {
+            await _backgroundJobManager.EnqueueAsync(
+                new DocumentFigureRoutingJobArgs { SourceDocumentId = document.Id });
         }
 
         // Publish OCRCompletedEto with a thin payload; downstream consumers pull Markdown back through REST.
@@ -453,7 +498,8 @@ public class DocumentTextExtractionBackgroundJob
         Guid RunId,
         string BlobName,
         string ContentType,
-        string? OriginalFileName);
+        string? OriginalFileName,
+        string? SeedMarkdown);
 
     /// <summary>
     /// Descriptor of a persisted candidate figure crop (#306). <c>protected</c> because it appears in the

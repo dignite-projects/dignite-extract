@@ -77,7 +77,9 @@ public class DocumentReadyEventHandler
                 DocumentId = document.Id,
                 TenantId = document.TenantId,
                 EventTime = _clock.Now,
-                DocumentTypeCode = documentTypeCode
+                DocumentTypeCode = documentTypeCode,
+                // #306: provenance link for a Scenario B sub-document (null for normally-uploaded documents).
+                OriginDocumentId = document.OriginDocumentId
             });
 
         _logger.LogInformation(

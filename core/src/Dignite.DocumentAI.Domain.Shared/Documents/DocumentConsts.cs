@@ -45,6 +45,13 @@ public static class DocumentConsts
     public static int MaxLanguageLength { get; set; } = 16;
 
     /// <summary>
+    /// Length of <see cref="Document.OriginFigureKey"/> (#306): the SHA-256 (lowercase hex) of the source
+    /// figure's bytes, which equals the derived document's <c>FileOrigin.ContentHash</c>. Matches
+    /// <see cref="FileOriginConsts.MaxContentHashLength"/>.
+    /// </summary>
+    public static int MaxOriginFigureKeyLength { get; set; } = 64;
+
+    /// <summary>
     /// Native payload archive size limit in bytes, default 16 MiB (#210).
     /// Over limit -> log warning, set manifest null, and text extraction still succeeds (archive fails open).
     /// May be overridden by tests or host, same static mutable pattern as MaxTitleLength.

@@ -460,6 +460,51 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
             $"figures/{documentId}/{Sha256Hex(figureBytes)}", Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Text_Extraction_Seeds_Derived_Document_From_Figure_Transcription()
+    {
+        var sourceId = _guidGenerator.Create();
+        var derivedId = _guidGenerator.Create();
+        var figureKey = $"{Guid.NewGuid():N}{Guid.NewGuid():N}"[..64];
+        const string seed = "# Invoice\n\nTotal 100.00";
+
+        Guid runId = default;
+        await WithUnitOfWorkAsync(async () =>
+        {
+            // The source document the figure belongs to (the figure FK requires it to exist).
+            await _documentRepository.InsertAsync(CreateDocument(sourceId), autoSave: true);
+
+            // The source figure whose transcription the derived document seeds from.
+            await _figureRepository.InsertAsync(new DocumentFigure(
+                _guidGenerator.Create(), tenantId: null, sourceDocumentId: sourceId,
+                contentHash: figureKey, cropBlobName: $"figures/{sourceId}/{figureKey}",
+                contentType: "image/png", transcription: seed, pageNumber: 1), autoSave: true);
+
+            var derived = Document.CreateDerived(
+                derivedId, tenantId: null,
+                fileOrigin: new FileOrigin(
+                    blobName: $"blobs/{derivedId:N}.png", uploadedByUserName: "test-user",
+                    contentType: "image/png", contentHash: figureKey, fileSize: 4, originalFileName: "figure.png"),
+                originDocumentId: sourceId, originFigureKey: figureKey);
+            await _documentRepository.InsertAsync(derived, autoSave: true);
+
+            var run = await _pipelineJobScheduler.QueueAsync(derived, DocumentAIPipelines.TextExtraction);
+            runId = run.Id;
+        });
+
+        // Intentionally do NOT stub the extractor: the seeded path must not call it.
+        await _textExtractionJob.ExecuteAsync(new DocumentTextExtractionJobArgs { DocumentId = derivedId, PipelineRunId = runId });
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var derived = await _documentRepository.GetAsync(derivedId, includeDetails: false);
+            derived.Markdown.ShouldBe(seed); // seeded from the figure transcription, no OCR
+        });
+
+        await _textExtractor.DidNotReceive().ExtractAsync(
+            Arg.Any<Stream>(), Arg.Any<TextExtractionContext>(), Arg.Any<CancellationToken>());
+    }
+
     private async Task<Guid> ArrangeQueuedTextExtractionAsync(Guid documentId)
     {
         Guid textExtractionRunId = default;
