@@ -68,10 +68,11 @@ public class DocumentReadyEventHandler_Tests
     }
 
     [Fact]
-    public async Task Container_Ready_Publishes_Eto_With_Marker_And_Null_Type()
+    public async Task Container_Ready_Does_Not_Publish_Eto()
     {
-        // #346: a container reaches Ready with no type. The ETO must carry IsContainer=true and
-        // DocumentTypeCode=null so downstream skips building a record from the container.
+        // #346 (Codex review): a container has no confirmed type, so it is not a consumable document — the handler
+        // suppresses its DocumentReadyEto (downstream consumes only the sub-documents' own Ready events). It still
+        // reaches Ready lifecycle for the operator UI.
         var doc = CreateContainerDocument();
         SetupDocumentRepository(doc);
 
@@ -80,14 +81,10 @@ public class DocumentReadyEventHandler_Tests
 
         await _handler.HandleEventAsync(evt);
 
-        await _eventBus.Received(1).PublishAsync(
-            Arg.Is<DocumentReadyEto>(e =>
-                e.DocumentId == doc.Id &&
-                e.IsContainer &&
-                e.DocumentTypeCode == null),
-            Arg.Any<bool>());
+        await _eventBus.DidNotReceive().PublishAsync(
+            Arg.Any<DocumentReadyEto>(), Arg.Any<bool>());
 
-        // A container has no DocumentTypeId, so the handler must not even attempt a type lookup.
+        // A container short-circuits before the type lookup.
         await _documentTypeRepository.DidNotReceive().FindAsync(
             Arg.Any<Guid>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }

@@ -37,5 +37,14 @@ public enum DocumentReviewReasons
     /// <b>non-blocking</b>: the document still becomes Ready and emits <c>DocumentReadyEto</c>; it only
     /// enters the operator "needs completion" queue. Maintained by the field extraction stage.
     /// </summary>
-    MissingRequiredFields = 1 << 1
+    MissingRequiredFields = 1 << 1,
+
+    /// <summary>
+    /// A container (#346) was detected but its born-digital segmentation could not be completed cleanly — the
+    /// LLM produced an untrusted split, fewer than two document slices, or more than
+    /// <c>MaxSegmentsPerDocument</c>. <b>non-blocking</b>: the container itself is already Ready (it carries no
+    /// type to gate), so this only routes it into the operator queue so a human can split / reclassify it instead
+    /// of it silently producing zero sub-documents. Maintained by the segmentation job.
+    /// </summary>
+    SegmentationIncomplete = 1 << 2
 }

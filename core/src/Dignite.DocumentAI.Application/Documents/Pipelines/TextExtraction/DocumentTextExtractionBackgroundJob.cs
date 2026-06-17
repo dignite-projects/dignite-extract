@@ -32,6 +32,9 @@ public class DocumentTextExtractionBackgroundJob
     /// <summary>Provider name recorded for a derived sub-document whose Markdown is seeded from the source figure's transcription (#306), instead of re-OCR'ing the crop.</summary>
     private const string ScenarioBSeedProviderName = "ScenarioB-FigureSeed";
 
+    /// <summary>Provider name recorded for a derived sub-document whose Markdown is seeded from a born-digital container's Markdown slice (#346), instead of re-extracting the slice blob.</summary>
+    private const string ScenarioBSegmentSeedProviderName = "ScenarioB-SegmentSeed";
+
     private readonly DocumentPipelineJobScheduler _pipelineJobScheduler;
     private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly ITextExtractor _textExtractor;
@@ -54,6 +57,8 @@ public class DocumentTextExtractionBackgroundJob
     // #306: Scenario B candidate figures are an independent aggregate (default repository), persisted in
     // this job's Complete phase from the crops written in its External phase.
     private readonly IRepository<DocumentFigure, Guid> _documentFigureRepository;
+    // #346: born-digital container slices; looked up in the Begin phase to seed a derived sub-document's Markdown.
+    private readonly IRepository<DocumentSegment, Guid> _documentSegmentRepository;
     private readonly IGuidGenerator _guidGenerator;
 
     public DocumentTextExtractionBackgroundJob(
@@ -73,6 +78,7 @@ public class DocumentTextExtractionBackgroundJob
         IOptions<DocumentAIBehaviorOptions> behaviorOptions,
         ICancellationTokenProvider cancellationTokenProvider,
         IRepository<DocumentFigure, Guid> documentFigureRepository,
+        IRepository<DocumentSegment, Guid> documentSegmentRepository,
         IGuidGenerator guidGenerator)
         : base(documentRepository, runRepository, pipelineRunManager, pipelineRunAccessor, unitOfWorkManager)
     {
@@ -87,6 +93,7 @@ public class DocumentTextExtractionBackgroundJob
         _behaviorOptions = behaviorOptions.Value;
         _cancellationTokenProvider = cancellationTokenProvider;
         _documentFigureRepository = documentFigureRepository;
+        _documentSegmentRepository = documentSegmentRepository;
         _guidGenerator = guidGenerator;
     }
 
@@ -102,16 +109,17 @@ public class DocumentTextExtractionBackgroundJob
             TextExtractionResult result;
             if (workItem.SeedMarkdown != null)
             {
-                // #306 derived sub-document: seed Markdown from the source figure's transcription instead of
-                // re-OCR'ing the crop. The crop is the exact bytes the figure OCR already transcribed via the
-                // same IOcrProvider, so re-OCR would reproduce the same text — seeding is equivalent and saves
-                // one OCR call. A crop is a single image, so no embedded figures are surfaced and no recursive
-                // sub-document routing occurs.
+                // Derived sub-document: seed Markdown from the source constituent instead of re-extracting it.
+                // #306 figure path — the crop is the exact bytes the figure OCR already transcribed via the same
+                // IOcrProvider, so re-OCR would reproduce the same text; seeding is equivalent and saves one OCR
+                // call. #346 born-digital path — the slice is already Markdown, so seeding preserves the exact
+                // slice text (no re-extraction, no drift). Either way the seed is a single constituent, so no
+                // embedded figures are surfaced and no recursive sub-document routing occurs.
                 result = new TextExtractionResult
                 {
                     Markdown = workItem.SeedMarkdown,
                     UsedOcr = false,
-                    ProviderName = ScenarioBSeedProviderName,
+                    ProviderName = workItem.SeedProviderName ?? ScenarioBSeedProviderName,
                     IsComplete = true
                 };
             }
@@ -175,16 +183,32 @@ public class DocumentTextExtractionBackgroundJob
             document, args.PipelineRunId, DocumentAIPipelines.TextExtraction);
         await DocumentRepository.UpdateAsync(document, autoSave: true);
 
-        // #306: a derived sub-document (OriginDocumentId set) seeds its Markdown from the source figure's
-        // transcription rather than re-OCR'ing the crop. Load it inside this UoW; null (not derived, or the
-        // candidate is missing/empty) falls back to the normal OCR path in ExecuteAsync.
+        // A derived sub-document (OriginDocumentId set) seeds its Markdown from the source constituent rather than
+        // re-extracting it. Two constituent paths, looked up by the shared OriginConstituentKey: the #306 figure
+        // path seeds from the figure's transcription; the #346 born-digital path seeds from the container's
+        // Markdown slice (the exact slice text, so there is no content drift). Loaded inside this UoW; null (not
+        // derived, or the constituent is missing/empty) falls back to the normal extraction path in ExecuteAsync.
         string? seedMarkdown = null;
+        string? seedProviderName = null;
         if (document.OriginDocumentId.HasValue && !string.IsNullOrEmpty(document.OriginConstituentKey))
         {
             var figure = await _documentFigureRepository.FirstOrDefaultAsync(
                 f => f.SourceDocumentId == document.OriginDocumentId.Value && f.ContentHash == document.OriginConstituentKey);
-            var transcription = figure?.Transcription;
-            seedMarkdown = string.IsNullOrEmpty(transcription) ? null : transcription;
+            if (!string.IsNullOrEmpty(figure?.Transcription))
+            {
+                seedMarkdown = figure.Transcription;
+                seedProviderName = ScenarioBSeedProviderName;
+            }
+            else
+            {
+                var segment = await _documentSegmentRepository.FirstOrDefaultAsync(
+                    s => s.SourceDocumentId == document.OriginDocumentId.Value && s.SegmentKey == document.OriginConstituentKey);
+                if (!string.IsNullOrEmpty(segment?.SliceText))
+                {
+                    seedMarkdown = segment.SliceText;
+                    seedProviderName = ScenarioBSegmentSeedProviderName;
+                }
+            }
         }
 
         await uow.CompleteAsync();
@@ -194,7 +218,8 @@ public class DocumentTextExtractionBackgroundJob
             document.FileOrigin.BlobName,
             document.FileOrigin.ContentType,
             document.FileOrigin.OriginalFileName,
-            seedMarkdown);
+            seedMarkdown,
+            seedProviderName);
     }
 
     private async Task CompleteRunAsync(
@@ -499,7 +524,8 @@ public class DocumentTextExtractionBackgroundJob
         string BlobName,
         string ContentType,
         string? OriginalFileName,
-        string? SeedMarkdown);
+        string? SeedMarkdown,
+        string? SeedProviderName);
 
     /// <summary>
     /// Descriptor of a persisted candidate figure crop (#306). <c>protected</c> because it appears in the

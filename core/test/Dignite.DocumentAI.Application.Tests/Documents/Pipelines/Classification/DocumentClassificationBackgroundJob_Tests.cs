@@ -8,6 +8,7 @@ using Dignite.DocumentAI.Ai;
 using Dignite.DocumentAI.Documents;
 using Dignite.DocumentAI.Documents.Pipelines;
 using Dignite.DocumentAI.Documents.Pipelines.Classification;
+using Dignite.DocumentAI.Documents.Pipelines.Segmentation;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -76,6 +77,7 @@ public class DocumentClassificationBackgroundJob_Tests
     private readonly IDocumentPipelineRunRepository _runRepository;
     private readonly DocumentClassificationWorkflow _workflow;
     private readonly IDistributedEventBus _eventBus;
+    private readonly IBackgroundJobManager _backgroundJobManager;
 
     public DocumentClassificationBackgroundJob_Tests()
     {
@@ -84,6 +86,7 @@ public class DocumentClassificationBackgroundJob_Tests
         _runRepository = GetRequiredService<IDocumentPipelineRunRepository>();
         _workflow = GetRequiredService<DocumentClassificationWorkflow>();
         _eventBus = GetRequiredService<IDistributedEventBus>();
+        _backgroundJobManager = GetRequiredService<IBackgroundJobManager>();
     }
 
     [Fact]
@@ -160,6 +163,44 @@ public class DocumentClassificationBackgroundJob_Tests
         // from cascading field extraction onto the container.
         await _eventBus.DidNotReceive().PublishAsync(
             Arg.Any<DocumentClassifiedEto>(), Arg.Any<bool>());
+
+        // #346 PR3b: a detected container enqueues the born-digital segmentation job (same UoW as the completion).
+        await _backgroundJobManager.Received(1).EnqueueAsync(
+            Arg.Is<DocumentSegmentationJobArgs>(a => a.ContainerDocumentId == doc.Id),
+            Arg.Any<BackgroundJobPriority>(), Arg.Any<TimeSpan?>());
+    }
+
+    [Fact]
+    public async Task Derived_SubDocument_Flagged_Container_Is_Classified_Normally_Not_Recursed()
+    {
+        // #346 recursion guard: a derived sub-document must never be re-detected as a container, or the split would
+        // recurse. Even if the LLM flags it a container, it is classified normally (here to a real type) and the
+        // segmentation job is NOT enqueued.
+        var doc = CreateDerivedDocument("A single invoice that the LLM mistook for a bundle.");
+        SetupDocumentRepository(doc);
+
+        _workflow
+            .RunAsync(
+                Arg.Any<IReadOnlyList<DocumentType>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DocumentClassificationOutcome
+            {
+                IsContainer = true,
+                TypeCode = "contract.general",
+                ConfidenceScore = 0.95
+            });
+
+        await _job.ExecuteAsync(new DocumentClassificationJobArgs { DocumentId = doc.Id });
+
+        doc.IsContainer.ShouldBeFalse();
+        doc.DocumentTypeId.ShouldBe(DocumentClassificationJobTestModule.ContractTypeId);
+
+        await _backgroundJobManager.DidNotReceive().EnqueueAsync(
+            Arg.Any<DocumentSegmentationJobArgs>(), Arg.Any<BackgroundJobPriority>(), Arg.Any<TimeSpan?>());
+        // It classified to a real type, so the normal field-extraction cascade event still fires.
+        await _eventBus.Received(1).PublishAsync(
+            Arg.Is<DocumentClassifiedEto>(e => e.DocumentId == doc.Id), Arg.Any<bool>());
     }
 
     [Fact]
@@ -357,6 +398,30 @@ public class DocumentClassificationBackgroundJob_Tests
                 contentHash: $"{Guid.NewGuid():N}{Guid.NewGuid():N}",
                 fileSize: 1024,
                 originalFileName: "test.pdf"));
+
+        typeof(Document)
+            .GetProperty(nameof(Document.Markdown))!
+            .GetSetMethod(nonPublic: true)!
+            .Invoke(doc, [extractedText]);
+
+        return doc;
+    }
+
+    private static Document CreateDerivedDocument(string extractedText)
+    {
+        // A born-digital sub-document: OriginDocumentId is set, which is what the recursion guard keys on.
+        var doc = Document.CreateDerived(
+            Guid.NewGuid(),
+            tenantId: null,
+            fileOrigin: new FileOrigin(
+                blobName: $"{Guid.NewGuid():N}.md",
+                uploadedByUserName: "test-user",
+                contentType: "text/markdown",
+                contentHash: $"{Guid.NewGuid():N}{Guid.NewGuid():N}"[..64],
+                fileSize: 256,
+                originalFileName: "segment-abc.md"),
+            originDocumentId: Guid.NewGuid(),
+            originConstituentKey: $"{Guid.NewGuid():N}{Guid.NewGuid():N}"[..64]);
 
         typeof(Document)
             .GetProperty(nameof(Document.Markdown))!

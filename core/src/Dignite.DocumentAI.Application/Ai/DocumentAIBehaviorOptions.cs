@@ -67,4 +67,24 @@ public class DocumentAIBehaviorOptions
     /// needs the leading document semantics.
     /// </summary>
     public double MinCabinetSuggestionConfidence { get; set; } = 0.6;
+
+    /// <summary>
+    /// Maximum number of slices a single container may be split into (#346). A hard cost + blast-radius bound:
+    /// each spawned document slice runs its own classification + extraction + Ready, so an adversarial or
+    /// pathological container could otherwise fan out unbounded work — and the rows themselves are bounded too.
+    /// When the LLM segmentation pass proposes more <b>total</b> slices than this (document <b>and</b>
+    /// cover / index slices, after de-duplication), the container is left with a review signal instead of being
+    /// split (mirrors the figure path's per-source cap). At least two distinct document slices are also required.
+    /// </summary>
+    public int MaxSegmentsPerDocument { get; set; } = 50;
+
+    /// <summary>
+    /// Maximum Markdown length (characters) a container may have for born-digital segmentation (#346). Segmentation
+    /// feeds the <b>whole</b> Markdown to the LLM (constituent boundaries can be anywhere; truncating would silently
+    /// lose the tail documents), so this is the hard upper bound on that single call's prompt-token cost. Above it
+    /// the container is left with a review signal for manual handling rather than paying for an enormous,
+    /// low-confidence call. Default 200k chars (≈ a large multi-document bundle, comfortably within modern context
+    /// windows); hosts may raise it for bigger bundles or lower it to cap spend.
+    /// </summary>
+    public int MaxSegmentationMarkdownLength { get; set; } = 200_000;
 }

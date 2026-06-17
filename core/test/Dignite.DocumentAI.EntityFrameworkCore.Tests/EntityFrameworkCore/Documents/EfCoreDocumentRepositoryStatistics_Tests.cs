@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Threading.Tasks;
 using Dignite.DocumentAI.Documents;
 using Shouldly;
@@ -106,6 +107,59 @@ public class EfCoreDocumentRepositoryStatistics_Tests : DocumentAIEntityFramewor
         });
         tenantStats.TotalCount.ShouldBe(2);
         tenantStats.TotalStorageBytes.ShouldBe(500);
+    }
+
+    [Fact]
+    public async Task GetStatistics_Excludes_Containers()
+    {
+        await WithUnitOfWorkAsync(async () =>
+        {
+            // A normal Ready business document is counted.
+            await SeedDocAsync(DocumentLifecycleStatus.Ready, 100);
+
+            // #346: a container is an infrastructure wrapper, not a business document — excluded from the overview
+            // (its sub-documents are the real records), even though it reached Ready.
+            var container = NewDocument(999);
+            typeof(Document)
+                .GetMethod("MarkAsContainer", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(container, null);
+            container.TransitionLifecycle(DocumentLifecycleStatus.Ready);
+            await _documentRepository.InsertAsync(container, autoSave: true);
+        });
+
+        var stats = await WithUnitOfWorkAsync(() => _documentRepository.GetStatisticsAsync());
+
+        stats.TotalCount.ShouldBe(1);          // the container is excluded
+        stats.ReadyCount.ShouldBe(1);          // only the normal Ready document
+        stats.TotalStorageBytes.ShouldBe(100); // the container's bytes are excluded
+    }
+
+    [Fact]
+    public async Task GetStatistics_Counts_SegmentationIncomplete_Container_In_NeedsReview_But_Not_Totals()
+    {
+        await WithUnitOfWorkAsync(async () =>
+        {
+            // A normal Ready business document.
+            await SeedDocAsync(DocumentLifecycleStatus.Ready, 100);
+
+            // #346: a container whose segmentation failed is excluded from totals/storage (it's a wrapper) but MUST
+            // be counted in NeedsReview, because it also appears in the operator review queue — so the dashboard
+            // count and the queue do not drift (#333).
+            var container = NewDocument(999);
+            typeof(Document)
+                .GetMethod("MarkAsContainer", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(container, null);
+            container.SetReviewReason(DocumentReviewReasons.SegmentationIncomplete, present: true);
+            container.TransitionLifecycle(DocumentLifecycleStatus.Ready);
+            await _documentRepository.InsertAsync(container, autoSave: true);
+        });
+
+        var stats = await WithUnitOfWorkAsync(() => _documentRepository.GetStatisticsAsync());
+
+        stats.TotalCount.ShouldBe(1);          // container excluded from the document total
+        stats.ReadyCount.ShouldBe(1);          // only the normal Ready document
+        stats.NeedsReviewCount.ShouldBe(1);    // but the segmentation-incomplete container IS counted as needing review
+        stats.TotalStorageBytes.ShouldBe(100); // container bytes excluded
     }
 
     // ─── helpers ───────────────────────────────────────────────────────────
