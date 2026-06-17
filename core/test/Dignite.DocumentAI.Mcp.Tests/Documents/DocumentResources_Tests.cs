@@ -59,7 +59,30 @@ public class DocumentResources_Tests : DocumentAITestBase<DocumentResourcesTestM
 
         var text = ((TextResourceContents)result).Text;
         text.ShouldContain("isContainer: true");
-        text.ShouldNotContain("originDocumentId:");
+        // Assert the absence of an `originDocumentId:` HEADER LINE specifically, not the substring
+        // anywhere in the payload — a prose sentence in the description/body could legitimately contain
+        // the word "originDocumentId". Header lines always begin at column 0 (each metadata line is
+        // appended with a leading "\n…\n"), so scope the assertion to the metadata header block.
+        var header = ExtractMetadataHeader(text);
+        header
+            .Split('\n')
+            .ShouldNotContain(line => line.StartsWith("originDocumentId:", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Returns the lines between the metadata header markers (<c>&lt;!-- docai document metadata</c> and the
+    /// closing <c>--&gt;</c>) so assertions target header lines only, decoupled from prose wording elsewhere
+    /// in the payload (matches <see cref="DocumentResources"/> <c>BuildPayload</c>).
+    /// </summary>
+    private static string ExtractMetadataHeader(string payload)
+    {
+        const string open = "<!-- docai document metadata";
+        const string close = "-->";
+        var start = payload.IndexOf(open, StringComparison.Ordinal);
+        start.ShouldBeGreaterThanOrEqualTo(0);
+        var end = payload.IndexOf(close, start, StringComparison.Ordinal);
+        end.ShouldBeGreaterThan(start);
+        return payload.Substring(start, end - start);
     }
 
     [Fact]

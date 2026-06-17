@@ -11,6 +11,15 @@ namespace Dignite.DocumentAI.Mcp.Documents;
 /// <see cref="Title"/> is user-derived free text and is wrapped with <c>PromptBoundary.WrapField</c>
 /// inside the tool.
 /// </summary>
+/// <remarks>
+/// Thin-payload contract (#350): each result item carries only the scalar provenance signals
+/// (<see cref="IsContainer"/>, <see cref="OriginDocumentId"/>) needed for a client to reason about
+/// container / sub-document relationships. It deliberately does <b>not</b> inline a sub-document list —
+/// a client that needs the children of a container follows <see cref="OriginDocumentId"/> (i.e. searches
+/// for documents whose <c>OriginDocumentId</c> equals the container's <see cref="Id"/>) and pulls each
+/// body back via <see cref="Uri"/>. Embedding a child collection here would fan out the payload, duplicate
+/// data already reachable through search, and break the channel's thin-payload-plus-pullback philosophy.
+/// </remarks>
 public sealed record DocumentSearchResultItem
 {
     /// <summary>MCP resource URI for reading the body (<c>docai://documents/{id}</c>).</summary>
