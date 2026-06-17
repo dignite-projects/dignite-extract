@@ -106,6 +106,11 @@ public sealed class DocumentSearchTool
                 DocumentTypeCode = d.DocumentTypeCode,
                 LifecycleStatus = d.LifecycleStatus.ToString(),
                 CreationTime = d.CreationTime,
+                // Container / sub-document provenance (#350). System-controlled signals, not user free text,
+                // so no PromptBoundary wrapping. Sub-documents are not inlined here to keep the payload thin;
+                // a client reads them by searching OriginDocumentId == this Id.
+                IsContainer = d.IsContainer,
+                OriginDocumentId = d.OriginDocumentId,
                 // Convert all extracted field values for this document to LLM-facing shape: strings wrapped, structured values raw, null skipped.
                 ExtractedFields = DocumentFieldProjection.Project(d.ExtractedFields)
             })

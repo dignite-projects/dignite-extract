@@ -116,6 +116,45 @@ public class DocumentSearchTool_Tests : DocumentAITestBase<DocumentSearchToolTes
     }
 
     [Fact]
+    public async Task Exposes_container_and_origin_provenance_on_result_item()
+    {
+        // #350: the search result item must surface the container / sub-document provenance signal so AI
+        // clients can tell a bundle (not consumable) from a sub-document and pivot to its sub-documents.
+        var containerId = Guid.NewGuid();
+        var subDocId = Guid.NewGuid();
+        _documentAppService
+            .GetListAsync(Arg.Any<GetDocumentListInput>())
+            .Returns(new PagedResultDto<DocumentListItemDto>(2, new List<DocumentListItemDto>
+            {
+                new()
+                {
+                    Id = containerId,
+                    LifecycleStatus = DocumentLifecycleStatus.Ready,
+                    CreationTime = new DateTime(2024, 1, 1),
+                    IsContainer = true,
+                    OriginDocumentId = null
+                },
+                new()
+                {
+                    Id = subDocId,
+                    LifecycleStatus = DocumentLifecycleStatus.Ready,
+                    CreationTime = new DateTime(2024, 1, 1),
+                    IsContainer = false,
+                    OriginDocumentId = containerId
+                }
+            }));
+
+        var result = await DocumentSearchTool.SearchAsync(
+            _documentAppService, documentTypeCode: "contract.general");
+
+        // System-controlled provenance fields pass through verbatim (no PromptBoundary, no inlined sub-doc list).
+        result[0].IsContainer.ShouldBeTrue();
+        result[0].OriginDocumentId.ShouldBeNull();
+        result[1].IsContainer.ShouldBeFalse();
+        result[1].OriginDocumentId.ShouldBe(containerId);
+    }
+
+    [Fact]
     public async Task Clamps_max_result_count_to_cap()
     {
         _documentAppService

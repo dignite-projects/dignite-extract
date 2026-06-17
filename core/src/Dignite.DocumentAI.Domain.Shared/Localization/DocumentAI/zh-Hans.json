@@ -206,6 +206,7 @@
     "Uploading": "上传中...",
     "Failed": "失败",
     "Document:FileName": "文件名",
+    "Document:Bundle": "文档包",
     "Document:Documents": "文档",
     "Document:Detail": "文档详情",
     "Document:OriginalFile": "原始文件",

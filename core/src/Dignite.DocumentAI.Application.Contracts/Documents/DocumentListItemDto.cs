@@ -13,6 +13,22 @@ public class DocumentListItemDto : EntityDto<Guid>
     /// <summary>Owning cabinet (#194). null means uncategorized. The frontend maps cabinet names from the cabinet list.</summary>
     public Guid? CabinetId { get; set; }
 
+    /// <summary>
+    /// Provenance link for a Scenario B sub-document (#306): when this document was derived from a constituent
+    /// of another document, the id of that source document; <c>null</c> for normally-uploaded documents. Mirrors
+    /// <see cref="DocumentDto.OriginDocumentId"/> on the list surface (#350) so the operator UI can offer a
+    /// "view sub-documents" affordance without a detail fetch.
+    /// </summary>
+    public Guid? OriginDocumentId { get; set; }
+
+    /// <summary>
+    /// Whether this document is a <b>container</b> (#346): a parent bundling several independent documents that
+    /// runs no type-bound field extraction itself. Mirrors <see cref="DocumentDto.IsContainer"/> on the list
+    /// surface (#350) so list views can render a "Bundle" badge; downstream must <b>not</b> build a business
+    /// record from a container — its real records are its sub-documents (query <c>OriginDocumentId == this.Id</c>).
+    /// </summary>
+    public bool IsContainer { get; set; }
+
     public string? DocumentTypeCode { get; set; }
     public DocumentLifecycleStatus LifecycleStatus { get; set; }
     public DocumentReviewDisposition ReviewDisposition { get; set; }
