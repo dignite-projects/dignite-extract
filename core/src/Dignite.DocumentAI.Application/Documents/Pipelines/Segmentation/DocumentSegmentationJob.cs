@@ -152,6 +152,18 @@ public class DocumentSegmentationJob
             return null;
         }
 
+        // #346: this job may have been enqueued for a container that an operator (or a high-confidence
+        // re-recognition) has since reclassified to a concrete type — which clears IsContainer. A stale job must
+        // NOT split/spawn a document that is no longer a container, or it would inject spurious sub-documents
+        // downstream alongside the now-typed document's own fields. Abort if the container marker is gone.
+        if (!container.IsContainer)
+        {
+            Logger.LogInformation(
+                "Document {ContainerId} is no longer a container (reclassified after this job was enqueued); skipping segmentation.",
+                containerDocumentId);
+            return null;
+        }
+
         var hasExistingSegments =
             await _segmentRepository.FirstOrDefaultAsync(s => s.SourceDocumentId == containerDocumentId) is not null;
 
@@ -220,30 +232,39 @@ public class DocumentSegmentationJob
             return;
         }
 
-        // De-duplicate byte-identical slices up front (same content -> same content hash). A born-digital duplicate
-        // is almost certainly an accidental repeat — the figure path makes the same choice for identical embedded
-        // images — but unlike a silent drop we LOG it, and we count AFTER de-dup so the validation below reflects the
-        // number of DISTINCT documents actually persisted. Hashing the content (no positional salt) keeps SegmentKey
-        // == the derived FileOrigin.ContentHash == OriginConstituentKey: one pure content fingerprint, consistent
-        // with the upload + #306 figure paths.
-        var deduped = new List<(MarkdownSlice Slice, string Key)>();
-        var seenKeys = new HashSet<string>(StringComparer.Ordinal);
+        // Detect byte-identical slices (same content -> same content hash). Content alone cannot decide whether two
+        // identical slices are an accidental duplicate (one real document copied/paged twice) or two genuinely
+        // distinct instances — and the pure content hash is needed as the SegmentKey / FileOrigin.ContentHash /
+        // OriginConstituentKey idempotency identity (positional salt would diverge from the upload + #306 figure
+        // paths). So rather than silently collapsing them (and risking dropping a real document instance), flag the
+        // whole container for human review. Byte-identical document slices are rare, so the false-trigger cost is low.
+        var dedupedKeys = new HashSet<string>(StringComparer.Ordinal);
+        var keyed = new List<(MarkdownSlice Slice, string Key)>(slices.Count);
+        var hasDuplicateSlice = false;
         foreach (var slice in slices)
         {
             var key = ContentHasher.Sha256Hex(Encoding.UTF8.GetBytes(slice.Text));
-            if (seenKeys.Add(key))
+            if (dedupedKeys.Add(key))
             {
-                deduped.Add((slice, key));
+                keyed.Add((slice, key));
             }
             else
             {
+                hasDuplicateSlice = true;
                 Logger.LogWarning(
-                    "Container {ContainerId} produced a byte-identical slice at ordinal {Ordinal}; de-duplicated to one sub-document (mirrors the figure path's identical-image de-dup).",
+                    "Container {ContainerId} produced a byte-identical slice at ordinal {Ordinal}; flagging for review (cannot tell an accidental duplicate from a genuine repeated instance).",
                     context.ContainerId, slice.Ordinal);
             }
         }
 
-        var documentSliceCount = deduped.Count(p => p.Slice.IsDocument);
+        if (hasDuplicateSlice)
+        {
+            await MarkSegmentationIncompleteAsync(
+                context, "byte-identical duplicate slices detected; manual review required to avoid dropping a document");
+            return;
+        }
+
+        var documentSliceCount = keyed.Count(p => p.Slice.IsDocument);
         if (documentSliceCount < 2)
         {
             // Fewer than two DISTINCT document slices means this was not really a multi-document bundle; do not spawn
@@ -255,11 +276,11 @@ public class DocumentSegmentationJob
         // Cap the TOTAL number of slices (document + cover/index), not just the document ones, so a flood of
         // non-document slices cannot insert an unbounded number of rows in one UoW — the blast-radius bound the
         // option promises.
-        if (deduped.Count > _behaviorOptions.MaxSegmentsPerDocument)
+        if (keyed.Count > _behaviorOptions.MaxSegmentsPerDocument)
         {
             await MarkSegmentationIncompleteAsync(
                 context,
-                $"the split produced {deduped.Count} slices, over the MaxSegmentsPerDocument limit of {_behaviorOptions.MaxSegmentsPerDocument}");
+                $"the split produced {keyed.Count} slices, over the MaxSegmentsPerDocument limit of {_behaviorOptions.MaxSegmentsPerDocument}");
             return;
         }
 
@@ -274,7 +295,7 @@ public class DocumentSegmentationJob
                 return;
             }
 
-            foreach (var (slice, key) in deduped)
+            foreach (var (slice, key) in keyed)
             {
                 await _segmentRepository.InsertAsync(new DocumentSegment(
                     _guidGenerator.Create(),
@@ -378,6 +399,16 @@ public class DocumentSegmentationJob
                 return;
             }
 
+            // #346: re-check the container is still a container in THIS UoW — it may have been reclassified between
+            // LoadAsync and now (the per-segment spawns span time). If the marker is gone, do not spawn; the
+            // document is being handled as a concrete type.
+            var container = await _documentRepository.FindAsync(context.ContainerId, includeDetails: false);
+            if (container is null || !container.IsContainer)
+            {
+                await TryDeleteBlobAsync(derivedBlobName);
+                return;
+            }
+
             var shortKey = segment.SegmentKey.Length > 8 ? segment.SegmentKey[..8] : segment.SegmentKey;
             var fileOrigin = new FileOrigin(
                 blobName: derivedBlobName,
@@ -463,16 +494,23 @@ public class DocumentSegmentationJob
             var remainingPending = segments.Count(s => s.Status == DocumentSegmentStatus.Pending);
 
             var container = await _documentRepository.FindAsync(context.ContainerId, includeDetails: false);
-            if (container is not null)
+
+            // #346: if the document was reclassified to a concrete type mid-job (IsContainer cleared), do NOT touch
+            // its review flag — its leftover Pending segments are inert (CommitSpawnAsync skips them) and re-flagging
+            // a now-typed document would wrongly push the operator's reclassification back into the review queue.
+            if (container is null || !container.IsContainer)
             {
-                var hasFlag = (container.ReviewReasons & DocumentReviewReasons.SegmentationIncomplete)
-                    != DocumentReviewReasons.None;
-                var shouldHaveFlag = remainingPending > 0;
-                if (hasFlag != shouldHaveFlag)
-                {
-                    container.SetReviewReason(DocumentReviewReasons.SegmentationIncomplete, present: shouldHaveFlag);
-                    await _documentRepository.UpdateAsync(container);
-                }
+                await uow.CompleteAsync();
+                return 0;
+            }
+
+            var hasFlag = (container.ReviewReasons & DocumentReviewReasons.SegmentationIncomplete)
+                != DocumentReviewReasons.None;
+            var shouldHaveFlag = remainingPending > 0;
+            if (hasFlag != shouldHaveFlag)
+            {
+                container.SetReviewReason(DocumentReviewReasons.SegmentationIncomplete, present: shouldHaveFlag);
+                await _documentRepository.UpdateAsync(container);
             }
 
             await uow.CompleteAsync();

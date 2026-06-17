@@ -36,21 +36,7 @@ public class DocumentReadyEto
     /// </summary>
     public required DateTime EventTime { get; init; }
 
-    /// <summary>
-    /// Confirmed document type, or <c>null</c>. Since #346, <c>null</c> together with <see cref="IsContainer"/> =
-    /// <c>true</c> is a valid Ready outcome: a container has no single type. Downstream must tolerate this pairing
-    /// and skip building a record from the container.
-    /// </summary>
     public string? DocumentTypeCode { get; init; }
-
-    /// <summary>
-    /// Whether this document is a <b>container</b> (#346): a parent bundling several independent documents that
-    /// ran no type-bound field extraction itself. When <c>true</c>, <see cref="DocumentTypeCode"/> is <c>null</c>
-    /// and downstream must <b>not</b> build a business record from this document — the real records are its
-    /// sub-documents (each fires its own <c>DocumentReadyEto</c> carrying <see cref="OriginDocumentId"/>). New
-    /// optional field; defaults to <c>false</c> for producers / consumers that predate it.
-    /// </summary>
-    public bool IsContainer { get; init; }
 
     /// <summary>
     /// Provenance link for a Scenario B sub-document (#306): when this document was derived from a constituent

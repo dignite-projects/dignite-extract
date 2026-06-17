@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -182,11 +183,12 @@ public class DocumentSegmentationJob_Tests : DocumentAITestBase<DocumentSegmenta
     }
 
     [Fact]
-    public async Task Byte_Identical_Document_Slices_Are_Deduped_While_Distinct_Slices_Each_Spawn()
+    public async Task Byte_Identical_Slices_Flag_For_Review_Instead_Of_Silently_Dropping()
     {
-        // #346 fix: a byte-identical slice collapses to one sub-document (an accidental repeat — mirrors the figure
-        // path's identical-image de-dup) and is LOGGED, not silently dropped; the distinct slices still each spawn,
-        // and SegmentKey stays a pure content hash (== FileOrigin.ContentHash == OriginConstituentKey).
+        // #346 fix (Codex review): content alone can't tell an accidental duplicate from a genuine repeated
+        // instance, and the pure content hash is the idempotency identity (no positional salt). So a byte-identical
+        // slice flags the WHOLE container for human review rather than silently collapsing and risking dropping a
+        // real document. Nothing is persisted/spawned until a human resolves it.
         var containerId = await ArrangeContainerAsync("DOCA body line\nDOCA body line\nDOCB other line");
         StubSplit(("DOCA body", true), ("DOCA body", true), ("DOCB other", true));
 
@@ -194,18 +196,29 @@ public class DocumentSegmentationJob_Tests : DocumentAITestBase<DocumentSegmenta
 
         await WithUnitOfWorkAsync(async () =>
         {
-            var segments = await _segmentRepository.GetListAsync(s => s.SourceDocumentId == containerId);
-            segments.Count.ShouldBe(2); // the duplicate "DOCA" slice was de-duplicated
-            segments.Select(s => s.SliceText).OrderBy(t => t).ToArray()
-                .ShouldBe(new[] { "DOCA body line", "DOCB other line" });
-            // SegmentKey is the pure content hash of the slice text (no positional salt).
-            foreach (var s in segments)
-            {
-                s.SegmentKey.ShouldBe(ContentHasher.Sha256Hex(System.Text.Encoding.UTF8.GetBytes(s.SliceText)));
-            }
+            (await _documentRepository.GetAsync(containerId)).ReviewReasons
+                .ShouldBe(DocumentReviewReasons.SegmentationIncomplete);
+            (await _segmentRepository.GetListAsync(s => s.SourceDocumentId == containerId)).ShouldBeEmpty();
+            (await _documentRepository.GetListAsync(d => d.OriginDocumentId == containerId)).ShouldBeEmpty();
+        });
+    }
 
-            var derived = await _documentRepository.GetListAsync(d => d.OriginDocumentId == containerId);
-            derived.Count.ShouldBe(2);
+    [Fact]
+    public async Task Reclassified_Container_Is_Skipped_Without_Splitting_Or_Spawning()
+    {
+        // #346 fix (Codex review): a job enqueued for a mis-detected container that was since reclassified to a
+        // concrete type (IsContainer cleared) must NOT split/spawn — that would inject spurious sub-documents
+        // downstream alongside the now-typed document's own fields.
+        var docId = await ArrangeContainerAsync("Invoice A first\nInvoice B second", asContainer: false);
+        StubSplit(("Invoice A", true), ("Invoice B", true));
+
+        await _job.ExecuteAsync(new DocumentSegmentationJobArgs { ContainerDocumentId = docId });
+
+        await _workflow.DidNotReceive().RunAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await WithUnitOfWorkAsync(async () =>
+        {
+            (await _segmentRepository.GetListAsync(s => s.SourceDocumentId == docId)).ShouldBeEmpty();
+            (await _documentRepository.GetListAsync(d => d.OriginDocumentId == docId)).ShouldBeEmpty();
         });
     }
 
@@ -354,7 +367,7 @@ public class DocumentSegmentationJob_Tests : DocumentAITestBase<DocumentSegmenta
             await _segmentRepository.InsertAsync(NewSegment(containerId, "second split slice", 0), autoSave: true)));
     }
 
-    private async Task<Guid> ArrangeContainerAsync(string markdown)
+    private async Task<Guid> ArrangeContainerAsync(string markdown, bool asContainer = true)
     {
         var containerId = _guidGenerator.Create();
         await WithUnitOfWorkAsync(async () =>
@@ -374,6 +387,15 @@ public class DocumentSegmentationJob_Tests : DocumentAITestBase<DocumentSegmenta
                 .GetProperty(nameof(Document.Markdown))!
                 .GetSetMethod(nonPublic: true)!
                 .Invoke(doc, [markdown]);
+
+            // The segmentation job only runs for actual containers; mark it unless the test wants a doc that was
+            // reclassified away from container (IsContainer == false).
+            if (asContainer)
+            {
+                typeof(Document)
+                    .GetMethod("MarkAsContainer", BindingFlags.NonPublic | BindingFlags.Instance)!
+                    .Invoke(doc, null);
+            }
 
             await _documentRepository.InsertAsync(doc, autoSave: true);
         });

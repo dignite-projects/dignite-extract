@@ -17,9 +17,10 @@ namespace Dignite.DocumentAI.Documents.Pipelines.Lifecycle;
 /// The Ready gate is enforced by the classification stage: documents with insufficient automatic
 /// classification confidence / no suitable type receive the blocking UnresolvedClassification reason
 /// and enter the manual review queue, which keeps them out of Ready. Therefore this handler needs no
-/// extra check: <c>NewStatus == Ready</c> implicitly means the gate passed. #346: a <b>container</b> is a
-/// valid Ready outcome with <b>no</b> type — it reaches Ready with <c>DocumentTypeCode == null</c> and
-/// <c>IsContainer == true</c> (it sets no blocking reason), so the published ETO carries that pairing.
+/// extra check: <c>NewStatus == Ready</c> implicitly means the gate passed. #346: a <b>container</b> also
+/// reaches Ready lifecycle but has <b>no</b> confirmed type, so it is <b>not</b> a consumable document — this
+/// handler suppresses its <c>DocumentReadyEto</c>; downstream consumes only the container's sub-documents,
+/// each emitting its own Ready event. This keeps the contract "<c>DocumentReadyEto</c> ⟺ a confirmed type".
 /// </para>
 /// </summary>
 public class DocumentReadyEventHandler
@@ -61,11 +62,25 @@ public class DocumentReadyEventHandler
             return;
         }
 
-        // ETO still carries the DocumentTypeCode string to preserve the outbound contract, resolving
-        // it from internal DocumentTypeId (#207). A non-container Ready document has a confirmed type
-        // because of the DeriveLifecycle gate, and DeleteAsync prevents deleting in-use types, so the
-        // type should be active. #346: a container reaches Ready with DocumentTypeId null, so
-        // documentTypeCode stays null — that null + IsContainer=true is the valid container outcome.
+        // #346: a container has no confirmed type, so it is NOT a consumable business document — it does not emit the
+        // type-confirmed DocumentReadyEto. (Doing so would be a type-less "ready" fired before its sub-documents even
+        // exist, with no later way to signal a segmentation failure — the contract break Codex's adversarial review
+        // flagged.) The container still reaches Ready *lifecycle* for the operator UI; downstream consumes only the
+        // sub-documents' own DocumentReadyEto, each carrying OriginDocumentId back to this container. A container the
+        // segmenter cannot split surfaces in the operator review queue (SegmentationIncomplete), exactly like a
+        // low-confidence document waits in review without emitting Ready. This keeps the documented contract
+        // "DocumentReadyEto ⟺ a confirmed type" intact.
+        if (document.IsContainer)
+        {
+            _logger.LogInformation(
+                "Document {DocumentId} reached Ready lifecycle as a container; suppressing DocumentReadyEto (its sub-documents emit their own).",
+                document.Id);
+            return;
+        }
+
+        // The ETO carries the DocumentTypeCode string (resolved from the internal DocumentTypeId, #207). A Ready
+        // document always has a confirmed type because of the DeriveLifecycle gate (and the container case is handled
+        // above), and DeleteAsync prevents deleting in-use types, so the type should be active.
         string? documentTypeCode = null;
         if (document.DocumentTypeId.HasValue)
         {
@@ -80,8 +95,6 @@ public class DocumentReadyEventHandler
                 TenantId = document.TenantId,
                 EventTime = _clock.Now,
                 DocumentTypeCode = documentTypeCode,
-                // #346: container marker; downstream skips building a record from a container (DocumentTypeCode null).
-                IsContainer = document.IsContainer,
                 // #306: provenance link for a Scenario B sub-document (null for normally-uploaded documents).
                 OriginDocumentId = document.OriginDocumentId
             });
