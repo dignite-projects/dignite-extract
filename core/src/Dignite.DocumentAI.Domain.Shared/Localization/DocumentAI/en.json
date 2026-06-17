@@ -63,6 +63,7 @@
     "Document:Type": "Document Type",
     "Document:Status": "Status",
     "Document:FileName": "File Name",
+    "Document:Bundle": "Bundle",
     "Document:Size": "Size",
     "Document:UploadedAt": "Uploaded At",
     "Document:UploadedBy": "Uploaded By",

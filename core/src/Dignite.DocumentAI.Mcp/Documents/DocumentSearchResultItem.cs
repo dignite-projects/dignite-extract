@@ -11,6 +11,15 @@ namespace Dignite.DocumentAI.Mcp.Documents;
 /// <see cref="Title"/> is user-derived free text and is wrapped with <c>PromptBoundary.WrapField</c>
 /// inside the tool.
 /// </summary>
+/// <remarks>
+/// Thin-payload contract (#350): each result item carries only the scalar provenance signals
+/// (<see cref="IsContainer"/>, <see cref="OriginDocumentId"/>) needed for a client to reason about
+/// container / sub-document relationships. It deliberately does <b>not</b> inline a sub-document list —
+/// a client that needs the children of a container follows <see cref="OriginDocumentId"/> (i.e. searches
+/// for documents whose <c>OriginDocumentId</c> equals the container's <see cref="Id"/>) and pulls each
+/// body back via <see cref="Uri"/>. Embedding a child collection here would fan out the payload, duplicate
+/// data already reachable through search, and break the channel's thin-payload-plus-pullback philosophy.
+/// </remarks>
 public sealed record DocumentSearchResultItem
 {
     /// <summary>MCP resource URI for reading the body (<c>docai://documents/{id}</c>).</summary>
@@ -26,6 +35,22 @@ public sealed record DocumentSearchResultItem
     public required string LifecycleStatus { get; init; }
 
     public DateTime CreationTime { get; init; }
+
+    /// <summary>
+    /// Whether this document is a <b>container</b> (#346 / #350): a parent bundling several independent
+    /// documents that runs no type-bound field extraction itself. When <c>true</c>, an AI client must
+    /// <b>not</b> consume this document as a business record — it should instead read the sub-documents
+    /// (those whose <see cref="OriginDocumentId"/> equals this <see cref="Id"/>). A system-controlled
+    /// boolean, so it is not wrapped with <c>PromptBoundary</c>.
+    /// </summary>
+    public bool IsContainer { get; init; }
+
+    /// <summary>
+    /// Provenance link for a Scenario B sub-document (#306 / #350): the id of the source document this one
+    /// was derived from, or <c>null</c> for normally-uploaded documents. A system-controlled id, so it is
+    /// not wrapped with <c>PromptBoundary</c>.
+    /// </summary>
+    public Guid? OriginDocumentId { get; init; }
 
     /// <summary>
     /// Type-bound field extraction results for this document (LLM-facing). key = field name

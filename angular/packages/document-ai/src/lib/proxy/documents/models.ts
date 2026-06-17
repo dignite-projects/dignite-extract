@@ -12,6 +12,8 @@ export interface DocumentDto extends EntityDto<string> {
   tenantId?: string | null;
   fileOrigin?: FileOriginDto;
   cabinetId?: string | null;
+  originDocumentId?: string | null;
+  isContainer: boolean;
   documentTypeCode?: string | null;
   lifecycleStatus?: DocumentLifecycleStatus;
   reviewDisposition?: DocumentReviewDisposition;
@@ -40,6 +42,8 @@ export interface DocumentListItemDto extends EntityDto<string> {
   tenantId?: string | null;
   fileOrigin?: FileOriginDto;
   cabinetId?: string | null;
+  originDocumentId?: string | null;
+  isContainer: boolean;
   documentTypeCode?: string | null;
   lifecycleStatus?: DocumentLifecycleStatus;
   reviewDisposition?: DocumentReviewDisposition;

@@ -260,12 +260,21 @@ export class DocumentListComponent implements OnInit {
         columnWidth: 340,
         valueResolver: data => {
           const doc = data.record;
+          const localization = data.getInjected(LocalizationService);
           const fileName = doc.title || doc.fileOrigin?.originalFileName || '-';
           const iconClass = this.isImage(doc)
             ? 'fas fa-file-image fa-lg text-primary'
             : 'fas fa-file-pdf fa-lg text-danger';
+          // #350: a container is a bundle of sub-documents and is not itself a business record. Flag it
+          // with a badge so operators don't mistake it for a normal document. isContainer is a
+          // system-controlled signal carried on the list DTO.
+          // TODO(#350): wire a "view sub-documents" filter (query OriginDocumentId === this id) once the
+          // list endpoint exposes an originDocumentId filter; for now only the badge is shown.
+          const bundleBadge = doc.isContainer
+            ? ` <span class="badge bg-dark">${escapeHtmlChars(localization.instant('::Document:Bundle'))}</span>`
+            : '';
           return of(
-            `<span class="document-file-cell"><i class="${iconClass} me-2"></i><span class="fw-semibold text-truncate">${escapeHtmlChars(fileName)}</span></span>`,
+            `<span class="document-file-cell"><i class="${iconClass} me-2"></i><span class="fw-semibold text-truncate">${escapeHtmlChars(fileName)}</span>${bundleBadge}</span>`,
           );
         },
       }),
