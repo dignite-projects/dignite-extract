@@ -246,6 +246,34 @@ public static class DocumentAIDbContextModelCreatingExtensions
                 .IsUnique();
         });
 
+        builder.Entity<DocumentSegment>(b =>
+        {
+            b.ToTable(DocumentAIDbProperties.DbTablePrefix + "DocumentSegments", DocumentAIDbProperties.DbSchema);
+            b.ConfigureByConvention();
+
+            b.Property(x => x.SegmentKey).IsRequired().HasMaxLength(DocumentSegmentConsts.MaxSegmentKeyLength);
+            // SliceText is a Markdown slice used to seed the derived document (nvarchar(max), like Document.Markdown
+            // and DocumentFigure.Transcription); not indexed.
+            b.Property(x => x.SliceText).IsRequired();
+            b.Property(x => x.Ordinal).IsRequired();
+            b.Property(x => x.Status).IsRequired();
+
+            // #346: born-digital slice -> container Document, FK + CASCADE so hard-deleting the container removes
+            // its segment rows (mirrors the #306 DocumentFigure child-side declaration). RoutedDocumentId is a
+            // soft pointer to the spawned derived Document with NO FK constraint: the derived document is a peer
+            // that must outlive the container, so it must not cascade from / be constrained by this table.
+            b.HasOne<Document>()
+                .WithMany()
+                .HasForeignKey(x => x.SourceDocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Idempotent spawn: one slice per (source, slice-content-hash). A job retry that re-persists the same
+            // slice collides here instead of duplicate-spawning downstream. Both columns are non-nullable, so this
+            // is a plain (portable) unique index, not a filtered one.
+            b.HasIndex(x => new { x.SourceDocumentId, x.SegmentKey })
+                .IsUnique();
+        });
+
         builder.Entity<DocumentType>(b =>
         {
             b.ToTable(DocumentAIDbProperties.DbTablePrefix + "DocumentTypes", DocumentAIDbProperties.DbSchema);

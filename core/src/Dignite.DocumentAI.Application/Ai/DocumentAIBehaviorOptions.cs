@@ -67,4 +67,14 @@ public class DocumentAIBehaviorOptions
     /// needs the leading document semantics.
     /// </summary>
     public double MinCabinetSuggestionConfidence { get; set; } = 0.6;
+
+    /// <summary>
+    /// Maximum number of born-digital sub-documents a single container may be split into (#346). A hard cost +
+    /// blast-radius bound: each spawned slice runs its own classification + extraction + Ready, so an
+    /// adversarial or pathological container could otherwise fan out unbounded work. When the LLM segmentation
+    /// pass proposes more document-slices than this, the container is left with a review signal instead of
+    /// spawning them (mirrors the figure path's per-source cap). Does not count non-document slices
+    /// (cover / index).
+    /// </summary>
+    public int MaxSegmentsPerDocument { get; set; } = 50;
 }

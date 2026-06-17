@@ -333,6 +333,10 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         DocumentTypeId = Check.NotDefaultOrNull<Guid>(documentTypeId, nameof(documentTypeId));
         ClassificationConfidence = Check.Range(classificationConfidence, nameof(classificationConfidence), 0d, 1d);
         SetReviewReason(DocumentReviewReasons.UnresolvedClassification, present: false);
+        // #346: a concrete type is now assigned, so this is no longer a container; clear the marker and any stale
+        // segmentation-incomplete signal to avoid the contradictory "has a type AND is a container" state.
+        IsContainer = false;
+        SetReviewReason(DocumentReviewReasons.SegmentationIncomplete, present: false);
         ReviewDisposition = DocumentReviewDisposition.NotReviewed;
         RejectionReason = null; // #284 review-fix: leaving Rejected disposition -> clear stale rejection reason; only Rejected should have one.
     }
@@ -382,9 +386,11 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         DocumentTypeId = null;
         ClassificationConfidence = 0;
         // A container is a correct outcome: clear the classification / field review reasons rather than setting them,
-        // so it is not routed to the operator review queue and is not blocked from deriving to Ready.
+        // so it is not routed to the operator review queue and is not blocked from deriving to Ready. The
+        // segmentation-incomplete signal (#346) is cleared too — a freshly detected container has not failed yet.
         SetReviewReason(DocumentReviewReasons.UnresolvedClassification, present: false);
         SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: false);
+        SetReviewReason(DocumentReviewReasons.SegmentationIncomplete, present: false);
         ReviewDisposition = DocumentReviewDisposition.NotReviewed;
         RejectionReason = null;
         _extractedFieldValues.Clear();
@@ -397,6 +403,10 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         // Operator-confirmed type -> clear UC; MRF will be recomputed by subsequent field re-extraction. Clear it here first to avoid stale required-field decisions from the old schema.
         SetReviewReason(DocumentReviewReasons.UnresolvedClassification, present: false);
         SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: false);
+        // #346: operator reclassifying a container to a concrete type clears the container marker (reversibility)
+        // and any stale segmentation-incomplete signal; subsequent DocumentClassifiedEto cascades field extraction.
+        IsContainer = false;
+        SetReviewReason(DocumentReviewReasons.SegmentationIncomplete, present: false);
         ReviewDisposition = DocumentReviewDisposition.Confirmed;
         RejectionReason = null; // #284 review-fix: rejection is recoverable; clear stale rejection reason after Reclassify / Confirm.
     }

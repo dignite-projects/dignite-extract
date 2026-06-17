@@ -180,6 +180,11 @@ public class EfCoreDocumentRepository
         // inlined here rather than reusing that Expression because EF Core cannot fold a shared Expression into a
         // grouped projection; keep the two in sync.
         var byStatus = await dbSet
+            // #346: a container is an infrastructure wrapper, not a business document — its sub-documents are the
+            // real records. Exclude containers from the overview so a container + its N sub-documents do not
+            // double-count the totals / storage. A segmentation-incomplete container still surfaces in the operator
+            // review queue list (DocumentAppService.ApplyFilter); only this dashboard summary omits it.
+            .Where(d => !d.IsContainer)
             .GroupBy(d => d.LifecycleStatus)
             .Select(g => new
             {
