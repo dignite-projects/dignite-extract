@@ -4,4 +4,5 @@ global using Dignite.DocumentAI.Documents.Exports;
 global using Dignite.DocumentAI.Documents.Fields;
 global using Dignite.DocumentAI.Documents.Figures;
 global using Dignite.DocumentAI.Documents.Pipelines;
+global using Dignite.DocumentAI.Documents.Segments;
 global using Dignite.DocumentAI.Slugging;

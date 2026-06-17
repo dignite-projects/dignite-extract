@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Dignite.DocumentAI.Abstractions.Documents;
 using Dignite.DocumentAI.Ai;
+using Dignite.DocumentAI.Documents.Pipelines.Segmentation;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Volo.Abp.BackgroundJobs;
@@ -26,6 +27,7 @@ public class DocumentClassificationBackgroundJob
     private readonly IClock _clock;
     private readonly DocumentAIBehaviorOptions _aiOptions;
     private readonly ICurrentTenant _currentTenant;
+    private readonly IBackgroundJobManager _backgroundJobManager;
 
     public DocumentClassificationBackgroundJob(
         IDocumentRepository documentRepository,
@@ -38,7 +40,8 @@ public class DocumentClassificationBackgroundJob
         IDistributedEventBus distributedEventBus,
         IClock clock,
         IOptions<DocumentAIBehaviorOptions> aiOptions,
-        ICurrentTenant currentTenant)
+        ICurrentTenant currentTenant,
+        IBackgroundJobManager backgroundJobManager)
         : base(documentRepository, runRepository, pipelineRunManager, pipelineRunAccessor, unitOfWorkManager)
     {
         _documentTypeRepository = documentTypeRepository;
@@ -47,6 +50,7 @@ public class DocumentClassificationBackgroundJob
         _clock = clock;
         _aiOptions = aiOptions.Value;
         _currentTenant = currentTenant;
+        _backgroundJobManager = backgroundJobManager;
     }
 
     public override async Task ExecuteAsync(DocumentClassificationJobArgs args)
@@ -151,10 +155,30 @@ public class DocumentClassificationBackgroundJob
         // is simply never emitting the trigger event). MarkAsContainer leaves DocumentTypeId null and sets no
         // UnresolvedClassification reason, so the container is not sent to the operator review queue and — with
         // both key pipelines succeeded and no blocking reason — derives straight to Ready (Design A).
-        if (outcome.IsContainer)
+        //
+        // Recursion guard (#346): a derived sub-document (OriginDocumentId set) must NOT be re-detected as a
+        // container — that would recurse the split one level deeper. v1 bars recursion at depth one: a derived
+        // document never takes the container branch, so a slice the LLM mistakes for a bundle is simply classified
+        // normally (a real type, or low-confidence review) like any other document.
+        if (outcome.IsContainer && !document.OriginDocumentId.HasValue)
         {
             await PipelineRunManager.CompleteClassificationAsContainerAsync(document, run);
+
+            // Born-digital path: enqueue the LLM segmentation that splits the container's Markdown into
+            // sub-documents. Enqueued in the SAME UoW as the completion so the container marker and the
+            // segmentation job commit atomically (no committed container without its segmentation job, and vice
+            // versa). The image path needs no enqueue here — its figures were already routed during text
+            // extraction; the segmentation prompt is told not to re-split inlined figure transcriptions.
+            await _backgroundJobManager.EnqueueAsync(
+                new DocumentSegmentationJobArgs { ContainerDocumentId = document.Id });
             return;
+        }
+
+        if (outcome.IsContainer)
+        {
+            Logger.LogDebug(
+                "Document {DocumentId} is a derived sub-document; ignoring the container signal (recursion guard) and classifying normally.",
+                document.Id);
         }
 
         // Field architecture v2: look up the type definition from DB, exactly matching the single

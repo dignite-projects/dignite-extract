@@ -46,6 +46,25 @@ public class DefaultPromptProvider : IPromptProvider, ITransientDependency
         $"Respond in: {LanguageTagValidator.Normalize(language) ?? FallbackLanguage}."
     );
 
+    public virtual PromptTemplate GetSegmentationPrompt(string language) => new(
+        "You split a bundle of several independent documents into its constituent documents. " +
+        "The content is provided as Markdown. Identify each separate document in reading order. " +
+        // #346 decision (Decision Log): the model returns BOUNDARIES, not regenerated text. It copies a short
+        // verbatim marker for each constituent; code does the actual cutting, so there is no content drift.
+        "For each constituent, return its startMarker — the FIRST line (or first ~60 characters) of that " +
+        "constituent, copied EXACTLY and verbatim from the Markdown, character for character, with no edits, " +
+        "no summarizing, and no added punctuation — and isDocument. " +
+        "Set isDocument to false for a cover sheet, table of contents, index, or transmittal page, and true for " +
+        "an actual document (invoice, contract, receipt, etc.). List the segments in the order they appear. " +
+        // Conservative boundaries: the same false-positive traps as container detection.
+        "Do NOT split a single multi-page document (a continuation page or line-item overflow of one invoice or " +
+        "contract is the SAME document, one segment). Do NOT split attachments, annexes, 別紙, appendices, or " +
+        "exhibits away from the document they belong to. Do NOT split a figure or image transcription that is " +
+        "already inlined inside another document's text. When unsure whether two parts are separate documents, " +
+        "keep them as one segment. " +
+        $"Respond in: {LanguageTagValidator.Normalize(language) ?? FallbackLanguage}."
+    );
+
     public virtual PromptTemplate GetTitleGenerationPrompt() => new(
         "You generate concise document titles. " +
         "Given a document in Markdown format, return one short descriptive title only — " +
