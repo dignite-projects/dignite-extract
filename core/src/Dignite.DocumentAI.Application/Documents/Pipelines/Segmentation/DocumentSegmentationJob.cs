@@ -166,8 +166,15 @@ public class DocumentSegmentationJob
             // container split — which yields the bundle's Kind=Text constituents — must STILL run. Keying the skip on
             // "any segment row exists" would treat the leftover figure row as a completed split and leave the container
             // forever undecomposed. So a container resumes (skips re-detection) only once a Text row exists; an
-            // embedded-document source only once a Figure row exists. (A rare figure-only container re-runs the LLM on
-            // a retry, but DetectAndPersistAsync inserts idempotently, so that is safe.)
+            // embedded-document source only once a Figure row exists.
+            //
+            // KNOWN LIMITATION (#377): keying on row Kind cannot tell an embedded-run figure row apart from a
+            // container-run figure row, so a *figure-only* container (a real ≥2-figure bundle, zero Text) is seen as
+            // never-split and re-runs the LLM on each re-entry — and the idempotent insert below reconciles only an
+            // IDENTICAL re-split (same content keys), not a divergent one (different figure-boundary composition over
+            // the same marked Markdown), which can append spurious rows. A clean fix needs an explicit
+            // "container-split-completed" marker; tracked in #377. Both edges are deep-tail (rare re-recognition/retry
+            // plus non-deterministic LLM divergence) and lose no source data.
             var existingKinds = (await _segmentRepository.GetListAsync(s => s.SourceDocumentId == sourceDocumentId))
                 .ConvertAll(s => s.Kind);
             hasExistingSplit = source.IsContainer
