@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 
 namespace Dignite.DocumentAI.Abstractions.TextExtraction;
 
@@ -87,6 +88,51 @@ public static class ImageOcrMarkup
         }
 
         return string.Join("\n", markdown.Split('\n').Where(line => !IsSentinelLine(line)));
+    }
+
+    /// <summary>
+    /// Returns the concatenated figure transcription <b>body</b> — the content between each
+    /// <c>[Image OCR]…[End OCR]</c> pair, joined by newlines — with everything OUTSIDE the sentinels (and the
+    /// sentinel lines themselves) dropped. Used (#371/#373) to spawn a figure sub-document from ONLY its figure body,
+    /// so any surrounding parent text the LLM folded into the span (e.g. by omitting a separate parent-body boundary)
+    /// is excluded; the figure child is the transcription, nothing more. Returns the empty string when there is no
+    /// figure block. An unclosed open sentinel keeps the rest as body (fail-open, never drops content silently).
+    /// </summary>
+    public static string ExtractBodies(string? markdown)
+    {
+        if (string.IsNullOrEmpty(markdown))
+        {
+            return string.Empty;
+        }
+
+        var sb = new StringBuilder();
+        var inside = false;
+        foreach (var line in markdown.Split('\n'))
+        {
+            if (IsOpenLine(line))
+            {
+                inside = true;
+                continue;
+            }
+
+            if (IsCloseLine(line))
+            {
+                inside = false;
+                continue;
+            }
+
+            if (inside)
+            {
+                if (sb.Length > 0)
+                {
+                    sb.Append('\n');
+                }
+
+                sb.Append(line);
+            }
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>Whether the (trimmed) line is a figure open sentinel (bare or page-anchored).</summary>

@@ -233,6 +233,36 @@ public class DocumentSegmentationJob_Tests : DocumentAITestBase<DocumentSegmenta
     }
 
     [Fact]
+    public async Task Embedded_Figure_Span_Carrying_Folded_Parent_Preamble_Spawns_Only_The_Figure_Body()
+    {
+        // #373 (own /code-review): in embedded-document mode (a concrete-typed parent that embeds a standalone
+        // figure), if the LLM returns ONLY the figure boundary and omits the preceding parent-body span,
+        // MarkdownSlicer folds the parent preamble into that first (figure) slice. The figure sub-document must still
+        // be JUST the figure body (ExtractBodies) — the folded parent text is excluded, so the child is the
+        // transcription, not the parent's prose.
+        var marked = $"Parent contract body text\n{ImageOcrMarkup.Wrap("INVOICE No 7 Total 50", 2)}";
+        var sourceId = await ArrangeContainerAsync(
+            markdown: "Parent contract body text", asContainer: false, markedMarkdown: marked);
+
+        // The LLM omits the parent-body span and returns only the figure boundary (its [Image OCR] line).
+        StubSplit((ImageOcrMarkup.OpenPagePrefix + "2]", true));
+
+        await _job.ExecuteAsync(new DocumentSegmentationJobArgs { SourceDocumentId = sourceId });
+
+        await WithUnitOfWorkAsync(async () =>
+        {
+            var segments = await _segmentRepository.GetListAsync(s => s.SourceDocumentId == sourceId);
+            segments.Count.ShouldBe(1);
+            var fig = segments.Single();
+            fig.Kind.ShouldBe(DocumentSegmentKind.Figure);
+            fig.PageNumber.ShouldBe(2);
+            // ONLY the figure body — no folded parent preamble, no sentinels.
+            fig.SliceText.ShouldBe("INVOICE No 7 Total 50");
+            fig.SliceText.ShouldNotContain("Parent contract body text");
+        });
+    }
+
+    [Fact]
     public async Task Untrusted_Split_Flags_Container_And_Spawns_Nothing()
     {
         var containerId = await ArrangeContainerAsync("Invoice A first\nInvoice B second");

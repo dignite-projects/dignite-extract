@@ -264,10 +264,11 @@ public class DocumentSegmentationJob
             // of whether a sentinel appears somewhere in its body. A genuine text constituent that embeds an inline
             // figure block (#301 inlines the transcription into the body) must stay Kind=Text — otherwise it would be
             // mislabeled Figure and survive the container→type retraction (which keeps Kind==Figure), a #364-class
-            // leak. cleanText always strips any sentinels (a text constituent's inline figures are just inline text
-            // in the spawned child).
+            // leak. For the clean child seed: a Figure span yields ONLY its figure body (ExtractBodies — drops any
+            // surrounding parent text the LLM folded in by omitting a separate parent-body boundary, #373); a Text
+            // span keeps its prose and strips only the inline figure sentinels. Either way the child carries no sentinels.
             var isFigure = slice.IsFigure;
-            var cleanText = ImageOcrMarkup.Strip(slice.Text);
+            var cleanText = isFigure ? ImageOcrMarkup.ExtractBodies(slice.Text) : ImageOcrMarkup.Strip(slice.Text);
             if (string.IsNullOrWhiteSpace(cleanText))
             {
                 continue; // a slice that was only sentinels
