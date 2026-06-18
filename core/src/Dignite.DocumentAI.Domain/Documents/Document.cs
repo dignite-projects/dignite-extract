@@ -472,6 +472,11 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         RejectionReason = null; // #284 review-fix: rejection is recoverable; clear stale rejection reason after Reclassify / Confirm.
         if (wasContainer)
         {
+            // #377: symmetric with MarkAsContainer clearing the marker on concrete→container. A container→concrete
+            // reclassify retracts the container's segment rows (#349 below), so its segmentation completion no longer
+            // holds — clear IsSegmented so the now-concrete document's own embedded-document routing can run if it is
+            // later re-segmented, instead of being skipped by a stale marker.
+            IsSegmented = false;
             AddLocalEvent(new ContainerMarkerClearedEvent(Id));
         }
     }
