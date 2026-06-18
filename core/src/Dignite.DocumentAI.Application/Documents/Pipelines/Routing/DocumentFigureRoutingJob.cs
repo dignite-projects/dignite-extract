@@ -13,11 +13,9 @@ using Volo.Abp.BackgroundJobs;
 using Volo.Abp.BlobStoring;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
-using Volo.Abp.EventBus.Distributed;
 using Volo.Abp.Guids;
 using Volo.Abp.MultiTenancy;
 using Volo.Abp.Threading;
-using Volo.Abp.Timing;
 using Volo.Abp.Uow;
 
 namespace Dignite.DocumentAI.Documents.Pipelines.Routing;
@@ -55,11 +53,9 @@ public class DocumentFigureRoutingJob
     private readonly IRepository<DocumentFigure, Guid> _figureRepository;
     private readonly IDocumentTypeRepository _documentTypeRepository;
     private readonly FigureDocumentGateWorkflow _figureGateWorkflow;
-    private readonly DocumentPipelineJobScheduler _pipelineJobScheduler;
+    private readonly DerivedDocumentSpawner _derivedDocumentSpawner;
     private readonly IBlobContainer<DocumentAIDocumentContainer> _blobContainer;
-    private readonly IDistributedEventBus _distributedEventBus;
     private readonly ICurrentTenant _currentTenant;
-    private readonly IClock _clock;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
     private readonly DocumentAIBehaviorOptions _behaviorOptions;
@@ -70,11 +66,9 @@ public class DocumentFigureRoutingJob
         IRepository<DocumentFigure, Guid> figureRepository,
         IDocumentTypeRepository documentTypeRepository,
         FigureDocumentGateWorkflow figureGateWorkflow,
-        DocumentPipelineJobScheduler pipelineJobScheduler,
+        DerivedDocumentSpawner derivedDocumentSpawner,
         IBlobContainer<DocumentAIDocumentContainer> blobContainer,
-        IDistributedEventBus distributedEventBus,
         ICurrentTenant currentTenant,
-        IClock clock,
         IGuidGenerator guidGenerator,
         IUnitOfWorkManager unitOfWorkManager,
         IOptions<DocumentAIBehaviorOptions> behaviorOptions,
@@ -84,11 +78,9 @@ public class DocumentFigureRoutingJob
         _figureRepository = figureRepository;
         _documentTypeRepository = documentTypeRepository;
         _figureGateWorkflow = figureGateWorkflow;
-        _pipelineJobScheduler = pipelineJobScheduler;
+        _derivedDocumentSpawner = derivedDocumentSpawner;
         _blobContainer = blobContainer;
-        _distributedEventBus = distributedEventBus;
         _currentTenant = currentTenant;
-        _clock = clock;
         _guidGenerator = guidGenerator;
         _unitOfWorkManager = unitOfWorkManager;
         _behaviorOptions = behaviorOptions.Value;
@@ -284,7 +276,7 @@ public class DocumentFigureRoutingJob
     private async Task SpawnDerivedDocumentAsync(
         RoutingWorkItem workItem, FigureSnapshot figure, CancellationToken cancellationToken)
     {
-        // External: copy the candidate crop into an independent, derived-document-owned blob so the derived
+        // External (no UoW): copy the candidate crop into an independent, derived-document-owned blob so the derived
         // document outlives the source (the source's permanent delete reclaims the candidate crop, not this copy).
         // The crop content hash is already known (figure.ContentHash), so there is no need to materialize a byte[]
         // for re-hashing — buffer the crop once and rewind the same stream to save it (avoids a second full-size
@@ -301,85 +293,51 @@ public class DocumentFigureRoutingJob
             await _blobContainer.SaveAsync(derivedBlobName, buffer, overrideExisting: true, cancellationToken);
         }
 
-        var derivedDocumentId = _guidGenerator.Create();
+        var shortHash = figure.ContentHash.Length > 8 ? figure.ContentHash[..8] : figure.ContentHash;
+        var fileOrigin = new FileOrigin(
+            blobName: derivedBlobName,
+            uploadedByUserName: workItem.SourceUploadedByUserName,
+            contentType: figure.ContentType,
+            contentHash: figure.ContentHash,
+            fileSize: fileSize,
+            originalFileName: $"figure-{shortHash}{extension}");
 
         try
         {
-            await CommitSpawnAsync(workItem, figure, derivedBlobName, derivedDocumentId, extension, fileSize);
+            // Shared complete-phase UoW (#358): insert the derived document, mark this figure Spawned, publish
+            // DocumentUploadedEto, and queue text extraction — atomically. The figure stays Pending and the gate
+            // is not re-paid if this fails (LoadAsync re-loads only still-Pending figures on retry).
+            var spawnedId = await _derivedDocumentSpawner.SpawnAsync<DocumentFigure>(
+                workItem.SourceDocumentId,
+                workItem.TenantId,
+                figure.ContentHash,
+                fileOrigin,
+                reloadClaimable: async () =>
+                {
+                    var entity = await _figureRepository.FindAsync(figure.FigureId);
+                    return entity is { Status: DocumentFigureStatus.Pending } ? entity : null;
+                },
+                markSpawned: async (entity, derivedId) =>
+                {
+                    entity.MarkSpawned(derivedId);
+                    await _figureRepository.UpdateAsync(entity);
+                },
+                cancellationToken);
+
+            if (spawnedId is null)
+            {
+                // A concurrent route already spawned this figure (or it was removed); our copied blob references no
+                // committed document — reclaim the orphan copy.
+                await TryDeleteBlobAsync(derivedBlobName);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The spawn UoW failed and rolled back (a concurrent unique-index collision, or any other fault), so
-            // the copied blob now references no committed document — reclaim it, then rethrow so the per-figure
-            // handler records the fault and the job is retried (which writes a fresh copy next time). Mirrors the
-            // text-extraction job's failed-completion crop cleanup. The one CommitSpawnAsync path that returns
-            // without throwing (the candidate is already non-Pending) deletes its own orphan blob, so it is not
-            // double-deleted here.
+            // The spawn UoW rolled back (a concurrent unique-index collision, or any other fault), so the copied blob
+            // references no committed document — reclaim it, then rethrow so the per-figure handler records the fault
+            // and the job is retried (which writes a fresh copy next time).
             await TryDeleteBlobAsync(derivedBlobName);
             throw;
-        }
-    }
-
-    /// <summary>
-    /// Complete phase (short UoW): inserts the derived document, marks the figure Spawned, publishes
-    /// <c>DocumentUploadedEto</c>, and queues the derived document's pipeline — all atomically. Returns early
-    /// (deleting the orphan copied blob) when the candidate is no longer Pending or a concurrent route already
-    /// spawned it; any other failure rolls back and propagates to the caller's orphan-blob cleanup.
-    /// </summary>
-    private async Task CommitSpawnAsync(
-        RoutingWorkItem workItem, FigureSnapshot figure, string derivedBlobName, Guid derivedDocumentId,
-        string extension, long fileSize)
-    {
-        using (_currentTenant.Change(workItem.TenantId))
-        using (var uow = _unitOfWorkManager.Begin(requiresNew: true))
-        {
-            var entity = await _figureRepository.FindAsync(figure.FigureId);
-            if (entity is null || entity.Status != DocumentFigureStatus.Pending)
-            {
-                // Another run already routed it (or it was removed). Drop our orphan copied blob and stop.
-                await TryDeleteBlobAsync(derivedBlobName);
-                return;
-            }
-
-            var shortHash = figure.ContentHash.Length > 8 ? figure.ContentHash[..8] : figure.ContentHash;
-            var fileOrigin = new FileOrigin(
-                blobName: derivedBlobName,
-                uploadedByUserName: workItem.SourceUploadedByUserName,
-                contentType: figure.ContentType,
-                contentHash: figure.ContentHash,
-                fileSize: fileSize,
-                originalFileName: $"figure-{shortHash}{extension}");
-
-            var derived = Document.CreateDerived(
-                derivedDocumentId, workItem.TenantId, fileOrigin, workItem.SourceDocumentId, figure.ContentHash);
-
-            // A concurrent route that already committed this figure's derived document trips the unique
-            // (OriginDocumentId, OriginConstituentKey) index here. The failure propagates to SpawnDerivedDocumentAsync,
-            // which reclaims this run's orphan blob and rethrows so the job retries; on retry LoadAsync sees the
-            // figure as Spawned (the winner committed it) and skips it — self-healing, no duplicate. Not narrowing
-            // to a specific exception type is deliberate: any non-unique DB failure also surfaces (job retry)
-            // instead of being silently swallowed as a "concurrency skip".
-            await _documentRepository.InsertAsync(derived, autoSave: true);
-
-            entity.MarkSpawned(derivedDocumentId);
-            await _figureRepository.UpdateAsync(entity);
-
-            await _distributedEventBus.PublishAsync(
-                new DocumentUploadedEto
-                {
-                    DocumentId = derived.Id,
-                    TenantId = derived.TenantId,
-                    EventTime = _clock.Now,
-                    FileName = fileOrigin.OriginalFileName,
-                    FileSize = fileOrigin.FileSize,
-                    ContentType = fileOrigin.ContentType
-                });
-
-            // Run the derived document through the full normal pipeline. Its text-extraction job seeds Markdown
-            // from this figure's transcription instead of re-OCR'ing the crop (see DocumentTextExtractionBackgroundJob).
-            await _pipelineJobScheduler.QueueAsync(derived, DocumentAIPipelines.TextExtraction);
-
-            await uow.CompleteAsync();
         }
     }
 

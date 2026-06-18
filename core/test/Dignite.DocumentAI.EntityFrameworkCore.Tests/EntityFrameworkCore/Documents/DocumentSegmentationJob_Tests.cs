@@ -323,7 +323,7 @@ public class DocumentSegmentationJob_Tests : DocumentAITestBase<DocumentSegmenta
         // verification, so the Phase A flag path (MarkSegmentationIncompleteAsync) runs — it must re-check IsContainer
         // and NOT re-flag the now-typed document, or it would push the operator's reclassification back into the
         // review queue with no way to clear it (no segment rows are persisted on this path, so the count-driven clear
-        // in FinalizeSegmentationFlagAsync never runs). Mirrors the guard CommitSpawnAsync / FinalizeSegmentationFlagAsync apply.
+        // in FinalizeSegmentationFlagAsync never runs). Mirrors the guard SpawnDerivedDocumentAsync / FinalizeSegmentationFlagAsync apply.
         var containerId = await ArrangeContainerAsync("Invoice A first\nInvoice B second");
 
         // Untrusted markers -> the split is rejected -> MarkSegmentationIncompleteAsync runs.

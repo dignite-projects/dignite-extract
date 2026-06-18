@@ -15,11 +15,9 @@ using Volo.Abp.BackgroundJobs;
 using Volo.Abp.BlobStoring;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
-using Volo.Abp.EventBus.Distributed;
 using Volo.Abp.Guids;
 using Volo.Abp.MultiTenancy;
 using Volo.Abp.Threading;
-using Volo.Abp.Timing;
 using Volo.Abp.Uow;
 
 namespace Dignite.DocumentAI.Documents.Pipelines.Segmentation;
@@ -57,11 +55,9 @@ public class DocumentSegmentationJob
     private readonly IRepository<DocumentSegment, Guid> _segmentRepository;
     private readonly IRepository<DocumentFigure, Guid> _documentFigureRepository;
     private readonly DocumentSegmentationWorkflow _segmentationWorkflow;
-    private readonly DocumentPipelineJobScheduler _pipelineJobScheduler;
+    private readonly DerivedDocumentSpawner _derivedDocumentSpawner;
     private readonly IBlobContainer<DocumentAIDocumentContainer> _blobContainer;
-    private readonly IDistributedEventBus _distributedEventBus;
     private readonly ICurrentTenant _currentTenant;
-    private readonly IClock _clock;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
     private readonly DocumentAIBehaviorOptions _behaviorOptions;
@@ -72,11 +68,9 @@ public class DocumentSegmentationJob
         IRepository<DocumentSegment, Guid> segmentRepository,
         IRepository<DocumentFigure, Guid> documentFigureRepository,
         DocumentSegmentationWorkflow segmentationWorkflow,
-        DocumentPipelineJobScheduler pipelineJobScheduler,
+        DerivedDocumentSpawner derivedDocumentSpawner,
         IBlobContainer<DocumentAIDocumentContainer> blobContainer,
-        IDistributedEventBus distributedEventBus,
         ICurrentTenant currentTenant,
-        IClock clock,
         IGuidGenerator guidGenerator,
         IUnitOfWorkManager unitOfWorkManager,
         IOptions<DocumentAIBehaviorOptions> behaviorOptions,
@@ -86,11 +80,9 @@ public class DocumentSegmentationJob
         _segmentRepository = segmentRepository;
         _documentFigureRepository = documentFigureRepository;
         _segmentationWorkflow = segmentationWorkflow;
-        _pipelineJobScheduler = pipelineJobScheduler;
+        _derivedDocumentSpawner = derivedDocumentSpawner;
         _blobContainer = blobContainer;
-        _distributedEventBus = distributedEventBus;
         _currentTenant = currentTenant;
-        _clock = clock;
         _guidGenerator = guidGenerator;
         _unitOfWorkManager = unitOfWorkManager;
         _behaviorOptions = behaviorOptions.Value;
@@ -193,8 +185,8 @@ public class DocumentSegmentationJob
     /// correction or a high-confidence re-recognition clears <see cref="Document.IsContainer"/>). A stale job must
     /// never split, spawn, or re-flag a document that is no longer a container — doing so would inject spurious
     /// sub-documents downstream, or push the operator's reclassification back into the review queue. This is the
-    /// single guard every phase consults (LoadAsync / CommitSpawnAsync / FinalizeSegmentationFlagAsync /
-    /// MarkSegmentationIncompleteAsync); it runs in the caller's ambient UoW and opens none.
+    /// single guard every phase consults (LoadAsync / SpawnDerivedDocumentAsync's reload guard /
+    /// FinalizeSegmentationFlagAsync / MarkSegmentationIncompleteAsync); it runs in the caller's ambient UoW and opens none.
     /// </summary>
     private async Task<Document?> FindActiveContainerAsync(Guid containerId)
     {
@@ -406,8 +398,8 @@ public class DocumentSegmentationJob
     private async Task SpawnDerivedDocumentAsync(
         PendingSegment segment, SegmentationContext context, CancellationToken cancellationToken)
     {
-        // External: write the slice to an independent, derived-document-owned blob so the derived document outlives
-        // the container (the container's permanent delete reclaims the container/segment rows, not this blob).
+        // External (no UoW): write the slice to an independent, derived-document-owned blob so the derived document
+        // outlives the container (the container's permanent delete reclaims the container/segment rows, not this blob).
         var sliceBytes = Encoding.UTF8.GetBytes(segment.SliceText);
         var derivedBlobName = _guidGenerator.Create().ToString("N") + ".md";
         using (var saveStream = new MemoryStream(sliceBytes, writable: false))
@@ -415,88 +407,59 @@ public class DocumentSegmentationJob
             await _blobContainer.SaveAsync(derivedBlobName, saveStream, overrideExisting: true, cancellationToken);
         }
 
-        var derivedDocumentId = _guidGenerator.Create();
+        var shortKey = segment.SegmentKey.Length > 8 ? segment.SegmentKey[..8] : segment.SegmentKey;
+        var fileOrigin = new FileOrigin(
+            blobName: derivedBlobName,
+            uploadedByUserName: context.UploadedByUserName,
+            contentType: "text/markdown",
+            contentHash: segment.SegmentKey,
+            fileSize: sliceBytes.LongLength,
+            originalFileName: $"segment-{shortKey}.md");
 
         try
         {
-            await CommitSpawnAsync(segment, context, derivedBlobName, derivedDocumentId, sliceBytes.LongLength);
+            // Shared complete-phase UoW (#358): insert the derived document, mark this segment Spawned, publish
+            // DocumentUploadedEto, and queue text extraction — atomically. The reload guard additionally re-checks
+            // the container is still a container (it may have been reclassified mid-job): this is segmentation's
+            // own pre-commit guard, folded into the claimable check the shared spawner runs inside its UoW.
+            var spawnedId = await _derivedDocumentSpawner.SpawnAsync<DocumentSegment>(
+                context.ContainerId,
+                context.TenantId,
+                segment.SegmentKey,
+                fileOrigin,
+                reloadClaimable: async () =>
+                {
+                    var entity = await _segmentRepository.FindAsync(segment.SegmentId);
+                    if (entity is not { Status: DocumentSegmentStatus.Pending })
+                    {
+                        return null;
+                    }
+
+                    // #346: the container may have been reclassified to a concrete type between LoadAsync and now
+                    // (the per-segment spawns span time); if the marker is gone, do not spawn.
+                    return await FindActiveContainerAsync(context.ContainerId) is null ? null : entity;
+                },
+                markSpawned: async (entity, derivedId) =>
+                {
+                    entity.MarkSpawned(derivedId);
+                    await _segmentRepository.UpdateAsync(entity);
+                },
+                cancellationToken);
+
+            if (spawnedId is null)
+            {
+                // The segment was already spawned by a concurrent run, removed, or its container was reclassified;
+                // our written blob references no committed document — reclaim the orphan.
+                await TryDeleteBlobAsync(derivedBlobName);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // The spawn UoW rolled back (a concurrent unique-index collision, or any other fault), so the written
             // blob references no committed document — reclaim it, then rethrow so the per-segment handler records
-            // the fault and the job is retried (which writes a fresh blob next time). The one CommitSpawnAsync path
-            // that returns without throwing (the segment is already non-Pending) deletes its own orphan blob.
+            // the fault and the job is retried (which writes a fresh blob next time).
             await TryDeleteBlobAsync(derivedBlobName);
             throw;
-        }
-    }
-
-    /// <summary>
-    /// Complete phase (short UoW): inserts the derived document, marks the segment Spawned, publishes
-    /// <c>DocumentUploadedEto</c>, and queues the derived document's pipeline — all atomically. Returns early
-    /// (deleting the orphan blob) when the segment is no longer Pending or a concurrent run already spawned it.
-    /// </summary>
-    private async Task CommitSpawnAsync(
-        PendingSegment segment, SegmentationContext context, string derivedBlobName, Guid derivedDocumentId, long fileSize)
-    {
-        using (_currentTenant.Change(context.TenantId))
-        using (var uow = _unitOfWorkManager.Begin(requiresNew: true))
-        {
-            var entity = await _segmentRepository.FindAsync(segment.SegmentId);
-            if (entity is null || entity.Status != DocumentSegmentStatus.Pending)
-            {
-                // Another run already spawned it (or it was removed). Drop our orphan blob and stop.
-                await TryDeleteBlobAsync(derivedBlobName);
-                return;
-            }
-
-            // #346: re-check the container is still a container in THIS UoW — it may have been reclassified between
-            // LoadAsync and now (the per-segment spawns span time). If the marker is gone, do not spawn; the
-            // document is being handled as a concrete type.
-            if (await FindActiveContainerAsync(context.ContainerId) is null)
-            {
-                await TryDeleteBlobAsync(derivedBlobName);
-                return;
-            }
-
-            var shortKey = segment.SegmentKey.Length > 8 ? segment.SegmentKey[..8] : segment.SegmentKey;
-            var fileOrigin = new FileOrigin(
-                blobName: derivedBlobName,
-                uploadedByUserName: context.UploadedByUserName,
-                contentType: "text/markdown",
-                contentHash: segment.SegmentKey,
-                fileSize: fileSize,
-                originalFileName: $"segment-{shortKey}.md");
-
-            var derived = Document.CreateDerived(
-                derivedDocumentId, context.TenantId, fileOrigin, context.ContainerId, segment.SegmentKey);
-
-            // A concurrent run that already committed this segment's derived document trips the unique
-            // (OriginDocumentId, OriginConstituentKey) index here. The failure propagates to
-            // SpawnDerivedDocumentAsync, which reclaims this run's orphan blob and rethrows so the job retries; on
-            // retry the segment is Spawned and skipped — self-healing, no duplicate.
-            await _documentRepository.InsertAsync(derived, autoSave: true);
-
-            entity.MarkSpawned(derivedDocumentId);
-            await _segmentRepository.UpdateAsync(entity);
-
-            await _distributedEventBus.PublishAsync(
-                new DocumentUploadedEto
-                {
-                    DocumentId = derived.Id,
-                    TenantId = derived.TenantId,
-                    EventTime = _clock.Now,
-                    FileName = fileOrigin.OriginalFileName,
-                    FileSize = fileOrigin.FileSize,
-                    ContentType = fileOrigin.ContentType
-                });
-
-            // Run the derived document through the full normal pipeline. Its text-extraction job seeds Markdown from
-            // this segment's SliceText instead of re-extracting the blob (see DocumentTextExtractionBackgroundJob).
-            await _pipelineJobScheduler.QueueAsync(derived, DocumentAIPipelines.TextExtraction);
-
-            await uow.CompleteAsync();
         }
     }
 
@@ -514,7 +477,7 @@ public class DocumentSegmentationJob
             // concrete type during the slow LLM split (the window between LoadAsync and here); flagging the now-typed
             // document would push the operator's reclassification back into the review queue with no path to clear it
             // — this Phase A path persists no segment rows, so FinalizeSegmentationFlagAsync's count-driven clear
-            // never runs. Mirrors the guard CommitSpawnAsync / FinalizeSegmentationFlagAsync already apply.
+            // never runs. Mirrors the guard SpawnDerivedDocumentAsync / FinalizeSegmentationFlagAsync already apply.
             var container = await FindActiveContainerAsync(context.ContainerId);
             if (container is null)
             {
@@ -550,7 +513,7 @@ public class DocumentSegmentationJob
             var remainingPending = segments.Count(s => s.Status == DocumentSegmentStatus.Pending);
 
             // #346: if the document was reclassified to a concrete type mid-job (IsContainer cleared), do NOT touch
-            // its review flag — its leftover Pending segments are inert (CommitSpawnAsync skips them) and re-flagging
+            // its review flag — its leftover Pending segments are inert (the spawn's reload guard skips them) and re-flagging
             // a now-typed document would wrongly push the operator's reclassification back into the review queue.
             var container = await FindActiveContainerAsync(context.ContainerId);
             if (container is null)

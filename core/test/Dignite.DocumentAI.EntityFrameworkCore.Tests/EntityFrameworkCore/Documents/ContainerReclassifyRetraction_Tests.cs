@@ -170,7 +170,7 @@ public class ContainerReclassifyRetraction_Tests
     /// <summary>
     /// Seeds a container document (Markdown set, IsContainer marked) plus <paramref name="subDocumentCount"/> derived
     /// sub-documents (OriginDocumentId == container) and one Spawned segment row each — mirroring the post-segmentation
-    /// state produced by <c>DocumentSegmentationJob.CommitSpawnAsync</c>.
+    /// state produced by <c>DocumentSegmentationJob</c>'s derived-document spawn (<c>DerivedDocumentSpawner</c>).
     /// </summary>
     private async Task<Guid> ArrangeSegmentedContainerAsync(int subDocumentCount)
     {
