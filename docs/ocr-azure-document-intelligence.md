@@ -2,7 +2,7 @@
 
 > One of Dignite Extract's OCR providers. Overview & comparison: [text-extraction.md](text-extraction.md).
 
-> 🧪 **Status: awaiting real-world validation.** The provider is implemented and unit-tested (at the mocked SDK boundary), but has not yet been run against a live Azure Document Intelligence resource. If you use Azure DI, testing and feedback are very welcome — see [#327](https://github.com/dignite-projects/document-ai/issues/327).
+> 🧪 **Status: awaiting real-world validation.** The provider is implemented and unit-tested (at the mocked SDK boundary), but has not yet been run against a live Azure Document Intelligence resource. If you use Azure DI, testing and feedback are very welcome — see [#327](https://github.com/dignite-projects/dignite-extract/issues/327).
 
 Recommended for production workloads where data is allowed to leave the network and the team prefers not to operate a sidecar.
 

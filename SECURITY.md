@@ -12,7 +12,7 @@
 
 Instead, use GitHub's private vulnerability reporting for this repository:
 
-1. Go to [https://github.com/dignite-projects/document-ai/security/advisories/new](https://github.com/dignite-projects/document-ai/security/advisories/new)
+1. Go to [https://github.com/dignite-projects/dignite-extract/security/advisories/new](https://github.com/dignite-projects/dignite-extract/security/advisories/new)
 2. Fill in the advisory form with as much detail as you can:
    - A description of the issue and its impact
    - Steps to reproduce (a minimal proof of concept helps a lot)

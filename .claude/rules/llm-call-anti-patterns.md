@@ -16,7 +16,7 @@ paths:
 This file is referenced by the `maf-workflow-reviewer` agent during PR review to quickly locate typical mistakes at Dignite Extract's internal **LLM call sites** (anti-patterns A / B are security issues, anti-pattern C is an MCP schema correctness issue). The rules apply to all LLM entry points:
 
 - Currently landed: `DocumentClassificationWorkflow` / `FieldExtractionWorkflow` + `FieldExtractionEventHandler` (field architecture v2 unifying Host + tenant (mechanism B)) / `DocumentParseBackgroundJob.TryGenerateTitleAsync`
-- Future extensions: MCP server tools ([#170](https://github.com/dignite-projects/document-ai/issues/170)), Webhook-triggered LLM paths, any query path where LLM output influences the parameters
+- Future extensions: MCP server tools ([#170](https://github.com/dignite-projects/dignite-extract/issues/170)), Webhook-triggered LLM paths, any query path where LLM output influences the parameters
 
 All examples are **pseudocode**, not compilable, illustrating intent only.
 

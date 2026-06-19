@@ -30,7 +30,7 @@ representing the project in public spaces.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the maintainers through
-[GitHub's private vulnerability / advisory reporting](https://github.com/dignite-projects/document-ai/security/advisories/new)
+[GitHub's private vulnerability / advisory reporting](https://github.com/dignite-projects/dignite-extract/security/advisories/new)
 or by opening a confidential channel with a maintainer. All complaints will be
 reviewed and investigated promptly and fairly. Maintainers are obligated to
 respect the privacy and security of the reporter of any incident.
