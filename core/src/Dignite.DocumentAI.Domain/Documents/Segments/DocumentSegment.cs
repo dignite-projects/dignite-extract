@@ -66,10 +66,11 @@ public class DocumentSegment : CreationAuditedAggregateRoot<Guid>, IMultiTenant
     public virtual DocumentSegmentKind Kind { get; private set; }
 
     /// <summary>
-    /// 1-based source page of a <see cref="DocumentSegmentKind.Figure"/> span (#371): a lightweight recovery anchor
-    /// parsed from the <c>[Image OCR p:N]</c> sentinel, so the original image can be recovered by re-parsing the
-    /// source file if ever needed (the crop is not persisted). <c>null</c> for a <see cref="DocumentSegmentKind.Text"/>
-    /// span or a page-less source. Provenance only — never identity (#210).
+    /// 1-based source page of a <see cref="DocumentSegmentKind.Figure"/> span (#371): a lightweight provenance anchor
+    /// parsed from the <c>[Image OCR p:N]</c> sentinel (the crop itself is not persisted, per Markdown-first). It
+    /// records <b>where</b> the figure came from; <b>no code re-parses the source to recover the image</b> — the
+    /// anchor only keeps that possible out-of-band should a future need arise. <c>null</c> for a
+    /// <see cref="DocumentSegmentKind.Text"/> span or a page-less source. Provenance only — never identity (#210).
     /// </summary>
     public virtual int? PageNumber { get; private set; }
 

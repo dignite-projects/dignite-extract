@@ -70,7 +70,14 @@ public class DerivedDocumentSpawner : ITransientDependency
     /// document id, or <c>null</c> when <paramref name="reloadClaimable"/> reports the candidate is no longer
     /// claimable (the caller decides what to do with the blob it already wrote, per its own naming scheme).
     /// </summary>
-    /// <typeparam name="TCandidate">The candidate ledger aggregate (<c>DocumentSegment</c>, #371).</typeparam>
+    /// <typeparam name="TCandidate">
+    /// The candidate ledger aggregate. After #371 unified the figure + born-digital ledgers there is exactly one
+    /// caller, passing <c>DocumentSegment</c>; the generic is <b>deliberately retained</b> as a decoupling seam — it
+    /// keeps this sink (in <c>Pipelines</c>) from referencing the ledger type (in <c>Documents.Segments</c>) or
+    /// hard-coding a reload/mark protocol, so the candidate's claim + spawn mutation enter through the two delegates
+    /// (<paramref name="reloadClaimable"/> / <paramref name="markSpawned"/>). Not dead generality — it is the boundary
+    /// that kept the shared #358 spawn protocol caller-agnostic.
+    /// </typeparam>
     /// <param name="sourceDocumentId">The source document the constituent belongs to (the derived doc's <c>OriginDocumentId</c>).</param>
     /// <param name="tenantId">The source/derived tenant; the UoW and the delegates run under this tenant.</param>
     /// <param name="constituentKey">The content-derived key (the derived doc's <c>OriginConstituentKey</c>, == <paramref name="fileOrigin"/>.ContentHash).</param>

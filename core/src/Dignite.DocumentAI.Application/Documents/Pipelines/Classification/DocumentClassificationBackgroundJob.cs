@@ -71,7 +71,7 @@ public class DocumentClassificationBackgroundJob
             // sees the [Image OCR] figure spans; fall back to the clean Document.Markdown when there is no artifact.
             var marked = await TryReadMarkedMarkdownAsync(workItem.DocumentId) ?? workItem.Markdown;
             var outcome = await ClassifyAsync(workItem, marked);
-            await CompleteRunAsync(workItem, outcome, ImageOcrMarkup.Contains(marked), marked.Length);
+            await CompleteRunAsync(workItem, outcome, ImageOcrMarkup.Contains(marked));
         }
         catch (Exception ex)
         {
@@ -138,8 +138,7 @@ public class DocumentClassificationBackgroundJob
     private async Task CompleteRunAsync(
         ClassificationWorkItem workItem,
         DocumentClassificationOutcome outcome,
-        bool hasFigures,
-        int markedLength)
+        bool hasFigures)
     {
         using var uow = UnitOfWorkManager.Begin(requiresNew: true);
 
@@ -148,7 +147,7 @@ public class DocumentClassificationBackgroundJob
         var (document, run) = await LoadDocumentAndRunAsync(
             workItem.DocumentId, workItem.RunId, DocumentAIPipelines.Classification, includeFieldValues: true);
 
-        await ApplyClassificationResultAsync(document, run, outcome, hasFigures, markedLength);
+        await ApplyClassificationResultAsync(document, run, outcome, hasFigures);
         await DocumentRepository.UpdateAsync(document, autoSave: true);
 
         await uow.CompleteAsync();
@@ -183,8 +182,7 @@ public class DocumentClassificationBackgroundJob
         Document document,
         DocumentPipelineRun run,
         DocumentClassificationOutcome outcome,
-        bool hasFigures,
-        int markedLength)
+        bool hasFigures)
     {
         var isDerived = document.OriginDocumentId.HasValue;
 
@@ -248,16 +246,23 @@ public class DocumentClassificationBackgroundJob
                 document, run, outcome.Reason, outcome.Candidates);
         }
 
-        // #371: a non-container parent may still embed a standalone document to route to its own sub-document. Enqueue
-        // the unified pass when the classifier flagged it, OR — a fallback for a figure beyond the classification
-        // truncation window — when the source is figure-bearing and its marked Markdown is longer than that window
-        // (so the embedded-document signal may not have seen the tail figure). Runs IN ADDITION to the parent's own
-        // extraction (DocumentClassifiedEto was published above for a confirmed type); the recursion guard prevents a
-        // seeded sub-document (which carries no figures) from descending. Enqueued in this same UoW, so the job and
-        // the run completion commit atomically via the outbox.
-        var shouldRoute = !isDerived
-            && (outcome.ContainsEmbeddedDocument
-                || (hasFigures && markedLength > _aiOptions.MaxTextLengthPerExtraction));
+        // #371/#379: a non-container parent may still embed a standalone document to route to its own sub-document.
+        // Enqueue the unified pass when the classifier flagged it, OR — deterministically — whenever the source is
+        // figure-bearing (its marked Markdown carries an [Image OCR] sentinel). Keying figure recall on the
+        // already-computed, zero-cost ImageOcrMarkup.Contains signal (#379) makes the focused segmentation LLM the
+        // single standalone-vs-element decision-maker, closing the within-window hole where a multi-objective
+        // classifier under-flagged an embedded figure (ContainsEmbeddedDocument=false) on a doc whose marked Markdown
+        // fit inside the classification truncation window — previously the figure arm fired only beyond that window,
+        // so an in-window embedded document was never routed and never entered review (a silent recall miss).
+        // No structural pre-check guards the figure arm: this trigger is only reached for a non-container parent, where
+        // the pass routes ONLY figure spans, so "has a candidate span" is exactly "Contains a figure" — a pre-check
+        // would be vacuous, and any content-length variant that skipped present figures would reopen the recall hole.
+        // A decorative-only figure is a clean no-op in the pass (logged, marked segmented, no review flag), and the
+        // per-doc IsSegmented gate means each figure-bearing document pays the segmentation LLM at most once.
+        // Runs IN ADDITION to the parent's own extraction (DocumentClassifiedEto was published above for a confirmed
+        // type); the recursion guard prevents a seeded sub-document (which carries no figures) from descending.
+        // Enqueued in this same UoW, so the job and the run completion commit atomically via the outbox.
+        var shouldRoute = !isDerived && (outcome.ContainsEmbeddedDocument || hasFigures);
         if (shouldRoute)
         {
             await _backgroundJobManager.EnqueueAsync(

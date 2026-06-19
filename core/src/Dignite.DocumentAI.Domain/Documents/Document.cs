@@ -119,9 +119,11 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     /// nothing standalone to route. Set by <see cref="MarkSegmented"/> in the same transaction as the segment rows,
     /// and used by <c>DocumentSegmentationJob</c> as the precise resume gate (skip the LLM split when set), replacing
     /// the imperfect "infer completion from segment-row Kind" heuristic that could not tell an embedded-run figure
-    /// row apart from a container-run figure row (#372/#377). It is <b>cleared</b> on a concrete→container
-    /// re-recognition (<see cref="MarkAsContainer"/>, false→true) so a re-recognized container runs its container
-    /// split exactly once. Failure / incomplete / byte-identical outcomes do NOT set it, so a retry re-runs the split.
+    /// row apart from a container-run figure row (#372/#377). It is <b>cleared on every container↔concrete
+    /// transition</b> — both directions — through the single <see cref="SetContainerFlag"/> choke point (#378/#379):
+    /// a concrete→container re-recognition so the new container runs its split exactly once, and a container→concrete
+    /// reclassify so the now-concrete document's own embedded-document routing can run instead of being skipped by a
+    /// stale marker. Failure / incomplete / byte-identical outcomes do NOT set it, so a retry re-runs the split.
     /// Internal pipeline state — not exposed at the egress.
     /// </summary>
     public virtual bool IsSegmented { get; private set; }
@@ -346,25 +348,21 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         DocumentTypeId = Check.NotDefaultOrNull<Guid>(documentTypeId, nameof(documentTypeId));
         ClassificationConfidence = Check.Range(classificationConfidence, nameof(classificationConfidence), 0d, 1d);
         SetReviewReason(DocumentReviewReasons.UnresolvedClassification, present: false);
-        // #346: a concrete type is now assigned, so this is no longer a container; clear the marker and any stale
-        // segmentation-incomplete signal to avoid the contradictory "has a type AND is a container" state.
-        // #349: capture the prior marker state and, on a true→false transition, raise ContainerMarkerClearedEvent so
-        // the in-process handler retracts any already-spawned sub-documents (soft-delete + DocumentDeletedEto) and
-        // removes the container's segment rows, preventing downstream double-counting.
+        // #346: a concrete type is now assigned, so this is no longer a container; clear the marker (and the stale
+        // segmentation-incomplete signal) to avoid the contradictory "has a type AND is a container" state.
+        // #377/#379: routing the flag through SetContainerFlag clears the stale IsSegmented resume marker on the
+        // container->concrete transition (single choke point — see SetContainerFlag), so the now-concrete document's
+        // own embedded-document routing can run when re-segmented instead of being skipped. #378 was exactly this
+        // omission on the automatic path (reachable via RerecognizeAsync) while only the operator path cleared it.
+        // #349: on a true->false transition raise ContainerMarkerClearedEvent so the in-process handler retracts any
+        // already-spawned sub-documents (soft-delete + DocumentDeletedEto) and removes the container's segment rows.
         var wasContainer = IsContainer;
-        IsContainer = false;
+        SetContainerFlag(false);
         SetReviewReason(DocumentReviewReasons.SegmentationIncomplete, present: false);
         ReviewDisposition = DocumentReviewDisposition.NotReviewed;
         RejectionReason = null; // #284 review-fix: leaving Rejected disposition -> clear stale rejection reason; only Rejected should have one.
         if (wasContainer)
         {
-            // #377 (#371 post-merge review): symmetric with the operator path (ConfirmClassification). A
-            // container->concrete reclassify retracts the container's segment rows (#349 below), so its
-            // segmentation completion no longer holds — clear IsSegmented so the now-concrete document's own
-            // embedded-document routing can run when re-segmented, instead of being skipped by the stale resume
-            // marker. Previously only the operator path cleared this, so the automatic high-confidence path
-            // (reachable via RerecognizeAsync) silently gated off the now-concrete document's embedded-figure routing.
-            IsSegmented = false;
             AddLocalEvent(new ContainerMarkerClearedEvent(Id));
         }
     }
@@ -418,7 +416,12 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         var wasContainer = IsContainer;
         var hadConcreteType = DocumentTypeId.HasValue;
 
-        IsContainer = true;
+        // #377/#379: SetContainerFlag clears IsSegmented on the concrete->container transition (single choke point —
+        // see SetContainerFlag), so any prior segmentation completion (an embedded-document run that already routed a
+        // figure before this re-recognition) does NOT count as the container split having run, and the container split
+        // runs exactly once now. A document that merely STAYS a container (wasContainer true) is a no-op here and
+        // keeps its marker, so it is not re-split.
+        SetContainerFlag(true);
         DocumentTypeId = null;
         ClassificationConfidence = 0;
         // A container is a correct outcome: clear the classification / field review reasons rather than setting them,
@@ -430,15 +433,6 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         ReviewDisposition = DocumentReviewDisposition.NotReviewed;
         RejectionReason = null;
         _extractedFieldValues.Clear();
-
-        // #377: on a false→true transition the document is NEWLY a container, so any prior segmentation completion
-        // (from an embedded-document run that already routed a figure before this re-recognition) does NOT count as
-        // the container split having run. Clear the marker so the container split runs exactly once now; a container
-        // that merely STAYS a container (wasContainer true) keeps its marker and is not re-split.
-        if (!wasContainer)
-        {
-            IsSegmented = false;
-        }
 
         // #355: mirror of the container→type retraction (#349 ContainerMarkerClearedEvent). The in-process handler
         // publishes DocumentReclassifiedToContainerEto so downstream retracts the record derived from the former type.
@@ -460,6 +454,34 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         IsSegmented = true;
     }
 
+    /// <summary>
+    /// The single mutator of <see cref="IsContainer"/> (#378/#379 hardening): every container↔concrete transition
+    /// flows through here so the coupled <see cref="IsSegmented"/> invariant cannot leak. Any <b>actual</b> change of
+    /// the flag — either direction — invalidates a prior segmentation completion, because the container split and a
+    /// concrete document's embedded-figure routing are different passes whose completion must not gate the other; so
+    /// the resume marker is cleared on every transition. A no-op call (the flag is already at the requested value)
+    /// leaves <see cref="IsSegmented"/> untouched, preserving a still-container's split marker and a still-concrete
+    /// document's embedded-routing marker. Callers retain the direction-specific concerns (the
+    /// <c>ContainerMarkerCleared</c>/<c>Set</c> events and review-reason resets), which depend on context they capture
+    /// before calling this.
+    /// <para>
+    /// #378 was a silent-data-loss bug caused by one concrete-assigning path forgetting to clear
+    /// <see cref="IsSegmented"/> while the other cleared it; funnelling the flag through one setter makes that class
+    /// of omission unrepresentable. The aggregate-level transition-matrix test (<c>IsSegmentedTransitionMatrix_Tests</c>)
+    /// asserts every reclassification path clears it.
+    /// </para>
+    /// </summary>
+    private void SetContainerFlag(bool isContainer)
+    {
+        if (IsContainer == isContainer)
+        {
+            return;
+        }
+
+        IsContainer = isContainer;
+        IsSegmented = false;
+    }
+
     internal void ConfirmClassification(Guid documentTypeId)
     {
         DocumentTypeId = Check.NotDefaultOrNull<Guid>(documentTypeId, nameof(documentTypeId));
@@ -469,21 +491,18 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
         SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: false);
         // #346: operator reclassifying a container to a concrete type clears the container marker (reversibility)
         // and any stale segmentation-incomplete signal; subsequent DocumentClassifiedEto cascades field extraction.
-        // #349: capture the prior marker state and, on a true→false transition, raise ContainerMarkerClearedEvent so
-        // the in-process handler retracts any already-spawned sub-documents (soft-delete + DocumentDeletedEto) and
-        // removes the container's segment rows, preventing downstream double-counting.
+        // #377/#379: SetContainerFlag clears the stale IsSegmented resume marker on the container->concrete transition
+        // (single choke point — see SetContainerFlag), so the now-concrete document's own embedded-document routing can
+        // run if it is later re-segmented instead of being skipped by a stale marker.
+        // #349: on a true->false transition raise ContainerMarkerClearedEvent so the in-process handler retracts any
+        // already-spawned sub-documents (soft-delete + DocumentDeletedEto) and removes the container's segment rows.
         var wasContainer = IsContainer;
-        IsContainer = false;
+        SetContainerFlag(false);
         SetReviewReason(DocumentReviewReasons.SegmentationIncomplete, present: false);
         ReviewDisposition = DocumentReviewDisposition.Confirmed;
         RejectionReason = null; // #284 review-fix: rejection is recoverable; clear stale rejection reason after Reclassify / Confirm.
         if (wasContainer)
         {
-            // #377: symmetric with MarkAsContainer clearing the marker on concrete→container. A container→concrete
-            // reclassify retracts the container's segment rows (#349 below), so its segmentation completion no longer
-            // holds — clear IsSegmented so the now-concrete document's own embedded-document routing can run if it is
-            // later re-segmented, instead of being skipped by a stale marker.
-            IsSegmented = false;
             AddLocalEvent(new ContainerMarkerClearedEvent(Id));
         }
     }

@@ -249,9 +249,10 @@ public class DocumentClassificationBackgroundJob_Tests
     [Fact]
     public async Task NoEmbeddedDocument_SmallDocument_Does_Not_Route()
     {
-        // #371 D6(b): the common case — a small, figure-free document the classifier does NOT flag as embedding a
-        // standalone document must NOT pay for the heavy segmentation pass. Guards a regression that drops the
-        // ContainsEmbeddedDocument disjunct or inverts the markedLength comparison.
+        // #371 D6(b): the common case — a small, figure-FREE document the classifier does NOT flag as embedding a
+        // standalone document must NOT pay for the heavy segmentation pass. After #379 the figure arm keys purely on
+        // the deterministic ImageOcrMarkup.Contains signal, so this guards a regression that drops the
+        // ContainsEmbeddedDocument disjunct or spuriously routes a document with no figure sentinels at all.
         var doc = CreateDocument("A short single service agreement with no embedded documents.");
         SetupDocumentRepository(doc);
 
@@ -272,12 +273,57 @@ public class DocumentClassificationBackgroundJob_Tests
     }
 
     [Fact]
+    public async Task FigureBearing_InWindow_Document_Routes_Even_Without_Embedded_Signal()
+    {
+        // #379 (HIGH) — the within-window embedded-figure recall hole. A figure-bearing document whose MARKED Markdown
+        // fits INSIDE the classification truncation window (MaxTextLengthPerExtraction = 8000) but whose embedded
+        // figure the multi-objective classifier under-flagged (ContainsEmbeddedDocument = false) must STILL route the
+        // unified pass — figure recall now keys purely on the deterministic ImageOcrMarkup.Contains signal, decoupled
+        // from both the LLM flag and the truncation window. On the pre-#379 code (figure arm gated on
+        // markedLength > window) this in-window document never routed and never entered review — a silent recall miss.
+        // The focused segmentation pass then owns the per-span standalone-vs-element judgment (a decorative figure is a
+        // clean no-op there, not a review flag).
+        var doc = CreateDocument("A short contract body with an embedded invoice photo.");
+        SetupDocumentRepository(doc);
+
+        // A real salted [Image OCR] span, comfortably inside the 8000 window (so the classifier saw it; the point is it
+        // under-flagged, not that the tail was truncated). GetAllBytesOrNullAsync is an extension over the interface
+        // GetOrNullAsync(Stream), so stub the latter.
+        var markedMarkdown = "Contract body.\n" + ImageOcrMarkup.Wrap("INVOICE\nVendor: Acme\nTotal: $4,200", pageNumber: 2);
+        markedMarkdown.Length.ShouldBeLessThan(8000); // guards the in-window premise (distinct from the over-window case below)
+        var markedBytes = Encoding.UTF8.GetBytes(markedMarkdown);
+        var markedBlobName = DocumentConsts.MarkedMarkdownBlobPrefix + doc.Id;
+        _markedBlobContainer
+            .GetOrNullAsync(markedBlobName, Arg.Any<CancellationToken>())
+            .Returns(_ => new MemoryStream(markedBytes));
+
+        _workflow
+            .RunAsync(Arg.Any<IReadOnlyList<DocumentType>>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new DocumentClassificationOutcome
+            {
+                TypeCode = "contract.general",
+                ConfidenceScore = 0.92,
+                ContainsEmbeddedDocument = false
+            });
+
+        await _job.ExecuteAsync(new DocumentClassificationJobArgs { DocumentId = doc.Id });
+
+        // The parent still classifies normally...
+        doc.DocumentTypeId.ShouldBe(DocumentClassificationJobTestModule.ContractTypeId);
+        // ...AND the unified pass is enqueued purely on the deterministic figure signal (no embedded flag, in-window).
+        await _backgroundJobManager.Received(1).EnqueueAsync(
+            Arg.Is<DocumentSegmentationJobArgs>(a => a.SourceDocumentId == doc.Id),
+            Arg.Any<BackgroundJobPriority>(), Arg.Any<TimeSpan?>());
+    }
+
+    [Fact]
     public async Task FigureBearing_OverWindow_Document_Routes_Even_Without_Embedded_Signal()
     {
-        // #371 D6(b) fallback arm: a figure-bearing document whose MARKED Markdown exceeds the classification
-        // truncation window (MaxTextLengthPerExtraction = 8000) may carry an embedded figure the classifier never saw
-        // (the tail was truncated out of the prompt). It must route even when ContainsEmbeddedDocument is false, so a
-        // beyond-window embedded document is not silently missed.
+        // #371/#379: a figure-bearing document whose MARKED Markdown exceeds the classification truncation window
+        // (MaxTextLengthPerExtraction = 8000) may carry an embedded figure the classifier never saw (the tail was
+        // truncated out of the prompt). It must route even when ContainsEmbeddedDocument is false. Since #379 routing
+        // is window-INDEPENDENT (keyed on ImageOcrMarkup.Contains), so this is now one instance of the general
+        // figure-bearing trigger rather than a special over-window fallback arm.
         var doc = CreateDocument("Leading body text used as the clean fallback Markdown.");
         SetupDocumentRepository(doc);
 

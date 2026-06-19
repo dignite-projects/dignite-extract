@@ -530,7 +530,9 @@ public class DocumentSegmentationJob
             return false;
         }
 
-        return kind == DocumentSegmentKind.Figure || source.IsContainer;
+        // A container-independent kind (Figure) spawns regardless; a container-bound kind (Text) only while the
+        // source is still a container. Exhaustive — adding a kind forces IsContainerIndependent to declare its stance.
+        return kind.IsContainerIndependent() || source.IsContainer;
     }
 
     /// <summary>

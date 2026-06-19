@@ -72,12 +72,15 @@ public class ContainerMarkerClearedEventHandler
         // filter by Kind (below). A container that was never segmented (or whose segmentation never spawned) yields no
         // routed ids — a no-op, which is correct.
         var segments = await _segmentRepository.GetListAsync(s => s.SourceDocumentId == containerId);
-        // #371: retract only TEXT-kind sub-documents (bundle constituents that existed only because the parent was a
-        // container). FIGURE-kind sub-documents are genuinely embedded documents (an invoice photo inside what is now
-        // a concrete-typed contract) and survive the reclassify — exactly as a freshly-uploaded concrete document with
-        // an embedded figure keeps it (#364, now a Kind filter on the single unified ledger).
+        // #371: retract only container-bound (Text) sub-documents — bundle constituents that existed only because the
+        // parent was a container. Container-independent (Figure) sub-documents are genuinely embedded documents (an
+        // invoice photo inside what is now a concrete-typed contract) and survive the reclassify — exactly as a
+        // freshly-uploaded concrete document with an embedded figure keeps it (#364). This in-memory filter goes
+        // through the exhaustive IsContainerIndependent switch (#379 LOW), so a future third kind throws here (the
+        // first decision site reached) rather than being silently kept; the SQL bulk delete below keeps the literal
+        // Kind value it cannot translate a method call.
         var spawnedSubDocumentIds = segments
-            .Where(s => s.Kind == DocumentSegmentKind.Text && s.RoutedDocumentId.HasValue)
+            .Where(s => !s.Kind.IsContainerIndependent() && s.RoutedDocumentId.HasValue)
             .Select(s => s.RoutedDocumentId!.Value)
             .ToList();
 

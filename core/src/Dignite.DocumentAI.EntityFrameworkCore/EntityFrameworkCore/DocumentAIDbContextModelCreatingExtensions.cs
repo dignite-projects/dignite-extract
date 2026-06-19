@@ -253,11 +253,15 @@ public static class DocumentAIDbContextModelCreatingExtensions
             b.HasIndex(x => new { x.SourceDocumentId, x.SegmentKey })
                 .IsUnique();
 
-            // Concurrency guard (#346): one split per container. The LLM split is non-deterministic, so two
-            // concurrent segmentation runs would otherwise produce different SegmentKeys and both commit (a double
-            // split). Every split numbers its slices from Ordinal 0, so this unique index makes the second
-            // committer collide on Ordinal 0 and roll back its whole insert — only one split survives; the loser
-            // retries and resumes from the winner's persisted rows.
+            // Reading-order uniqueness (#346/#372): no two segment rows of one source share an Ordinal. This is a
+            // structural guard, NOT the primary double-split backstop. The authoritative concurrency backstops are the
+            // Document concurrency stamp — both runs re-check !IsSegmented and then UpdateAsync the source via
+            // MarkSegmented in the same UoW as the rows, so the loser's commit conflicts (#377) — and the
+            // (SourceDocumentId, SegmentKey) unique index above. A FRESH split numbers from Ordinal 0, so two
+            // CONCURRENT fresh splits also collide here (both write Ordinal 0) and one rolls back; but a SEQUENTIAL
+            // cross-mode re-split (a concrete doc's embedded figure already routed, then a container re-recognition,
+            // #372/#377) deliberately numbers from Max(Ordinal)+1 and skips already-persisted keys, so it neither
+            // relies on nor trips an Ordinal-0 collision.
             b.HasIndex(x => new { x.SourceDocumentId, x.Ordinal })
                 .IsUnique();
         });
