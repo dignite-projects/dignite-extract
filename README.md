@@ -1,6 +1,6 @@
-# Dignite Document AI
+# Dignite Extract
 
-> **Document AI = any content requiring IDP (Intelligent Document Processing) — scans / photos / PDF images / Office files / digital-born documents → trustworthy structured data.**
+> **Dignite Extract = any content requiring IDP (Intelligent Document Processing) — scans / photos / PDF images / Office files / digital-born documents → trustworthy structured data.**
 > A **channel layer**, not an end-product. It doesn't consume, doesn't own, doesn't dive into business — it hands Markdown + structured metadata to downstream RAG platforms, business systems, and AI clients via REST / EventBus / MCP server / Webhook.
 
 For the full positioning, architecture rules, OUT-of-scope list, Markdown-first contract, multi-stage ETO event contract, and security covenant, see [CLAUDE.md](./CLAUDE.md). It is the truth source — this README only stages the operational entry points.
@@ -10,7 +10,7 @@ For the full positioning, architecture rules, OUT-of-scope list, Markdown-first 
 ```
 content requiring IDP: scans / photos / PDF images / Office files / digital-born documents
     ↓
-[Document AI channel]: OCR + Markdown + system metadata + type-bound field extraction
+[Dignite Extract channel]: OCR + Markdown + system metadata + type-bound field extraction
     ↓ (REST / EventBus / MCP server / Webhook)
     ├─→ downstream RAG platform
     ├─→ business systems (finance / CLM / HR / ERP)
@@ -43,7 +43,7 @@ Business modules (contract management / invoice management / HR records / etc.) 
 
 ### 1. Start the PaddleOCR sidecar (only if you enable the PaddleOCR provider)
 
-The host currently wires the **Vision LLM** OCR provider by default (see [Choosing an OCR provider](#choosing-an-ocr-provider)), which needs no sidecar — it reuses the `DocumentAI` AI-provider configuration below. If you switch the host to the PaddleOCR provider, start its Docker container first:
+The host currently wires the **Vision LLM** OCR provider by default (see [Choosing an OCR provider](#choosing-an-ocr-provider)), which needs no sidecar — it reuses the `Extract` AI-provider configuration below. If you switch the host to the PaddleOCR provider, start its Docker container first:
 
 ```bash
 cd host
@@ -60,12 +60,12 @@ Create `host/src/appsettings.Development.json` with your local SQL Server connec
 {
   "Serilog": { "MinimumLevel": { "Default": "Debug" } },
   "ConnectionStrings": {
-    "Default": "Server=YOUR_DB_SERVER;Database=Document AI-Dev;User ID=YOUR_USER;Password=YOUR_PASSWORD;TrustServerCertificate=true"
+    "Default": "Server=YOUR_DB_SERVER;Database=Extract-Dev;User ID=YOUR_USER;Password=YOUR_PASSWORD;TrustServerCertificate=true"
   },
   "StringEncryption": {
     "DefaultPassPhrase": "any-random-string-here"
   },
-  "DocumentAI": {
+  "Extract": {
     "Endpoint": "https://api.openai.com/v1",
     "ApiKey": "YOUR_REAL_API_KEY",
     "ChatModelId": "gpt-4o-mini",
@@ -76,7 +76,7 @@ Create `host/src/appsettings.Development.json` with your local SQL Server connec
 
 > This file is git-ignored. In Development mode, the application automatically generates temporary OpenIddict certificates — no `.pfx` file is needed. For LocalDB, the committed `appsettings.json` default (`Server=(LocalDb)\MSSQLLocalDB;...`) already works without any override.
 
-An LLM provider is **mandatory** — classification and field extraction have no non-LLM fallback, and the host fails fast at startup while `DocumentAI:ApiKey` is still the committed placeholder. Any OpenAI-compatible endpoint works; with the default Vision LLM OCR provider, `VisionOcrModelId` must point at a vision-capable model. See [docs/ai-provider.md](./docs/ai-provider.md).
+An LLM provider is **mandatory** — classification and field extraction have no non-LLM fallback, and the host fails fast at startup while `Extract:ApiKey` is still the committed placeholder. Any OpenAI-compatible endpoint works; with the default Vision LLM OCR provider, `VisionOcrModelId` must point at a vision-capable model. See [docs/ai-provider.md](./docs/ai-provider.md).
 
 ### 3. Install client-side libraries
 
@@ -108,7 +108,7 @@ SPA: `http://localhost:4200`. Default seeded credentials: `admin` / `1q2w3E*`.
 
 ## Choosing an OCR provider
 
-Document AI ships three OCR providers; the host enables exactly one (`[DependsOn(...)]` in `host/src/DocumentAIHostModule.cs` + the matching `ProjectReference` in `host/src/Dignite.DocumentAI.Host.csproj`):
+Dignite Extract ships three OCR providers; the host enables exactly one (`[DependsOn(...)]` in `host/src/ExtractHostModule.cs` + the matching `ProjectReference` in `host/src/Dignite.Extract.Host.csproj`):
 
 * **Vision LLM** — the host's current default (#259). Sends images / rasterized PDF pages to a vision-capable `IChatClient` model; the strongest option for phone photos, thermal receipts, and image-only PDFs. No sidecar — only a vision model id. See [docs/ocr-vision-llm.md](./docs/ocr-vision-llm.md).
 * **PaddleOCR** — local Docker sidecar (PP-StructureV3, CPU); data never leaves the network. See [docs/ocr-paddleocr.md](./docs/ocr-paddleocr.md).
@@ -147,4 +147,4 @@ External references:
 
 ## License
 
-Dignite Document AI is licensed under the [Apache License 2.0](./LICENSE).
+Dignite Extract is licensed under the [Apache License 2.0](./LICENSE).

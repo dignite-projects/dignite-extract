@@ -5,9 +5,9 @@ const baseUrl = 'http://localhost:4200';
 const oAuthConfig = {
   issuer: 'https://localhost:44348/',
   redirectUri: baseUrl,
-  clientId: 'DocumentAI_App',
+  clientId: 'Extract_App',
   responseType: 'code',
-  scope: 'offline_access DocumentAI',
+  scope: 'offline_access Extract',
   requireHttps: true,
 };
 
@@ -15,13 +15,13 @@ export const environment = {
   production: false,
   application: {
     baseUrl,
-    name: 'Document AI',
+    name: 'Extract',
   },
   oAuthConfig,
   apis: {
     default: {
       url: 'https://localhost:44348',
-      rootNamespace: 'Dignite.DocumentAI',
+      rootNamespace: 'Dignite.Extract',
     },
     AbpAccountPublic: {
       url: oAuthConfig.issuer,

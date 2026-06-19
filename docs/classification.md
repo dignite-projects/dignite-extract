@@ -1,10 +1,10 @@
 # Document Classification
 
-When a document finishes [text extraction](text-extraction.md), Document AI classifies it against `DocumentType` rows that belong to the same layer as the document (Host documents → `TenantId IS NULL` rows; tenant documents → matching tenant rows). The Host deployer creates their types through the admin UI (`IDocumentTypeAppService`); tenants do the same for their own private types. Document AI ships **no built-in types** and **does not register types in Module startup** — every type is owned by the deployer or tenant, never by Document AI itself.
+When a document finishes [text extraction](text-extraction.md), Dignite Extract classifies it against `DocumentType` rows that belong to the same layer as the document (Host documents → `TenantId IS NULL` rows; tenant documents → matching tenant rows). The Host deployer creates their types through the admin UI (`IDocumentTypeAppService`); tenants do the same for their own private types. Dignite Extract ships **no built-in types** and **does not register types in Module startup** — every type is owned by the deployer or tenant, never by Dignite Extract itself.
 
 The resulting `DocumentTypeCode` is the routing signal that drives the next channel stages — Host field extraction (#168) for type-bound Host fields and tenant field extraction (#169) for tenant-defined fields — and is also broadcast via `DocumentClassifiedEto` over `DistributedEventBus` so downstream business consumers (in their own repositories) can subscribe and persist their own derived records.
 
-This page covers the classification pipeline as a *feature*: how it works, how to tune it, and what happens when the LLM is unhappy. For low-level orchestration code see `core/src/Dignite.DocumentAI.Application/Documents/Pipelines/Classification/`.
+This page covers the classification pipeline as a *feature*: how it works, how to tune it, and what happens when the LLM is unhappy. For low-level orchestration code see `core/src/Dignite.Extract.Application/Documents/Pipelines/Classification/`.
 
 ## How it works
 
@@ -28,7 +28,7 @@ Two design properties matter:
 
 ## Registering document types
 
-Both Host deployers and tenants create their `DocumentType` rows through the admin UI (`IDocumentTypeAppService`), each in their own layer. There is **no Module-startup registration path** — Document AI Core ships with no built-in types, and there's no inheritance: a Host type never auto-applies to tenant documents.
+Both Host deployers and tenants create their `DocumentType` rows through the admin UI (`IDocumentTypeAppService`), each in their own layer. There is **no Module-startup registration path** — Dignite Extract Core ships with no built-in types, and there's no inheritance: a Host type never auto-applies to tenant documents.
 
 | Field | Used by |
 |---|---|
@@ -40,7 +40,7 @@ Both Host deployers and tenants create their `DocumentType` rows through the adm
 ## Configuration
 
 ```json
-"DocumentAIBehavior": {
+"ExtractBehavior": {
   "MaxDocumentTypesInClassificationPrompt": 50,
   "MaxTextLengthPerExtraction": 8000
 }
@@ -51,7 +51,7 @@ Both Host deployers and tenants create their `DocumentType` rows through the adm
 | `MaxDocumentTypesInClassificationPrompt` | `50` | When more than this many types are registered, the prompt keeps the top N by `Priority`. Tune this against your LLM's context window — more types means a longer prompt and slower / more expensive calls. |
 | `MaxTextLengthPerExtraction` | `8000` | Markdown longer than this is truncated before being sent. The first N characters usually contain the most discriminative content (title, table-of-contents, opening clauses). Increase if your documents bury the type signal deep, but watch token cost. |
 
-The prompt language follows `DocumentAIBehavior:DefaultLanguage` (see [ai-provider.md](ai-provider.md#cross-cutting-llm-behavior-documentaibehavior)).
+The prompt language follows `ExtractBehavior:DefaultLanguage` (see [ai-provider.md](ai-provider.md#cross-cutting-llm-behavior-extractbehavior)).
 
 ## Outcomes
 

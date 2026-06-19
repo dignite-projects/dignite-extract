@@ -1,8 +1,8 @@
 # Local Development Setup
 
-This guide covers everything needed to run Document AI on a local machine.
+This guide covers everything needed to run Dignite Extract on a local machine.
 
-> **Channel positioning**: Document AI is a paper → digitized-data channel. It persists into **SQL Server**; downstream RAG / vector-store / chat features live in the consumer's own deployment, not here. See `CLAUDE.md` → "OUT of scope".
+> **Channel positioning**: Dignite Extract is a paper → digitized-data channel. It persists into **SQL Server**; downstream RAG / vector-store / chat features live in the consumer's own deployment, not here. See `CLAUDE.md` → "OUT of scope".
 
 ## Prerequisites
 
@@ -61,7 +61,7 @@ docker compose down
 
 Create `host/src/appsettings.Development.json`. This file is git-ignored — keep your real credentials here (or in user-secrets / environment variables), never in the committed `appsettings.json`.
 
-An LLM provider is **required**. The host fails fast at startup if `DocumentAI` is not configured, because document classification and field extraction have no non-LLM fallback (the committed `appsettings.json` ships only a `"YOUR_API_KEY"` placeholder, which the startup guard rejects). Minimum viable dev config:
+An LLM provider is **required**. The host fails fast at startup if `Extract` is not configured, because document classification and field extraction have no non-LLM fallback (the committed `appsettings.json` ships only a `"YOUR_API_KEY"` placeholder, which the startup guard rejects). Minimum viable dev config:
 
 ```json
 {
@@ -71,12 +71,12 @@ An LLM provider is **required**. The host fails fast at startup if `DocumentAI` 
     }
   },
   "ConnectionStrings": {
-    "Default": "Server=YOUR_DB_SERVER;Database=Document AI-Dev;User ID=YOUR_USER;Password=YOUR_PASSWORD;TrustServerCertificate=true"
+    "Default": "Server=YOUR_DB_SERVER;Database=Extract-Dev;User ID=YOUR_USER;Password=YOUR_PASSWORD;TrustServerCertificate=true"
   },
   "StringEncryption": {
     "DefaultPassPhrase": "any-random-string-here"
   },
-  "DocumentAI": {
+  "Extract": {
     "Endpoint": "https://api.openai.com/v1",
     "ApiKey": "sk-...",
     "ChatModelId": "gpt-4o-mini"
@@ -86,7 +86,7 @@ An LLM provider is **required**. The host fails fast at startup if `DocumentAI` 
 
 `TitleGeneratorModelId` / `StructuredModelId` are optional and default to `ChatModelId`; set them only when you want a different model per workload.
 
-To use a non-OpenAI provider (Azure OpenAI, SiliconFlow, OpenRouter, Ollama, etc.), see [docs/ai-provider.md](./ai-provider.md) — for OpenAI-protocol providers you only swap `Endpoint` + `ApiKey` + model ids; for non-OpenAI wire protocols you override `ConfigureAI` in `DocumentAIHostModule`. For a zero-cost local option, run Ollama and point `Endpoint` at its `/v1` endpoint (use any non-empty token as `ApiKey`).
+To use a non-OpenAI provider (Azure OpenAI, SiliconFlow, OpenRouter, Ollama, etc.), see [docs/ai-provider.md](./ai-provider.md) — for OpenAI-protocol providers you only swap `Endpoint` + `ApiKey` + model ids; for non-OpenAI wire protocols you override `ConfigureAI` in `ExtractHostModule`. For a zero-cost local option, run Ollama and point `Endpoint` at its `/v1` endpoint (use any non-empty token as `ApiKey`).
 
 > **OpenIddict certificates**: In Development mode, temporary signing and encryption certificates are generated automatically. No `.pfx` file is needed.
 
@@ -133,9 +133,9 @@ Default credentials (seeded on first run):
 
 ## Full startup checklist
 
-1. SQL Server is running and the target database (e.g. `Document AI-Dev`) is reachable
+1. SQL Server is running and the target database (e.g. `Dignite Extract-Dev`) is reachable
 2. `docker compose up -d paddleocr` completed successfully in `host/` (only required if you upload scanned documents)
-3. `host/src/appsettings.Development.json` exists with a valid connection string, passphrase, and `DocumentAI` provider config (the host won't start without it — see [Backend configuration](#backend-configuration))
+3. `host/src/appsettings.Development.json` exists with a valid connection string, passphrase, and `Extract` provider config (the host won't start without it — see [Backend configuration](#backend-configuration))
 4. `dotnet run` started without errors in `host/src`
 5. `npm start` started in `host/angular`
 
@@ -157,7 +157,7 @@ ss -tlnp | grep -E '8866|18888|4317'
 
 ### Database migration errors
 
-Migrations require the SQL Server account to have `CREATE TABLE` / `CREATE INDEX` privileges on the target database. For LocalDB the default user typically has full rights; for a shared SQL Server instance grant the application user `db_owner` on the Document AI database.
+Migrations require the SQL Server account to have `CREATE TABLE` / `CREATE INDEX` privileges on the target database. For LocalDB the default user typically has full rights; for a shared SQL Server instance grant the application user `db_owner` on the Dignite Extract database.
 
 ### PaddleOCR slow on first request
 

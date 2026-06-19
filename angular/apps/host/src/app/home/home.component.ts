@@ -8,7 +8,7 @@ import type { CurrentTenantDto, CurrentUserDto } from '@abp/ng.core';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { DOCUMENT_AI_PERMISSIONS } from '@dignite/document-ai';
+import { EXTRACT_PERMISSIONS } from '@dignite/extract';
 
 interface HomeEntryPoint {
   title: string;
@@ -38,7 +38,7 @@ export class HomeComponent {
       route: '/documents',
       iconClass: 'fas fa-file-lines',
       toneClass: 'text-bg-primary',
-      policies: [DOCUMENT_AI_PERMISSIONS.Documents.Default],
+      policies: [EXTRACT_PERMISSIONS.Documents.Default],
     },
     {
       title: 'Users',

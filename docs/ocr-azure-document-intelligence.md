@@ -1,6 +1,6 @@
 # Azure Document Intelligence — cloud
 
-> One of Document AI's OCR providers. Overview & comparison: [text-extraction.md](text-extraction.md).
+> One of Dignite Extract's OCR providers. Overview & comparison: [text-extraction.md](text-extraction.md).
 
 > 🧪 **Status: awaiting real-world validation.** The provider is implemented and unit-tested (at the mocked SDK boundary), but has not yet been run against a live Azure Document Intelligence resource. If you use Azure DI, testing and feedback are very welcome — see [#327](https://github.com/dignite-projects/document-ai/issues/327).
 
@@ -8,7 +8,7 @@ Recommended for production workloads where data is allowed to leave the network 
 
 1. Create an Azure AI Document Intelligence resource (F0 for trial, S0 for production).
 2. Copy the **Endpoint** and **API Key**.
-3. In `host/src/DocumentAIHostModule.cs`, swap `DocumentAIVisionLlmOcrModule` (the current default) for `DocumentAIAzureDocumentIntelligenceModule`, and re-enable the matching `ProjectReference` in `host/src/Dignite.DocumentAI.Host.csproj`. You can also drop the Vision-LLM vision `IChatClient` block in `ConfigureAI` — it fail-fasts on `DocumentAI:VisionOcrModelId`.
+3. In `host/src/ExtractHostModule.cs`, swap `ExtractVisionLlmOcrModule` (the current default) for `ExtractAzureDocumentIntelligenceModule`, and re-enable the matching `ProjectReference` in `host/src/Dignite.Extract.Host.csproj`. You can also drop the Vision-LLM vision `IChatClient` block in `ConfigureAI` — it fail-fasts on `Extract:VisionOcrModelId`.
 4. Add to `host/src/appsettings.Development.json` (or `appsettings.Production.json`):
 
 ```json
@@ -18,9 +18,9 @@ Recommended for production workloads where data is allowed to leave the network 
 }
 ```
 
-`DocumentAIAzureDocumentIntelligenceModule` binds this section automatically.
+`ExtractAzureDocumentIntelligenceModule` binds this section automatically.
 
-Document AI fixes the Azure model to `prebuilt-layout` and does not expose it as a config option — it emits the structured Markdown that Markdown-first requires. `prebuilt-read` (plain text only) and business prebuilts (invoice / contract) are intentionally not channel-layer OCR options.
+Dignite Extract fixes the Azure model to `prebuilt-layout` and does not expose it as a config option — it emits the structured Markdown that Markdown-first requires. `prebuilt-read` (plain text only) and business prebuilts (invoice / contract) are intentionally not channel-layer OCR options.
 
 > ⚠️ **F0 limitations** — each request only processes the **first 2 pages**, only one F0 resource per subscription per region, ~1–2 TPS throughput. Suitable only for demos and short documents (≤ 2 pages). Switch to S0 for sustained development or any larger document.
 

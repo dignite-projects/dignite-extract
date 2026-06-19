@@ -1,5 +1,5 @@
 <!--
-  Thanks for contributing to Dignite Document AI!
+  Thanks for contributing to Dignite Extract!
   Keep PRs scoped to one concern. See CONTRIBUTING.md and CLAUDE.md before opening.
 -->
 
@@ -19,7 +19,7 @@
 
 ## Checklist
 
-- [ ] Backend tests pass locally (`dotnet test Dignite.DocumentAI.slnx`)
+- [ ] Backend tests pass locally (`dotnet test Dignite.Extract.slnx`)
 - [ ] Frontend checks pass if the Angular workspace was touched (`cd angular && npm test && npm run lint`)
 - [ ] Follows the conventions in `.claude/rules/` and CLAUDE.md (dependency direction, ABP patterns, Markdown-first, LLM-call security covenant)
 - [ ] Documentation updated if behavior, configuration, or exit contracts changed

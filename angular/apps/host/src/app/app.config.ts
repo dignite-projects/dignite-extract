@@ -12,7 +12,7 @@ import { provideLogo, withEnvironmentOptions } from "@abp/ng.theme.shared";
 import { ApplicationConfig } from '@angular/core';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
-import { provideDocuments } from '@dignite/document-ai/config';
+import { provideExtract } from '@dignite/extract/config';
 import { environment } from '../environments/environment';
 import { APP_ROUTES } from './app.routes';
 import { HOME_MENU_PROVIDER } from './home/home.menu.provider';
@@ -39,6 +39,6 @@ export const appConfig: ApplicationConfig = {
     provideThemeLeptonX(),
     provideSideMenuLayout(),
     provideLogo(withEnvironmentOptions(environment)),
-    provideDocuments(),
+    provideExtract(),
   ]
 };

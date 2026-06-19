@@ -1,21 +1,21 @@
 {
   "production": true,
   "application": {
-    "baseUrl":"https://document-ai-web",
+    "baseUrl":"https://extract-web",
     "name": "Document AI",
     "logoUrl": ""
   },
   "oAuthConfig": {
-    "issuer": "https://document-ai-api/",
-    "redirectUri": "https://document-ai-web",
-    "clientId": "DocumentAI_App",
+    "issuer": "https://extract-api/",
+    "redirectUri": "https://extract-web",
+    "clientId": "Extract_App",
     "responseType": "code",
-    "scope": "offline_access openid profile email phone DocumentAI"
+    "scope": "offline_access openid profile email phone Extract"
   },
   "apis": {
     "default": {
-      "url": "https://document-ai-api",
-      "rootNamespace": "Dignite.DocumentAI"
+      "url": "https://extract-api",
+      "rootNamespace": "Dignite.Extract"
     }
   }
 }

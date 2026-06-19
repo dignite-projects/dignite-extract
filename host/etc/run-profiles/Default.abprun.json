@@ -1,6 +1,6 @@
-﻿{
+﻿﻿{
   "applications": {
-    "Dignite.DocumentAI.Host.Angular": {
+    "Dignite.Extract.Host.Angular": {
       "type": "cli",
       "workingDirectory": "../../../angular/apps/host",
       "startCommand": "./start.ps1",
@@ -9,12 +9,12 @@
         "order": 0
       }
     },
-    "Dignite.DocumentAI.Host": {
+    "Dignite.Extract.Host": {
       "type": "dotnet-project",
       "launchUrl": "https://localhost:44348",
       "healthCheckEndpoint": "/health-status",
       "healthUiEndpoint": "/health-ui",
-      "path": "../../src/Dignite.DocumentAI.Host.csproj",
+      "path": "../../src/Dignite.Extract.Host.csproj",
       "execution": {
         "order": 1
       }

@@ -10,7 +10,7 @@ using Volo.Abp.OpenIddict.Applications;
 using Volo.Abp.OpenIddict.Scopes;
 using Volo.Abp.Uow;
 
-namespace Dignite.DocumentAI.Host.Data;
+namespace Dignite.Extract.Host.Data;
 
 /* Creates initial data that is needed to property run the application
  * and make client-to-server communication possible.
@@ -36,17 +36,17 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
 
     private async Task CreateScopesAsync()
     {
-        // The DocumentAI API is a SINGLE OpenIddict resource named "DocumentAI" — this is the token
+        // The Extract API is a SINGLE OpenIddict resource named "Extract" — this is the token
         // audience for every client (Angular, Swagger, and MCP alike). MCP's RFC 8707 `resource`
         // parameter does NOT introduce a second audience: the resource gates are turned off in
-        // DocumentAIHostModule (the parameter is accepted-but-ignored), so an MCP-issued token's aud
-        // stays "DocumentAI", matching the validation layer's AddAudiences("DocumentAI").
+        // ExtractHostModule (the parameter is accepted-but-ignored), so an MCP-issued token's aud
+        // stays "Extract", matching the validation layer's AddAudiences("Extract").
         var scopeDescriptor = new OpenIddictScopeDescriptor
         {
-            Name = "DocumentAI",
-            DisplayName = "DocumentAI API"
+            Name = "Extract",
+            DisplayName = "Extract API"
         };
-        scopeDescriptor.Resources.Add("DocumentAI");
+        scopeDescriptor.Resources.Add("Extract");
 
         await CreateScopesAsync(scopeDescriptor);
     }
@@ -60,16 +60,16 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
             OpenIddictConstants.Permissions.Scopes.Phone,
             OpenIddictConstants.Permissions.Scopes.Profile,
             OpenIddictConstants.Permissions.Scopes.Roles,
-            "DocumentAI"
+            "Extract"
         };
 
         var configurationSection = Configuration.GetSection("OpenIddict:Applications");
 
         // Angular Client
-        var consoleAndAngularClientId = configurationSection["DocumentAI_App:ClientId"];
+        var consoleAndAngularClientId = configurationSection["Extract_App:ClientId"];
         if (!consoleAndAngularClientId.IsNullOrWhiteSpace())
         {
-            var webClientRootUrl = configurationSection["DocumentAI_App:RootUrl"]?.TrimEnd('/');
+            var webClientRootUrl = configurationSection["Extract_App:RootUrl"]?.TrimEnd('/');
             await CreateOrUpdateApplicationAsync(
                 applicationType: OpenIddictConstants.ApplicationTypes.Web,
                 name: consoleAndAngularClientId,
@@ -93,10 +93,10 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
         }
 
         // Swagger Client
-        var swaggerClientId = configurationSection["DocumentAI_Swagger:ClientId"];
+        var swaggerClientId = configurationSection["Extract_Swagger:ClientId"];
         if (!swaggerClientId.IsNullOrWhiteSpace())
         {
-            var swaggerRootUrl = configurationSection["DocumentAI_Swagger:RootUrl"]?.TrimEnd('/');
+            var swaggerRootUrl = configurationSection["Extract_Swagger:RootUrl"]?.TrimEnd('/');
 
             await CreateOrUpdateApplicationAsync(
                 applicationType: OpenIddictConstants.ApplicationTypes.Web,
@@ -119,7 +119,7 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
         // mcp-remote, Claude Desktop / claude.ai connectors — that connect to /mcp without a token. This
         // is the authorization-server half of the RFC 9728 discovery flow whose resource-server half was
         // wired in #278/#280. We deliberately do NOT implement Dynamic Client Registration (RFC 7591):
-        // DocumentAI is a self-hosted channel facing a knowable set of clients, so an open registration
+        // Extract is a self-hosted channel facing a knowable set of clients, so an open registration
         // endpoint is pure attack surface. Instead the client_id is documented (docs/mcp-server.md) and
         // operators paste it into each client's OAuth settings — every real target supports a manually
         // specified client_id.
@@ -129,14 +129,14 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
         // then matches any ephemeral port http://127.0.0.1:<port>/oauth/callback (scheme/host/path/query/
         // fragment must still be byte-equal; only the port is relaxed, and only for loopback hosts). Native
         // desktop clients bind a random loopback port, so this single preset client covers them all.
-        // Web/default-type clients (DocumentAI_App / DocumentAI_Swagger above) do NOT get this relaxation.
+        // Web/default-type clients (Extract_App / Extract_Swagger above) do NOT get this relaxation.
         //
         // ConsentType is Explicit: this is a PUBLIC client whose client_id is published and non-secret, so
         // any application can present it. We require an interactive consent screen rather than silently
         // issuing tokens (OAuth 2.1 BCP for public clients). Data access stays gated fail-closed by the
-        // logged-in user's DocumentAI.Documents permission — the auth-code flow logs in a user, and the
+        // logged-in user's Extract.Documents permission — the auth-code flow logs in a user, and the
         // client itself holds no data permission.
-        var mcpClientId = configurationSection["DocumentAI_Mcp:ClientId"];
+        var mcpClientId = configurationSection["Extract_Mcp:ClientId"];
         if (!mcpClientId.IsNullOrWhiteSpace())
         {
             // REDIRECT URIS are split by environment to keep the production surface minimal:
@@ -144,7 +144,7 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
             //     the one redirect_uri a deployed host actually serves.
             //   • Dev-only loopback callbacks are NOT seeded (dead attack surface on a production client).
             //     Each developer lists them in appsettings.Development.json (gitignored) under
-            //     OpenIddict:Applications:DocumentAI_Mcp:RedirectUris.
+            //     OpenIddict:Applications:Extract_Mcp:RedirectUris.
             // That override REPLACES the default, and ASP.NET Core merges config arrays by index (not as a
             // union), so the dev list must be COMPLETE — every loopback below PLUS the claude.ai entry.
             // Researched dev set (verified against each client's source, #281; loopback ports are relaxed
@@ -156,7 +156,7 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
             //   https://claude.ai/api/mcp/auth_callback → Claude.ai / Claude Desktop / mobile (fixed hosted callback)
             // Cursor (custom cursor:// scheme) still needs adding if used. See docs/mcp-server.md.
             var mcpRedirectUris = configurationSection
-                .GetSection("DocumentAI_Mcp:RedirectUris")
+                .GetSection("Extract_Mcp:RedirectUris")
                 .Get<List<string>>();
 
             if (mcpRedirectUris == null || mcpRedirectUris.Count == 0)
@@ -172,14 +172,14 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
                 name: mcpClientId,
                 type: OpenIddictConstants.ClientTypes.Public,
                 consentType: OpenIddictConstants.ConsentTypes.Explicit,
-                displayName: "DocumentAI MCP (native clients)",
+                displayName: "Extract MCP (native clients)",
                 secret: null,
                 grantTypes: new List<string>
                 {
                     OpenIddictConstants.GrantTypes.AuthorizationCode,
                     OpenIddictConstants.GrantTypes.RefreshToken
                 },
-                // Mirror the advertised resource metadata (scopes_supported: ["DocumentAI"]) plus minimal
+                // Mirror the advertised resource metadata (scopes_supported: ["Extract"]) plus minimal
                 // OIDC identity scopes for the interactive login. Address/Phone/Roles are intentionally
                 // omitted (least privilege + a clean Explicit-consent screen). openid is implicit in
                 // OpenIddict and needs no scope permission; offline_access is gated by the RefreshToken
@@ -188,7 +188,7 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
                 {
                     OpenIddictConstants.Permissions.Scopes.Profile,
                     OpenIddictConstants.Permissions.Scopes.Email,
-                    "DocumentAI"
+                    "Extract"
                 },
                 redirectUris: mcpRedirectUris
             );

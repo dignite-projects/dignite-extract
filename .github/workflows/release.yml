@@ -54,36 +54,36 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore
-        run: dotnet restore Dignite.DocumentAI.slnx
+        run: dotnet restore Dignite.Extract.slnx
 
       - name: Build
-        run: dotnet build Dignite.DocumentAI.slnx --no-restore --configuration Release
+        run: dotnet build Dignite.Extract.slnx --no-restore --configuration Release
 
       # Same backend test set as ci.yml; all are dependency-light
       # (SQLite in-memory / mocks / minimal TestServer).
       - name: Run domain tests
-        run: dotnet test core/test/Dignite.DocumentAI.Domain.Tests/Dignite.DocumentAI.Domain.Tests.csproj --no-build --configuration Release --verbosity normal
+        run: dotnet test core/test/Dignite.Extract.Domain.Tests/Dignite.Extract.Domain.Tests.csproj --no-build --configuration Release --verbosity normal
 
       - name: Run application tests
-        run: dotnet test core/test/Dignite.DocumentAI.Application.Tests/Dignite.DocumentAI.Application.Tests.csproj --no-build --configuration Release --verbosity normal
+        run: dotnet test core/test/Dignite.Extract.Application.Tests/Dignite.Extract.Application.Tests.csproj --no-build --configuration Release --verbosity normal
 
       - name: Run EF Core tests
-        run: dotnet test core/test/Dignite.DocumentAI.EntityFrameworkCore.Tests/Dignite.DocumentAI.EntityFrameworkCore.Tests.csproj --no-build --configuration Release --verbosity normal
+        run: dotnet test core/test/Dignite.Extract.EntityFrameworkCore.Tests/Dignite.Extract.EntityFrameworkCore.Tests.csproj --no-build --configuration Release --verbosity normal
 
       - name: Run MCP tests
-        run: dotnet test core/test/Dignite.DocumentAI.Mcp.Tests/Dignite.DocumentAI.Mcp.Tests.csproj --no-build --configuration Release --verbosity normal
+        run: dotnet test core/test/Dignite.Extract.Mcp.Tests/Dignite.Extract.Mcp.Tests.csproj --no-build --configuration Release --verbosity normal
 
       - name: Run OCR VisionLlm tests
-        run: dotnet test core/test/Dignite.DocumentAI.Ocr.VisionLlm.Tests/Dignite.DocumentAI.Ocr.VisionLlm.Tests.csproj --no-build --configuration Release --verbosity normal
+        run: dotnet test core/test/Dignite.Extract.Ocr.VisionLlm.Tests/Dignite.Extract.Ocr.VisionLlm.Tests.csproj --no-build --configuration Release --verbosity normal
 
       - name: Run host tests
-        run: dotnet test host/test/Dignite.DocumentAI.Host.Tests/Dignite.DocumentAI.Host.Tests.csproj --no-build --configuration Release --verbosity normal
+        run: dotnet test host/test/Dignite.Extract.Host.Tests/Dignite.Extract.Host.Tests.csproj --no-build --configuration Release --verbosity normal
 
       # Projects with IsPackable=false (host / test projects; test projects are implicitly false
       # via Microsoft.NET.Test.Sdk) are skipped automatically. Only NuGet packages under core/src
       # are produced.
       - name: Pack
-        run: dotnet pack Dignite.DocumentAI.slnx --no-build --configuration Release -o ./artifacts
+        run: dotnet pack Dignite.Extract.slnx --no-build --configuration Release -o ./artifacts
 
       - name: Upload NuGet packages
         uses: actions/upload-artifact@v4

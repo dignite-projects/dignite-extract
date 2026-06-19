@@ -1,20 +1,20 @@
 # Observability
 
-Document AI emits OpenTelemetry traces and metrics from the MAF + `Microsoft.Extensions.AI` stack it consumes, and ships them through a single host-configured export pipeline. This page covers what's emitted, how to wire it up locally, and how to point it at a production backend.
+Dignite Extract emits OpenTelemetry traces and metrics from the MAF + `Microsoft.Extensions.AI` stack it consumes, and ships them through a single host-configured export pipeline. This page covers what's emitted, how to wire it up locally, and how to point it at a production backend.
 
 ## What's emitted
 
 | Source | Type | Highlights |
 |---|---|---|
-| **`Microsoft.Agents.AI`** | Traces, Metrics | MAF agent-invocation spans + token-usage / tool-call metrics for the `ChatClientAgent` runs (today: document classification via `RunAsync<T>`). MAF also defines `CompactionTelemetry` (`compaction.*` spans) but those only fire when chat-history compaction is configured — Document AI's agent runs are single-shot and tool-free, so no `compaction.*` spans are emitted. |
-| **`Microsoft.Extensions.AI`** | Traces, Metrics | `chat-client.GetResponseAsync` spans with GenAI semantic-convention tags (model id, prompt / completion tokens, finish reason). Emitted automatically by the `.UseOpenTelemetry()` decorators wired on every chat client in `DocumentAIHostModule.ConfigureAI`. |
-| **`Dignite.DocumentAI.*`** | Traces, Metrics (reserved) | Wildcard reservation only — **nothing emits under it today**. Document AI Core registers no custom `ActivitySource` / `Meter` (every LLM stage — classification / field extraction / title generation / slug suggestion — is observable through the `Microsoft.Extensions.AI` + `Microsoft.Agents.AI` instrumentation above). The wildcard is a forward hook for **Document AI Core's own future pipeline metrics** (e.g. classification-confidence histograms, OCR-duration counters) to land in the pipeline without host-side changes. It is **not** an integration point for downstream business modules — those are out of scope and run in their own host with their own OTel pipeline. |
+| **`Microsoft.Agents.AI`** | Traces, Metrics | MAF agent-invocation spans + token-usage / tool-call metrics for the `ChatClientAgent` runs (today: document classification via `RunAsync<T>`). MAF also defines `CompactionTelemetry` (`compaction.*` spans) but those only fire when chat-history compaction is configured — Dignite Extract's agent runs are single-shot and tool-free, so no `compaction.*` spans are emitted. |
+| **`Microsoft.Extensions.AI`** | Traces, Metrics | `chat-client.GetResponseAsync` spans with GenAI semantic-convention tags (model id, prompt / completion tokens, finish reason). Emitted automatically by the `.UseOpenTelemetry()` decorators wired on every chat client in `ExtractHostModule.ConfigureAI`. |
+| **`Dignite.Extract.*`** | Traces, Metrics (reserved) | Wildcard reservation only — **nothing emits under it today**. Dignite Extract Core registers no custom `ActivitySource` / `Meter` (every LLM stage — classification / field extraction / title generation / slug suggestion — is observable through the `Microsoft.Extensions.AI` + `Microsoft.Agents.AI` instrumentation above). The wildcard is a forward hook for **Dignite Extract Core's own future pipeline metrics** (e.g. classification-confidence histograms, OCR-duration counters) to land in the pipeline without host-side changes. It is **not** an integration point for downstream business modules — those are out of scope and run in their own host with their own OTel pipeline. |
 
-If Document AI Core later adds a Meter or ActivitySource named `Dignite.DocumentAI.<name>`, it lands in the pipeline automatically — the host registers wildcard `AddSource("Dignite.DocumentAI.*")` / `AddMeter("Dignite.DocumentAI.*")`.
+If Dignite Extract Core later adds a Meter or ActivitySource named `Dignite.Extract.<name>`, it lands in the pipeline automatically — the host registers wildcard `AddSource("Dignite.Extract.*")` / `AddMeter("Dignite.Extract.*")`.
 
 ## Host pipeline configuration
 
-The pipeline is set up in `host/src/DocumentAIHostModule.cs → ConfigureOpenTelemetry`. It's **opt-in** so an unconfigured host doesn't spawn a background exporter or hit a non-existent OTLP endpoint.
+The pipeline is set up in `host/src/ExtractHostModule.cs → ConfigureOpenTelemetry`. It's **opt-in** so an unconfigured host doesn't spawn a background exporter or hit a non-existent OTLP endpoint.
 
 Default in `host/src/appsettings.json`:
 
@@ -64,7 +64,7 @@ Pick one of three places to set `OpenTelemetry:Enabled = true`:
 
 | Where | Scope | Notes |
 |---|---|---|
-| `host/src/Properties/launchSettings.json` → `environmentVariables` | Per-launch-profile, **persisted in git** | Recommended for the project default. Already populated for both `IIS Express` and `Dignite.DocumentAI.Host` profiles. |
+| `host/src/Properties/launchSettings.json` → `environmentVariables` | Per-launch-profile, **persisted in git** | Recommended for the project default. Already populated for both `IIS Express` and `Dignite.Extract.Host` profiles. |
 | `host/src/appsettings.Development.json` → `OpenTelemetry.Enabled = true` | Development environment, **persisted in git** | Equivalent effect to launchSettings; choose one or the other (both is harmless but redundant). |
 | Shell env vars (`$env:OpenTelemetry__Enabled = "true"` in PowerShell) | Current shell session only | For ad-hoc inspection without changing any tracked file. |
 
@@ -74,7 +74,7 @@ The repo defaults to **launchSettings.json**: contributors who clone, `docker co
 
 ```powershell
 # Start the host
-dotnet run --project host/src/Dignite.DocumentAI.Host.csproj
+dotnet run --project host/src/Dignite.Extract.Host.csproj
 
 # Upload a document via the API or operator UI, then open the dashboard
 start http://localhost:18888
@@ -92,7 +92,7 @@ aspire-dashboard takes 30–60 seconds to become reachable after `Up` status. If
 
 ### Note: `gen_ai.usage.*` token counts are trustworthy here (no streaming)
 
-All Document AI LLM calls (classification / field extraction / title generation / slug suggestion) are **non-streaming**. The `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` values reflect the provider-reported totals for the turn and are safe to use for cost tracking.
+All Dignite Extract LLM calls (classification / field extraction / title generation / slug suggestion) are **non-streaming**. The `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` values reflect the provider-reported totals for the turn and are safe to use for cost tracking.
 
 This only becomes a caveat if a future code path introduces *streaming* (`GetStreamingResponseAsync`): `Microsoft.Extensions.AI`'s `OpenTelemetryChatClient` accumulates usage per streamed chunk, and some OpenAI-compatible gateways report **cumulative-so-far** usage on each chunk rather than per-chunk deltas — the SDK then sums them, inflating the total by the chunk count (observed ~40–70× on SiliconFlow + DeepSeek-V3). If streaming is ever added, verify token numbers against the provider's billing dashboard before trusting OTel for absolute cost.
 
@@ -105,7 +105,7 @@ MAF and `Microsoft.Extensions.AI` currently publish their ActivitySources and Me
 | `Microsoft.Agents.AI` | `Experimental.Microsoft.Agents.AI` | Follows the OpenTelemetry GenAI semantic-convention draft (https://opentelemetry.io/docs/specs/semconv/gen-ai/) — the spec is still pre-stable so Microsoft scopes the telemetry under "Experimental" until conventions freeze. |
 | `Microsoft.Extensions.AI` | `Experimental.Microsoft.Extensions.AI` | Same reason. |
 
-The prefix will be dropped once the spec stabilizes. `DocumentAIHostModule.ConfigureOpenTelemetry` registers both the prefixed and unprefixed names so the pipeline keeps working through that rename.
+The prefix will be dropped once the spec stabilizes. `ExtractHostModule.ConfigureOpenTelemetry` registers both the prefixed and unprefixed names so the pipeline keeps working through that rename.
 
 **Symptom of forgetting the prefix**: Aspire Dashboard shows the bare `HTTP POST api.siliconflow.cn:443` (or other provider) spans from `System.Net.Http` instrumentation, but no wrapping `chat-client.GetResponseAsync` parent and no `execute_tool {tool_name}` children. The OpenTelemetry SDK silently drops spans from unregistered sources — no exception, no warning. If you see only HTTP leaf spans for an LLM call, this is the first thing to check.
 
@@ -124,20 +124,20 @@ OpenTelemetry__Otlp__Endpoint=http://tempo:4317
 OpenTelemetry__Otlp__Endpoint=http://otel-collector:4317
 
 # Azure Monitor: use OpenTelemetry.Exporter.AzureMonitor instead of OTLP
-# (requires a code change in DocumentAIHostModule.ConfigureOpenTelemetry)
+# (requires a code change in ExtractHostModule.ConfigureOpenTelemetry)
 ```
 
 Production deployments should set the endpoint via env var or Kubernetes ConfigMap — never commit a production OTLP URL to `appsettings.json`.
 
 ## Tagging policy and cardinality
 
-Any Document AI Core Meter introduced under `Dignite.DocumentAI.*` should follow the same rule: **tags are low-cardinality enums or bounded sets**.
+Any Dignite Extract Core Meter introduced under `Dignite.Extract.*` should follow the same rule: **tags are low-cardinality enums or bounded sets**.
 
 | Allowed as tag | Not allowed as tag |
 |---|---|
 | `document_type_code` (bounded by tenant-scoped `DocumentType` rows) | `tenant_id` (multi-tenant cardinality blowup) |
 | `success` (`true` / `false`) | `user_id` |
-| `pipeline_code` (one of the static `DocumentAIPipelines.*`) | `document_id` |
+| `pipeline_code` (one of the static `ExtractPipelines.*`) | `document_id` |
 | `stage` (one of the static pipeline stage names) | Free-text from the model or user |
 
 Per-tenant / per-user drill-down belongs in traces and structured logs — those are sampled, while metrics are aggregated by tag and would explode storage and dashboard latency.
@@ -146,22 +146,22 @@ When adding a new tag to an existing metric, audit the cardinality first. A tag 
 
 ## Tests
 
-A test must not register the production OTel pipeline. The `DocumentAIHostModule.ConfigureOpenTelemetry` short-circuits when `Enabled = false` (the default), so test hosts that don't set `OpenTelemetry:Enabled = true` skip the export entirely. Tests that need to *capture* metric emissions instead use `System.Diagnostics.Metrics.MeterListener` directly — subscribe to the specific Meter name in test setup, drain measurements in assertions.
+A test must not register the production OTel pipeline. The `ExtractHostModule.ConfigureOpenTelemetry` short-circuits when `Enabled = false` (the default), so test hosts that don't set `OpenTelemetry:Enabled = true` skip the export entirely. Tests that need to *capture* metric emissions instead use `System.Diagnostics.Metrics.MeterListener` directly — subscribe to the specific Meter name in test setup, drain measurements in assertions.
 
-## Adding a Meter in Document AI Core
+## Adding a Meter in Dignite Extract Core
 
-The `Dignite.DocumentAI.*` wildcard exists so Document AI Core can add its own pipeline metrics later (e.g. classification-confidence histogram, OCR-duration counter) without touching the host. Pattern:
+The `Dignite.Extract.*` wildcard exists so Dignite Extract Core can add its own pipeline metrics later (e.g. classification-confidence histogram, OCR-duration counter) without touching the host. Pattern:
 
 ```csharp
-// In Document AI Core (Domain or Application layer)
+// In Dignite Extract Core (Domain or Application layer)
 public class PipelineTelemetryRecorder : ISingletonDependency
 {
-    public const string MeterName = "Dignite.DocumentAI.Pipeline";
+    public const string MeterName = "Dignite.Extract.Pipeline";
 
     private static readonly Meter Meter = new(MeterName);
 
     private static readonly Counter<long> SomeCounter = Meter.CreateCounter<long>(
-        "documentai.pipeline.something.total",
+        "extract.pipeline.something.total",
         description: "...");
 
     public virtual void RecordSomething(string tagValue)
@@ -171,6 +171,6 @@ public class PipelineTelemetryRecorder : ISingletonDependency
 }
 ```
 
-No host-side change required: the `AddMeter("Dignite.DocumentAI.*")` / `AddSource("Dignite.DocumentAI.*")` wildcards in `ConfigureOpenTelemetry` pick up any Core-defined Meter or ActivitySource under that prefix on the next host rebuild.
+No host-side change required: the `AddMeter("Dignite.Extract.*")` / `AddSource("Dignite.Extract.*")` wildcards in `ConfigureOpenTelemetry` pick up any Core-defined Meter or ActivitySource under that prefix on the next host rebuild.
 
 Downstream business modules are out of scope (they run in their own host with their own OTel pipeline), so this wildcard is **not** an integration seam for them.

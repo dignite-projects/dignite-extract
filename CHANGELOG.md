@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-06-13
 
-First public release of Dignite Document AI — a **channel layer** that turns physical paper / scans / photos / PDF images / Office files into trustworthy digitized data (Markdown + structured metadata) for downstream RAG platforms, business systems, and AI clients. See [CLAUDE.md](./CLAUDE.md) for the full positioning and architecture contract.
+First public release of Dignite Extract — a **channel layer** that turns physical paper / scans / photos / PDF images / Office files into trustworthy digitized data (Markdown + structured metadata) for downstream RAG platforms, business systems, and AI clients. See [CLAUDE.md](./CLAUDE.md) for the full positioning and architecture contract.
 
 ### Added
 
@@ -38,7 +38,7 @@ First public release of Dignite Document AI — a **channel layer** that turns p
 
 ### Known limitations
 
-- **Test coverage gaps** — there are no test projects yet for the TextExtraction orchestrator, `Ocr.PaddleOcr`, `Ocr.AzureDocumentIntelligence`, or `HttpApi`.
+- **Test coverage gaps** — there are no test projects yet for the Parse orchestrator, `Ocr.PaddleOcr`, `Ocr.AzureDocumentIntelligence`, or `HttpApi`.
 - **Webhook exit is not yet implemented** — the exit contract names four exits (REST / MCP server / EventBus / Webhook); this release ships the first three.
 - **MCP server is pull-only** — no resource subscriptions or lifecycle notifications yet (follow-up increment, #197).
 

@@ -1,10 +1,10 @@
 using System;
-using Dignite.DocumentAI.Host.Data;
+using Dignite.Extract.Host.Data;
 using Serilog;
 using Serilog.Events;
 using Volo.Abp.Data;
 
-namespace Dignite.DocumentAI.Host;
+namespace Dignite.Extract.Host;
 
 public class Program
 {
@@ -41,13 +41,13 @@ public class Program
             {
                 builder.Services.AddDataMigrationEnvironment();
             }
-            await builder.AddApplicationAsync<DocumentAIHostModule>();
+            await builder.AddApplicationAsync<ExtractHostModule>();
             var app = builder.Build();
             await app.InitializeApplicationAsync();
 
             if (IsMigrateDatabase(args))
             {
-                await app.Services.GetRequiredService<DocumentAIHostDbMigrationService>().MigrateAsync();
+                await app.Services.GetRequiredService<ExtractHostDbMigrationService>().MigrateAsync();
                 var previous = Console.ForegroundColor;
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("Migration completed.");
@@ -55,7 +55,7 @@ public class Program
                 return 0;
             }
 
-            Log.Information("Starting Dignite.DocumentAI.Host.");
+            Log.Information("Starting Dignite.Extract.Host.");
             await app.RunAsync();
             return 0;
         }
@@ -66,7 +66,7 @@ public class Program
                 throw;
             }
 
-            Log.Fatal(ex, "Dignite.DocumentAI.Host terminated unexpectedly!");
+            Log.Fatal(ex, "Dignite.Extract.Host terminated unexpectedly!");
             return 1;
         }
         finally

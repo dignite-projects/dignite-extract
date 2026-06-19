@@ -1,15 +1,15 @@
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
-namespace Dignite.DocumentAI.Host.HealthChecks;
+namespace Dignite.Extract.Host.HealthChecks;
 
 public static class HealthChecksBuilderExtensions
 {
-    public static void AddDocumentAIHealthChecks(this IServiceCollection services)
+    public static void AddExtractHealthChecks(this IServiceCollection services)
     {
         // Add your health checks here
         var healthChecksBuilder = services.AddHealthChecks();
-        healthChecksBuilder.AddCheck<DocumentAIHostDatabaseCheck>("DocumentAI DbContext Check", tags: new string[] { "database" });
+        healthChecksBuilder.AddCheck<ExtractHostDatabaseCheck>("Extract DbContext Check", tags: new string[] { "database" });
 
         var configuration = services.GetConfiguration();
         var healthCheckUrl = configuration["App:HealthCheckUrl"];
@@ -23,7 +23,7 @@ public static class HealthChecksBuilderExtensions
 
         var healthChecksUiBuilder = services.AddHealthChecksUI(settings =>
         {
-            settings.AddHealthCheckEndpoint("DocumentAI Health Status", healthCheckUrl);
+            settings.AddHealthCheckEndpoint("Extract Health Status", healthCheckUrl);
         });
 
         // Set your HealthCheck UI Storage here

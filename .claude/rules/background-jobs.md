@@ -34,7 +34,7 @@ This avoids holding database connections, locks, or transactions while external 
 
 ### DocumentPipelineRun Exception (#216)
 
-`DocumentPipelineRun` is itself an `AggregateRoot<Guid>`, so it is handled directly through `IDocumentPipelineRunRepository` and **no longer through the `Document` aggregate root**. The BeginRun / CompleteRun / FailRun phases in the three-phase UoW pattern used by background jobs (`DocumentTextExtractionBackgroundJob` / `DocumentClassificationBackgroundJob`) all follow this model:
+`DocumentPipelineRun` is itself an `AggregateRoot<Guid>`, so it is handled directly through `IDocumentPipelineRunRepository` and **no longer through the `Document` aggregate root**. The BeginRun / CompleteRun / FailRun phases in the three-phase UoW pattern used by background jobs (`DocumentParseBackgroundJob` / `DocumentClassificationBackgroundJob`) all follow this model:
 
 - Load the Document with `DocumentRepository.GetAsync(id, includeDetails: false)` (**not** `GetWithPipelineRunsAsync`).
 - Load the specific run with `RunRepository.FindAsync(runId)` (**not** `document.GetRun(runId)`).

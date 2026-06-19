@@ -16,9 +16,9 @@
     "useDefineForClassFields": false,
     "strict": true,
     "paths": {
-      "@dignite/document-ai": ["packages/document-ai/src/public-api.ts"],
-      "@dignite/document-ai/documents": ["packages/document-ai/documents/src/public-api.ts"],
-      "@dignite/document-ai/config": ["packages/document-ai/config/src/public-api.ts"]
+      "@dignite/extract": ["packages/extract/src/public-api.ts"],
+      "@dignite/extract/documents": ["packages/extract/documents/src/public-api.ts"],
+      "@dignite/extract/config": ["packages/extract/config/src/public-api.ts"]
     }
   },
   "angularCompilerOptions": {

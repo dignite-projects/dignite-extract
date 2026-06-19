@@ -8,14 +8,14 @@
   "oAuthConfig": {
     "issuer": "https://localhost:44348/",
     "redirectUri": "http://localhost:4200",
-    "clientId": "DocumentAI_App",
+    "clientId": "Extract_App",
     "responseType": "code",
-    "scope": "offline_access openid profile email phone DocumentAI"
+    "scope": "offline_access openid profile email phone Extract"
   },
   "apis": {
     "default": {
       "url": "https://localhost:44348",
-      "rootNamespace": "Dignite.DocumentAI"
+      "rootNamespace": "Dignite.Extract"
     }
   }
 }

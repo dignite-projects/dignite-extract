@@ -1,5 +1,5 @@
 ---
-description: "Document AI internal LLM call-site anti-patterns: fail-closed security gate / PromptBoundary / compile-time-constant descriptions / MCP schema collection-parameter pitfall"
+description: "Dignite Extract internal LLM call-site anti-patterns: fail-closed security gate / PromptBoundary / compile-time-constant descriptions / MCP schema collection-parameter pitfall"
 paths:
   - "**/*Workflow*.cs"
   - "**/Pipelines/**/*.cs"
@@ -13,9 +13,9 @@ paths:
 
 # LLM call anti-patterns
 
-This file is referenced by the `maf-workflow-reviewer` agent during PR review to quickly locate typical mistakes at Document AI's internal **LLM call sites** (anti-patterns A / B are security issues, anti-pattern C is an MCP schema correctness issue). The rules apply to all LLM entry points:
+This file is referenced by the `maf-workflow-reviewer` agent during PR review to quickly locate typical mistakes at Dignite Extract's internal **LLM call sites** (anti-patterns A / B are security issues, anti-pattern C is an MCP schema correctness issue). The rules apply to all LLM entry points:
 
-- Currently landed: `DocumentClassificationWorkflow` / `FieldExtractionWorkflow` + `FieldExtractionEventHandler` (field architecture v2 unifying Host + tenant (mechanism B)) / `DocumentTextExtractionBackgroundJob.TryGenerateTitleAsync`
+- Currently landed: `DocumentClassificationWorkflow` / `FieldExtractionWorkflow` + `FieldExtractionEventHandler` (field architecture v2 unifying Host + tenant (mechanism B)) / `DocumentParseBackgroundJob.TryGenerateTitleAsync`
 - Future extensions: MCP server tools ([#170](https://github.com/dignite-projects/document-ai/issues/170)), Webhook-triggered LLM paths, any query path where LLM output influences the parameters
 
 All examples are **pseudocode**, not compilable, illustrating intent only.
@@ -46,8 +46,8 @@ var run = await agent.RunAsync<HostFieldExtractionResult>(markdown);
 
 **Harm**:
 
-- RAG retrieval injects chunks from other, unrelated documents into the prompt, causing structured fields like "contract amount" and "party A name" to be extracted **from the wrong document** and written into a downstream business aggregate root / the Document AI type-bound field table
-- Document AI is a **channel layer**; the input to field extraction should be **only the current document's Markdown** — attaching `AIContextProviders` corrupts the channel philosophy into RAG, violating CLAUDE.md's "OUT of scope"
+- RAG retrieval injects chunks from other, unrelated documents into the prompt, causing structured fields like "contract amount" and "party A name" to be extracted **from the wrong document** and written into a downstream business aggregate root / the Dignite Extract type-bound field table
+- Dignite Extract is a **channel layer**; the input to field extraction should be **only the current document's Markdown** — attaching `AIContextProviders` corrupts the channel philosophy into RAG, violating CLAUDE.md's "OUT of scope"
 
 ### ✅ Correct
 
@@ -74,8 +74,8 @@ var response = await _chatClient.GetResponseAsync(messages, options, cancellatio
 ```
 
 **Reference implementations**:
-- `core/src/Dignite.DocumentAI.Application/Documents/Pipelines/Classification/DocumentClassificationWorkflow.cs`
-- `core/src/Dignite.DocumentAI.Application/Documents/Pipelines/FieldExtraction/FieldExtractionWorkflow.cs`
+- `core/src/Dignite.Extract.Application/Documents/Pipelines/Classification/DocumentClassificationWorkflow.cs`
+- `core/src/Dignite.Extract.Application/Documents/Pipelines/FieldExtraction/FieldExtractionWorkflow.cs`
 
 ---
 
@@ -83,7 +83,7 @@ var response = await _chatClient.GetResponseAsync(messages, options, cancellatio
 
 **Rule source**: `maf-workflow-reviewer.md § 2.9`
 
-**Background**: Document AI Core's current LLM paths are all **plain text input → structured output** (classification, field extraction, title generation), with no DB query parameterized by LLM output. But the upcoming #170 MCP server will let an LLM trigger document retrieval / metadata queries via a tool interface. **Any query path triggered by an LLM, or whose parameters are influenced by LLM output**, must have a fail-closed security gate — the `[Authorize]` at the HTTP boundary does not cover this reflection / tool-dispatch path; the security assertion inside the script / tool method body is the only line of defense.
+**Background**: Dignite Extract Core's current LLM paths are all **plain text input → structured output** (classification, field extraction, title generation), with no DB query parameterized by LLM output. But the upcoming #170 MCP server will let an LLM trigger document retrieval / metadata queries via a tool interface. **Any query path triggered by an LLM, or whose parameters are influenced by LLM output**, must have a fail-closed security gate — the `[Authorize]` at the HTTP boundary does not cover this reflection / tool-dispatch path; the security assertion inside the script / tool method body is the only line of defense.
 
 **Scope**:
 
@@ -169,7 +169,7 @@ Each LLM-triggered query point (whether an MCP tool, a Webhook handler, or any s
 
 ```csharp
 [McpTool("search-documents")]
-[Description("Search Document AI documents by structured criteria.")]   // ← compile-time constant
+[Description("Search Dignite Extract documents by structured criteria.")]   // ← compile-time constant
 private static async Task<string> SearchAsync(
     string? keyword,
     [Description("ISO 4217 currency code (optional).")] string? currency,
@@ -178,7 +178,7 @@ private static async Task<string> SearchAsync(
 {
     // 1. Explicit permission assertion — fail closed
     var authSvc = serviceProvider.GetRequiredService<IAuthorizationService>();
-    await authSvc.CheckAsync(DocumentAIPermissions.Documents.Default);
+    await authSvc.CheckAsync(ExtractPermissions.Documents.Default);
 
     // 2. Tenant isolation — left to ABP's IMultiTenant global filter; do not hand-write a TenantId predicate,
     //    and never Disable<IMultiTenant>() / IgnoreQueryFilters() here

@@ -29,7 +29,7 @@ services:
       - AuthServer__Authority=http://document-ai-api:8080
       - AuthServer__RequireHttpsMetadata=false
       - AuthServer__SetSelfAsIssuer=true
-      - ConnectionStrings__Default=Data Source=sql-server;Initial Catalog=DocumentAI;User Id=sa;Password=myPassw0rd;MultipleActiveResultSets=true;TrustServerCertificate=True;
+      - ConnectionStrings__Default=Data Source=sql-server;Initial Catalog=Extract;User Id=sa;Password=myPassw0rd;MultipleActiveResultSets=true;TrustServerCertificate=True;
     ports:
       - "44348:8081"
     depends_on:
@@ -48,7 +48,7 @@ services:
       context: ../../
       dockerfile: src/Dockerfile.local
     environment:
-      - ConnectionStrings__Default=Data Source=sql-server;Initial Catalog=DocumentAI;User Id=sa;Password=myPassw0rd;MultipleActiveResultSets=true;TrustServerCertificate=True;
+      - ConnectionStrings__Default=Data Source=sql-server;Initial Catalog=Extract;User Id=sa;Password=myPassw0rd;MultipleActiveResultSets=true;TrustServerCertificate=True;
     command:
       - --migrate-database
     depends_on:

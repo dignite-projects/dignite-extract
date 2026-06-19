@@ -19,7 +19,7 @@ services:
       - hf_cache:/root/.cache/huggingface
     restart: unless-stopped
 
-  # Local observability backend for the OTel pipeline wired in DocumentAIHostModule
+  # Local observability backend for the OTel pipeline wired in ExtractHostModule
   # (Issue #142). Receives traces / metrics / logs over OTLP and renders them at
   # http://localhost:18888. Profile-gated so it doesn't start on plain
   # `docker compose up` — bring it up only when you want to look at signals:

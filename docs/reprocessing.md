@@ -4,7 +4,7 @@ When you change a **classification prompt** (a `DocumentType`'s `Description`, `
 
 The forward pipeline is `upload → text-extraction → classification → field-extraction → Ready`. Reprocessing re-runs from the **classification** or **field-extraction** stage — never text extraction (re-OCR of existing documents is out of scope, see below).
 
-**Judgment stays with the operator.** Config changes do **not** cascade automatically — Document AI never guesses whether you meant a change to apply to existing documents. You trigger reprocessing explicitly, choose its scope, and accept its cost. This page covers the feature; for orchestration code see `core/src/Dignite.DocumentAI.Application/Documents/Pipelines/Reprocessing/` and `.../FieldExtraction/`.
+**Judgment stays with the operator.** Config changes do **not** cascade automatically — Dignite Extract never guesses whether you meant a change to apply to existing documents. You trigger reprocessing explicitly, choose its scope, and accept its cost. This page covers the feature; for orchestration code see `core/src/Dignite.Extract.Application/Documents/Pipelines/Reprocessing/` and `.../FieldExtraction/`.
 
 ## Three entry points
 
@@ -22,7 +22,7 @@ Re-runs **only** type-bound field extraction (the `field-extraction` pipeline) o
 
 - **Scope**: all text-extracted documents whose `DocumentTypeId` is the selected type (current layer only; recycle-bin documents excluded).
 - **Overwrites**: each document's extracted field values are replaced as a group — including any values an operator corrected manually. This is the "light warning" the preview shows.
-- **Lifecycle-neutral**: `field-extraction` is deliberately **not** a key pipeline (`DocumentAIPipelines.KeyPipelines` = `{ text-extraction, classification }`), so re-extracting fields never flips an already-`Ready` document back to `Processing`. The `DocumentPipelineRun` row exists for observability and retry only.
+- **Lifecycle-neutral**: `field-extraction` is deliberately **not** a key pipeline (`ExtractPipelines.KeyPipelines` = `{ text-extraction, classification }`), so re-extracting fields never flips an already-`Ready` document back to `Processing`. The `DocumentPipelineRun` row exists for observability and retry only.
 - **Entry points**: the document-type list (per-type action) and the field-definition page header; the preview shows the affected document count and the type's current field names.
 
 ## Batch reclassification
@@ -69,19 +69,19 @@ Single-document jobs run on the host's background-job manager. The default host 
 
 | Permission | Gates |
 |---|---|
-| `Document AI.Documents.Reprocessing.FieldExtraction` | batch field re-extraction (preview + trigger) |
-| `Document AI.Documents.Reprocessing.Reclassification` | batch reclassification (preview + trigger) |
-| `Document AI.Documents.ConfirmClassification` | single-document *Re-extract fields* (operator-level, same as *Re-recognize*) |
+| `Extract.Documents.Reprocessing.FieldExtraction` | batch field re-extraction (preview + trigger) |
+| `Extract.Documents.Reprocessing.Reclassification` | batch reclassification (preview + trigger) |
+| `Extract.Documents.ConfirmClassification` | single-document *Re-extract fields* (operator-level, same as *Re-recognize*) |
 
 ## REST endpoints
 
 | Method | Route | Purpose |
 |---|---|---|
-| `GET` | `/api/document-ai/document-reprocessing/field-extraction/preview?documentTypeId=` | affected count + the type's current field names |
-| `POST` | `/api/document-ai/document-reprocessing/field-extraction` | start batch field re-extraction |
-| `POST` | `/api/document-ai/document-reprocessing/reclassification/preview` | affected count for a scope |
-| `POST` | `/api/document-ai/document-reprocessing/reclassification` | start batch reclassification |
-| `POST` | `/api/document-ai/documents/{id}/reextract-fields` | single-document re-extract fields |
+| `GET` | `/api/extract/document-reprocessing/field-extraction/preview?documentTypeId=` | affected count + the type's current field names |
+| `POST` | `/api/extract/document-reprocessing/field-extraction` | start batch field re-extraction |
+| `POST` | `/api/extract/document-reprocessing/reclassification/preview` | affected count for a scope |
+| `POST` | `/api/extract/document-reprocessing/reclassification` | start batch reclassification |
+| `POST` | `/api/extract/documents/{id}/reextract-fields` | single-document re-extract fields |
 
 Batch and progress are internal operational state — they are **not** part of the exit contract. Downstream consumers see the normal staged events (`DocumentClassifiedEto` / `FieldsExtractedEto`) republished as documents reprocess, absorbed idempotently by `(DocumentId, EventType, EventTime)` like any other.
 
