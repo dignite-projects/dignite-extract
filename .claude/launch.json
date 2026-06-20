@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "angular-host",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 4200,
+      "cwd": "angular"
+    }
+  ]
+}
