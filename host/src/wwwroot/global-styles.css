@@ -1,8 +1,25 @@
+@font-face {
+    font-family: 'ProstoOne';
+    src: url('/fonts/ProstoOne-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+.lpx-brand-name,
+.lpx-login-name {
+    font-family: 'ProstoOne', sans-serif !important;
+}
+
 :root {
     --lpx-logo: url('/images/logo/leptonxlite/logo-light-thumbnail.png');
     --lpx-logo-icon: url('/images/logo/leptonxlite/logo-light-thumbnail.png');
 }
-:root .abp-account-layout .lpx-brand-logo{
-    --lpx-logo: url('/images/logo/leptonxlite/logo-dark-thumbnail.png');
-    background-position: left;
-}
+
+    :root .abp-account-layout .lpx-login-logo {
+        --lpx-logo: url('/images/logo/leptonxlite/logo-favicon.svg');
+        --lpx-brand-logo: url('/images/logo/leptonxlite/logo-favicon.svg');
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: contain;
+    }

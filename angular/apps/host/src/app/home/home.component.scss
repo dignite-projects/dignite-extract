@@ -3,12 +3,6 @@
   margin: 0 auto;
 }
 
-.host-hero {
-  background:
-    radial-gradient(circle at 88% 10%, rgba(var(--bs-primary-rgb), 0.12), transparent 28rem),
-    linear-gradient(135deg, var(--bs-body-bg), var(--bs-tertiary-bg, #f8f9fa));
-}
-
 .section-kicker {
   color: var(--bs-primary);
   font-size: 0.75rem;
