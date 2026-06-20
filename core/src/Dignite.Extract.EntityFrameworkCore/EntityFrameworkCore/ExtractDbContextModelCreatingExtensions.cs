@@ -142,9 +142,16 @@ public static class ExtractDbContextModelCreatingExtensions
             // SQL-Server-specific; the SQL-Server-only filtered-index portability limitation is intentionally
             // accepted for v0.2.0. No FK on OriginDocumentId: it is a soft provenance pointer, not a constraint,
             // so the derived document outlives the source (the source may be hard-deleted while derived ones remain).
+            // #391: the filter also excludes soft-deleted rows (IsDeleted = 0). A retracted (soft-deleted)
+            // sub-document is a recoverable archive (#349 DocumentDeletedEto), not a live constituent — leaving it in
+            // the index made a container→concrete→container round trip collide on re-spawn (Document.Markdown is
+            // immutable, so the re-split reuses the same OriginConstituentKey) and the job retried forever. Excluding
+            // IsDeleted keeps the slot free for the fresh child; concurrent double-spawn idempotency is preserved
+            // (two LIVE rows with the same key still collide). The new index covers a strict subset of the old one's
+            // rows, so the recreate is safe on populated tables.
             b.HasIndex(x => new { x.OriginDocumentId, x.OriginConstituentKey })
                 .IsUnique()
-                .HasFilter("[OriginDocumentId] IS NOT NULL");
+                .HasFilter("[OriginDocumentId] IS NOT NULL AND [IsDeleted] = 0");
         });
 
         builder.Entity<DocumentExtractedField>(b =>

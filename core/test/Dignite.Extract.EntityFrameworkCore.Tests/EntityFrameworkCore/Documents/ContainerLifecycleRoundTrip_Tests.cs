@@ -133,16 +133,15 @@ public class ContainerLifecycleRoundTrip_Tests
         });
     }
 
-    [Fact(Skip = "Documents a latent defect discovered via the #390 round-trip probe (pending its own issue): a "
-        + "container→concrete→container loop cannot re-spawn its text children. Retraction SOFT-deletes them, but "
-        + "Document.Markdown is immutable, so the re-split produces the SAME OriginConstituentKey values and the spawn "
-        + "collides with the soft-deleted rows on the (OriginDocumentId, OriginConstituentKey) unique index (its "
-        + "filter is 'OriginDocumentId IS NOT NULL', not 'IsDeleted = 0'). The job then retries forever. Un-skip and "
-        + "assert clean re-spawn once the index/retraction interaction is fixed.")]
-    public async Task Re_Recognized_Container_Clears_IsSegmented_So_The_Split_Runs_Again()
+    [Fact]
+    public async Task Re_Recognized_Container_Re_Splits_And_Re_Spawns_Text_Children_Without_Colliding()
     {
-        // The full loop's third leg: after container→concrete, re-recognizing the document as a container again must
-        // clear IsSegmented so the segmentation job's Phase-A LLM split is NOT short-circuited by the stale marker.
+        // The full loop's third leg + the #391 fix: after container→concrete, re-recognizing the document as a
+        // container again must clear IsSegmented so the Phase-A split re-runs, AND the re-split must cleanly re-spawn
+        // the text children. Retraction soft-deleted the original text children and Document.Markdown is immutable, so
+        // the re-split reuses the same OriginConstituentKey values — before #391 that collided with the soft-deleted
+        // rows on the (OriginDocumentId, OriginConstituentKey) unique index and the job retried forever. The index
+        // filter now excludes IsDeleted = 0, so the slot is free for the fresh child.
         var containerId = await ArrangeContainerAsync();
         StubSplit(("Service A-B", true), (ImageOcrMarkup.OpenPagePrefix + "1]*", true), ("Lease X-Y", true));
         await _job.ExecuteAsync(new DocumentSegmentationJobArgs { SourceDocumentId = containerId });
@@ -169,12 +168,25 @@ public class ContainerLifecycleRoundTrip_Tests
         await _workflow.Received().RunAsync(
             Arg.Any<string>(), Arg.Any<SubDocumentDetectionContext>(), Arg.Any<CancellationToken>());
 
-        // The surviving figure constituent is idempotently kept (never duplicated) across the re-split.
         var figureKey = ContentHasher.Sha256Hex(Encoding.UTF8.GetBytes(FigureText));
         await WithUnitOfWorkAsync(async () =>
         {
+            var doc = await _documentRepository.GetAsync(containerId);
+            doc.IsContainer.ShouldBeTrue();
+            doc.IsSegmented.ShouldBeTrue();                                    // the re-split completed
+            doc.ReviewReasons.ShouldBe(DocumentReviewReasons.None);           // no SegmentationIncomplete collision flag
+
+            // The surviving figure is idempotently kept (never duplicated) and the two text constituents are re-split,
+            // all reaching Spawned — no unique-index collision with the soft-deleted originals (#391).
             var segments = await _segmentRepository.GetListAsync(s => s.SourceDocumentId == containerId);
+            segments.Count.ShouldBe(3);
+            segments.ShouldAllBe(s => s.Status == DocumentSegmentStatus.Spawned);
             segments.Count(s => s.SegmentKey == figureKey).ShouldBe(1);
+            segments.Count(s => s.Kind == DocumentSegmentKind.Text).ShouldBe(2);
+
+            // Three LIVE derived children (the figure that survived + two freshly re-spawned text children); the two
+            // originally-retracted text children remain only as soft-deleted archives, excluded by the ISoftDelete filter.
+            (await _documentRepository.GetListByOriginAsync(containerId)).Count.ShouldBe(3);
         });
     }
 
