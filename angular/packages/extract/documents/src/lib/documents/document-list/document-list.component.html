@@ -14,19 +14,19 @@
       >
         <i class="fas fa-sync-alt" [class.fa-spin]="isLoading()"></i>
       </button>
-      <button
-        class="btn"
-        [class.btn-warning]="hasReviewReasonsFilter()"
-        [class.btn-outline-warning]="!hasReviewReasonsFilter()"
-        (click)="toggleManualReviewFilter()"
-        title="{{ '::Document:NeedsReview' | abpLocalization }}"
-      >
-        <i class="fas fa-user-edit me-1"></i>
-        {{ '::Document:NeedsReview' | abpLocalization }}
-        @if (reviewNeededCount() > 0) {
-          <span class="badge bg-danger ms-1">{{ reviewNeededCount() }}</span>
-        }
-      </button>
+      @if (canConfirm) {
+        <button
+          class="btn btn-outline-warning"
+          routerLink="/documents/review"
+          title="{{ '::Menu:DocumentReviewQueue' | abpLocalization }}"
+        >
+          <i class="fas fa-clipboard-check me-1"></i>
+          {{ '::Document:NeedsReview' | abpLocalization }}
+          @if (reviewQueueCount() > 0) {
+            <span class="badge bg-danger ms-1">{{ reviewQueueCount() }}</span>
+          }
+        </button>
+      }
       @if (canUpload) {
         <button class="btn btn-primary" (click)="uploadNew()">
           <i class="fas fa-upload me-1"></i>

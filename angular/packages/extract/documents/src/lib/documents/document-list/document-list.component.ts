@@ -37,6 +37,7 @@ import {
   DocumentListItemDto,
   DocumentReviewReasons,
   DocumentService,
+  DocumentStatisticsService,
   DocumentTypeDto,
   DocumentTypeService,
   FieldDefinitionDto,
@@ -75,6 +76,7 @@ interface TableActivateEvent {
 })
 export class DocumentListComponent implements OnInit {
   private readonly documentService = inject(DocumentService);
+  private readonly statisticsService = inject(DocumentStatisticsService);
   private readonly documentTypeService = inject(DocumentTypeService);
   private readonly fieldDefinitionService = inject(FieldDefinitionService);
   private readonly cabinetService = inject(CabinetService);
@@ -110,7 +112,6 @@ export class DocumentListComponent implements OnInit {
   // track key) to force a fresh instance — deterministic, no setTimeout/flicker.
   tableKey = signal(0);
 
-  hasReviewReasonsFilter = signal<boolean | undefined>(undefined);
   typeFilter = signal<string>('');
   cabinetFilter = signal<string>('');
   lifecycleFilter = signal<DocumentLifecycleStatus | undefined>(undefined);
@@ -131,9 +132,10 @@ export class DocumentListComponent implements OnInit {
   selectedTypeId = signal('');
   isConfirming = signal(false);
 
-  reviewNeededCount = computed(() =>
-    this.documents().items.filter(d => d.requiresReview).length,
-  );
+  // #284 review-queue gateway: the toolbar badge shows the canonical needs-review total for the current
+  // layer (DocumentStatisticsDto.NeedsReviewCount — same RequiresAttention predicate the review queue runs,
+  // #333), not a page-local count, so it stays correct across pagination and once the list is unfiltered.
+  reviewQueueCount = signal(0);
 
   // #354: render the row actions column when the user has confirm/delete actions OR any row is a container —
   // containers expose a "view sub-documents" action regardless of those permissions.
@@ -153,6 +155,8 @@ export class DocumentListComponent implements OnInit {
     // cabinet- or type-filtered list before the initial load runs.
     this.applyQueryParamFilters();
     this.hookListQuery();
+    // Review-queue badge total — only fetched/shown for operators who can open the queue (#284).
+    this.loadReviewQueueCount();
     // Document types drive the type filter, the dynamic extracted-field columns, and
     // the confirm-classification picker. Every Documents.Default user needs them, and
     // the read is now decoupled from schema-admin permission (#223 — GetVisible no longer
@@ -269,7 +273,6 @@ export class DocumentListComponent implements OnInit {
       cabinetId: this.cabinetFilter() || undefined,
       originDocumentId: this.originDocumentIdFilter() || undefined,
       lifecycleStatus: this.lifecycleFilter(),
-      hasReviewReasons: this.hasReviewReasonsFilter(),
     };
   }
 
@@ -489,6 +492,8 @@ export class DocumentListComponent implements OnInit {
             next: () => {
               this.toaster.success('::Document:DeletedSuccessfully', '::Success');
               this.list.getWithoutPageReset();
+              // A deleted document leaves the (soft-delete-filtered) review queue — refresh the badge.
+              this.loadReviewQueueCount();
             },
             error: () => this.toaster.error('::Document:DeleteFailed', '::Error'),
           });
@@ -496,9 +501,17 @@ export class DocumentListComponent implements OnInit {
       });
   }
 
-  toggleManualReviewFilter(): void {
-    this.hasReviewReasonsFilter.update(v => (v ? undefined : true));
-    this.refreshListFromFirstPage();
+  // Canonical needs-review total for the toolbar badge. Gated on canConfirm so non-reviewers (who don't
+  // see the gateway button) never fire the call. The statistics endpoint shares the review queue's
+  // RequiresAttention predicate (#333), so the badge and the queue never drift.
+  private loadReviewQueueCount(): void {
+    if (!this.canConfirm) return;
+    this.statisticsService.get()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: stats => this.reviewQueueCount.set(stats.needsReviewCount ?? 0),
+        error: () => this.reviewQueueCount.set(0),
+      });
   }
 
   // #284: show the confirm-classification button only when the document still requires attention
@@ -547,6 +560,8 @@ export class DocumentListComponent implements OnInit {
         this.closeConfirmDialog();
         this.toaster.success('::Document:ClassificationConfirmed', '::Success');
         this.list.getWithoutPageReset();
+        // Confirming a classification clears its review reason — keep the badge in step with the queue.
+        this.loadReviewQueueCount();
       },
       error: () => {
         this.isConfirming.set(false);
