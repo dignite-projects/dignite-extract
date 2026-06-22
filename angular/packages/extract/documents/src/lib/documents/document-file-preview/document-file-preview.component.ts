@@ -45,6 +45,10 @@ export class DocumentFilePreviewComponent implements OnInit {
   readonly contentType = computed(() => this.document()?.fileOrigin?.contentType ?? '');
   readonly isImage = computed(() => isImageContentType(this.contentType()));
   readonly isPdf = computed(() => isPdfContentType(this.contentType()));
+  // Sub-documents (#306/#346) carry no FileOrigin — there is no original file to fetch. Gate the blob fetch
+  // and the viewer on this so the page never calls GetBlobAsync for a blob-less document
+  // (Extract:DocumentNoSourceBlob); the template shows a neutral notice instead.
+  readonly hasSourceFile = computed(() => !!this.document()?.fileOrigin);
 
   ngOnInit(): void {
     this.documentId = this.route.snapshot.paramMap.get('id')!;
@@ -63,7 +67,10 @@ export class DocumentFilePreviewComponent implements OnInit {
         next: doc => {
           this.document.set(doc);
           this.isLoading.set(false);
-          this.fileBlob.ensureLoaded(this.documentId);
+          // A sub-document has no source blob; skip the fetch (would throw Extract:DocumentNoSourceBlob).
+          if (doc.fileOrigin) {
+            this.fileBlob.ensureLoaded(this.documentId);
+          }
         },
         error: () => {
           this.isLoading.set(false);

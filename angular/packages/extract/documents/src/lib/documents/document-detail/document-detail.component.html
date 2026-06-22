@@ -18,12 +18,15 @@
       </span>
     }
     <div class="ms-auto d-flex gap-2">
+      <!-- Display label is "重新分类 / Re-classify": it re-runs classification on the already-extracted text,
+           NOT OCR (the #263 internal name stays "rerecognize"). The tooltip states the original file is not
+           re-scanned, to kill the "re-OCR from the original file" misconception. -->
       @if (canRerecognize()) {
         <button
           class="btn btn-outline-primary btn-sm"
           (click)="rerecognize()"
           [disabled]="isRerecognizing()"
-          title="{{ '::Document:Rerecognize' | abpLocalization }}"
+          title="{{ '::Document:Rerecognize:Hint' | abpLocalization }}"
         >
           @if (isRerecognizing()) {
             <span class="spinner-border spinner-border-sm me-1" role="status"></span>
@@ -110,12 +113,16 @@
                   <i class="fas fa-code me-1"></i>{{ '::Document:Tab:Source' | abpLocalization }}
                 </button>
               </li>
-              <li class="nav-item">
-                <button class="nav-link" [class.active]="activeTab() === 'file'"
-                        (click)="selectTab('file')">
-                  <i class="fas fa-file me-1"></i>{{ '::Document:OriginalFile' | abpLocalization }}
-                </button>
-              </li>
+              <!-- Sub-documents have no source blob (#306/#346); hide the Original File tab so the UI never
+                   calls GetBlobAsync for them (Extract:DocumentNoSourceBlob). -->
+              @if (hasSourceFile()) {
+                <li class="nav-item">
+                  <button class="nav-link" [class.active]="activeTab() === 'file'"
+                          (click)="selectTab('file')">
+                    <i class="fas fa-file me-1"></i>{{ '::Document:OriginalFile' | abpLocalization }}
+                  </button>
+                </li>
+              }
             </ul>
           </div>
           <div class="card-body overflow-auto" style="min-height: 400px; max-height: 80vh;">
@@ -175,21 +182,26 @@
               }
             }
           </div>
-          <div class="card-footer text-muted small d-flex align-items-center gap-2">
-            <i class="fas fa-file"></i>
-            <span class="text-truncate">{{ document()!.fileOrigin?.originalFileName }}</span>
-            <span>·</span>
-            <span class="flex-shrink-0">{{ document()!.fileOrigin?.contentType }}</span>
-            <button type="button" (click)="downloadFile()" [disabled]="fileBlob.isLoading()"
-                    class="btn btn-sm btn-link p-0 ms-auto flex-shrink-0">
-              @if (fileBlob.isLoading()) {
-                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-              } @else {
-                <i class="fas fa-download me-1"></i>
-              }
-              {{ '::Document:DownloadFile' | abpLocalization }}
-            </button>
-          </div>
+          <!-- Source-file footer (name / type / download): only for documents that actually have a source
+               blob. A sub-document (#306/#346) has none, so hiding this avoids an empty footer and a Download
+               button that would fail with Extract:DocumentNoSourceBlob. -->
+          @if (hasSourceFile()) {
+            <div class="card-footer text-muted small d-flex align-items-center gap-2">
+              <i class="fas fa-file"></i>
+              <span class="text-truncate">{{ document()!.fileOrigin?.originalFileName }}</span>
+              <span>·</span>
+              <span class="flex-shrink-0">{{ document()!.fileOrigin?.contentType }}</span>
+              <button type="button" (click)="downloadFile()" [disabled]="fileBlob.isLoading()"
+                      class="btn btn-sm btn-link p-0 ms-auto flex-shrink-0">
+                @if (fileBlob.isLoading()) {
+                  <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                } @else {
+                  <i class="fas fa-download me-1"></i>
+                }
+                {{ '::Document:DownloadFile' | abpLocalization }}
+              </button>
+            </div>
+          }
         </div>
       </div>
 
