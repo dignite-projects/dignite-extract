@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule, formatDate } from '@angular/common';
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import {
   ListService,
@@ -59,7 +59,6 @@ interface TableActivateEvent {
   styleUrls: ['./document-list.component.scss'],
   imports: [
     CommonModule,
-    RouterModule,
     FormsModule,
     LocalizationPipe,
     ExtensibleTableComponent,
@@ -115,6 +114,10 @@ export class DocumentListComponent implements OnInit {
   typeFilter = signal<string>('');
   cabinetFilter = signal<string>('');
   lifecycleFilter = signal<DocumentLifecycleStatus | undefined>(undefined);
+  // #395: needs-review filter. Replaces the standalone review-queue page — when on, the list shows only
+  // documents that still require operator attention (hasReviewReasons, the queue's RequiresAttention
+  // predicate). Seeded from the ?review=1 deep-link used by the overview needs-review entry points.
+  reviewFilter = signal<boolean>(false);
   // #354: when set, the list shows only the sub-documents derived from this source document (a container's
   // children). subDocumentsParent is the container itself (for the indicator banner); it is null when the filter
   // was seeded from a deep-link query param and the parent row is not in hand.
@@ -195,6 +198,10 @@ export class DocumentListComponent implements OnInit {
     if (originDocumentId) {
       this.originDocumentIdFilter.set(originDocumentId);
     }
+    // #395: overview needs-review entry points deep-link here with ?review=1.
+    if (params.get('review')) {
+      this.reviewFilter.set(true);
+    }
   }
 
   onLifecycleFilterChange(value: DocumentLifecycleStatus | undefined): void {
@@ -213,6 +220,13 @@ export class DocumentListComponent implements OnInit {
 
   onCabinetFilterChange(value: string): void {
     this.cabinetFilter.set(value);
+    this.refreshListFromFirstPage();
+  }
+
+  // #395: toggle the needs-review filter (the former review-queue gateway). Refreshes from page 1 so the
+  // filtered count and pagination stay consistent.
+  toggleReviewFilter(): void {
+    this.reviewFilter.update(on => !on);
     this.refreshListFromFirstPage();
   }
 
@@ -295,6 +309,8 @@ export class DocumentListComponent implements OnInit {
       cabinetId: this.cabinetFilter() || undefined,
       originDocumentId: this.originDocumentIdFilter() || undefined,
       lifecycleStatus: this.lifecycleFilter(),
+      // #395: same RequiresAttention predicate the old review queue ran.
+      hasReviewReasons: this.reviewFilter() || undefined,
     };
   }
 

@@ -34,7 +34,7 @@ export class HomeComponent {
   private readonly entryPoints: HomeEntryPoint[] = [
     {
       title: 'Dignite Extract',
-      description: 'Open the module for document intake, review queues, schema management, and exports.',
+      description: 'Open the module for document intake, review, schema management, and exports.',
       route: '/documents',
       iconClass: 'fas fa-file-lines',
       toneClass: 'text-bg-primary',

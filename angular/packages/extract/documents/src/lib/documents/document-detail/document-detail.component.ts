@@ -125,9 +125,21 @@ export class DocumentDetailComponent implements OnInit {
   isEditingCabinet = signal(false);
   isSavingCabinet = signal(false);
   selectedCabinetId = signal<string>('');
-  // Document types visible in the current layer, used for typeCode-to-displayName mapping. Populated
-  // together with field definition loading.
+  // Document types visible in the current layer, used for typeCode-to-displayName mapping and the
+  // confirm-classification picker. Populated together with field definition loading.
   documentTypes = signal<DocumentTypeDto[]>([]);
+
+  // #395: manual confirm/assign classification — the authoritative override for UnresolvedClassification,
+  // relocated here from the removed review-queue page.
+  showClassifyDialog = signal(false);
+  selectedTypeId = signal('');
+  isConfirmingClassification = signal(false);
+
+  // #395: reject (#237/#284 recoverable disposition). The review queue was the only place this action
+  // lived; it moves to the remediation hub so the disposition is not lost.
+  showRejectDialog = signal(false);
+  rejectReason = signal('');
+  isRejecting = signal(false);
 
   readonly DocumentLifecycleStatus = DocumentLifecycleStatus;
   readonly DocumentReviewDisposition = DocumentReviewDisposition;
@@ -191,6 +203,15 @@ export class DocumentDetailComponent implements OnInit {
   // #284: operator attention required, for any unresolved review reason, equals server-provided
   // requiresReview. The client does not infer it locally.
   needsReview = computed(() => this.document()?.requiresReview ?? false);
+
+  // #395: classification still unresolved AND the operator may act — drives the "Confirm classification"
+  // CTA. Mirrors the list's needsConfirmation; the blocking UnresolvedClassification reason is the only one
+  // a manual type assignment resolves.
+  needsClassification = computed(() =>
+    this.canEditFields &&
+    (((this.document()?.reviewReasons ?? DocumentReviewReasons.None) & DocumentReviewReasons.UnresolvedClassification)
+      !== DocumentReviewReasons.None),
+  );
 
   // #284: pure availability axis. After the two axes became orthogonal, the review banner and processing
   // banner are judged independently; the template's @if needsReview takes precedence over isProcessing.
@@ -373,11 +394,10 @@ export class DocumentDetailComponent implements OnInit {
           // Field definitions are used for: 1. displayName in extracted-field display for all viewers;
           // 2. completing empty fields when editable. Backend GetListAsync has been open to
           // Documents.Default since #223, so load whenever a type exists and no longer gate on edit
-          // permission.
+          // permission. #395: visible types are always loaded (even when unclassified) so the
+          // confirm-classification picker has its options.
           this.fieldDefinitions.set([]);
-          if (doc.documentTypeCode) {
-            this.loadFieldDefinitions(doc.documentTypeCode);
-          }
+          this.loadDocumentTypesAndFields(doc.documentTypeCode);
           // #306/#354: a sub-document carries its source (container) id. Fetch the parent's lightweight
           // metadata so the provenance banner can show its title; reset first so a previous document's
           // parent never lingers when navigating between documents in the same component instance.
@@ -399,14 +419,17 @@ export class DocumentDetailComponent implements OnInit {
 
   // doc.documentTypeCode is the current code projection in the Document output contract (#207). The
   // field definition API associates by immutable DocumentTypeId, so first resolve code to id from types
-  // visible in the current layer, then query.
-  private loadFieldDefinitions(typeCode: string): void {
+  // visible in the current layer, then query. #395: visible types are always stored (the
+  // confirm-classification picker needs them even when the document is unclassified); field definitions
+  // are only fetched when the document already has a type.
+  private loadDocumentTypesAndFields(typeCode: string | null | undefined): void {
     this.documentTypeService.getVisible()
       .pipe(
         // One getVisible call serves two purposes: store documentTypes for document type displayName
-        // mapping, then resolve typeId for field definition lookup.
+        // mapping + the confirm picker, then resolve typeId for field definition lookup.
         tap(types => this.documentTypes.set(types)),
         switchMap(types => {
+          if (!typeCode) return of<FieldDefinitionDto[]>([]);
           const documentTypeId = types.find(t => t.typeCode === typeCode)?.id;
           if (!documentTypeId) return of<FieldDefinitionDto[]>([]);
           return this.fieldDefinitionService.getList({ documentTypeId });
@@ -627,6 +650,81 @@ export class DocumentDetailComponent implements OnInit {
               this.toaster.error('::Document:ReextractFieldsFailed', '::Error');
             },
           });
+      });
+  }
+
+  // #395: manual confirm / assign document type. Authoritative override that clears
+  // UnresolvedClassification and cascades field extraction (backend confirmClassification). Defaults the
+  // picker to the document's current low-confidence type when present so the operator usually just confirms.
+  openClassifyDialog(): void {
+    const doc = this.document();
+    if (!doc) return;
+    this.selectedTypeId.set(
+      this.documentTypes().find(t => t.typeCode === doc.documentTypeCode)?.id ?? '',
+    );
+    this.showClassifyDialog.set(true);
+  }
+
+  closeClassifyDialog(): void {
+    this.showClassifyDialog.set(false);
+    this.selectedTypeId.set('');
+  }
+
+  submitClassify(): void {
+    const doc = this.document();
+    if (!doc || !this.selectedTypeId() || this.isConfirmingClassification()) return;
+    this.isConfirmingClassification.set(true);
+    this.documentService.confirmClassification(doc.id!, { documentTypeId: this.selectedTypeId() })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isConfirmingClassification.set(false);
+          this.closeClassifyDialog();
+          this.toaster.success('::Document:ClassificationConfirmed', '::Success');
+          this.loadDocument();
+        },
+        error: () => {
+          this.isConfirmingClassification.set(false);
+          this.toaster.error('::Document:ConfirmFailed', '::Error');
+        },
+      });
+  }
+
+  // #395: reject the document (#237/#284 recoverable disposition). The rejection reason is required by the
+  // backend RejectReviewInput.Reason; reload after success so disposition/badge reflect the new state.
+  openRejectDialog(): void {
+    if (!this.document()) return;
+    this.rejectReason.set('');
+    this.showRejectDialog.set(true);
+  }
+
+  closeRejectDialog(): void {
+    this.showRejectDialog.set(false);
+    this.rejectReason.set('');
+  }
+
+  submitReject(): void {
+    const doc = this.document();
+    if (!doc || this.isRejecting()) return;
+    const reason = this.rejectReason().trim();
+    if (!reason) {
+      this.toaster.warn('::Document:Review:RejectReasonRequired');
+      return;
+    }
+    this.isRejecting.set(true);
+    this.documentService.rejectReview(doc.id!, { reason })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isRejecting.set(false);
+          this.closeRejectDialog();
+          this.toaster.success('::Document:Review:RejectedSuccessfully', '::Success');
+          this.loadDocument();
+        },
+        error: () => {
+          this.isRejecting.set(false);
+          this.toaster.error('::Document:Review:ActionFailed', '::Error');
+        },
       });
   }
 

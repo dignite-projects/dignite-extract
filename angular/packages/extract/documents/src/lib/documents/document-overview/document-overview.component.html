@@ -83,12 +83,16 @@
 
           @if (canReview) {
             <div class="col-6 col-md-4 col-xl-2">
-              <div class="card shadow-sm h-100 stat-card">
+              <a
+                class="card shadow-sm h-100 stat-card text-decoration-none text-reset"
+                routerLink="/documents/list"
+                [queryParams]="{ review: 1 }"
+              >
                 <div class="card-body">
                   <div class="stat-value text-warning">{{ stats()?.needsReviewCount ?? 0 }}</div>
                   <div class="stat-label">{{ '::Document:Home:Statistics:NeedsReview' | abpLocalization }}</div>
                 </div>
-              </div>
+              </a>
             </div>
           }
 
@@ -154,10 +158,10 @@
                 </a>
 
                 @if (canReview) {
-                  <a class="home-action" routerLink="/documents/review">
+                  <a class="home-action" routerLink="/documents/list" [queryParams]="{ review: 1 }">
                     <span class="home-action-icon text-bg-warning"><i class="fas fa-clipboard-check"></i></span>
                     <span>
-                      <span class="fw-semibold d-block">{{ '::Menu:DocumentReviewQueue' | abpLocalization }}</span>
+                      <span class="fw-semibold d-block">{{ '::Document:NeedsReview' | abpLocalization }}</span>
                       <small class="text-muted">{{ '::Document:Home:ReviewQueueHint' | abpLocalization }}</small>
                     </span>
                   </a>
