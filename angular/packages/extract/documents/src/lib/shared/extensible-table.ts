@@ -5,7 +5,6 @@ export const EXTRACT_TABLES = {
   Cabinets: 'Extract.Cabinets',
   Documents: 'Extract.Documents',
   DocumentRecycleBin: 'Extract.DocumentRecycleBin',
-  DocumentReviewQueue: 'Extract.DocumentReviewQueue',
   DocumentTypes: 'Extract.DocumentTypes',
   ExportTemplates: 'Extract.ExportTemplates',
   FieldDefinitions: 'Extract.FieldDefinitions',

@@ -32,15 +32,6 @@ export const DOCUMENTS_ROUTES: Routes = [
       ),
   },
   {
-    path: 'review',
-    canActivate: [authGuard, permissionGuard],
-    data: { requiredPolicy: EXTRACT_PERMISSIONS.Documents.ConfirmClassification },
-    loadComponent: () =>
-      import('./documents/document-review-queue/document-review-queue.component').then(
-        c => c.DocumentReviewQueueComponent,
-      ),
-  },
-  {
     path: 'types',
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: EXTRACT_PERMISSIONS.DocumentTypes.Default },

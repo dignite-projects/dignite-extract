@@ -16,9 +16,12 @@
       </button>
       @if (canConfirm) {
         <button
-          class="btn btn-outline-warning"
-          routerLink="/documents/review"
-          title="{{ '::Menu:DocumentReviewQueue' | abpLocalization }}"
+          class="btn"
+          [class.btn-warning]="reviewFilter()"
+          [class.btn-outline-warning]="!reviewFilter()"
+          [attr.aria-pressed]="reviewFilter()"
+          (click)="toggleReviewFilter()"
+          title="{{ '::Document:NeedsReview' | abpLocalization }}"
         >
           <i class="fas fa-clipboard-check me-1"></i>
           {{ '::Document:NeedsReview' | abpLocalization }}

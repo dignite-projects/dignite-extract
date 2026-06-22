@@ -39,15 +39,6 @@ export function provideExtract(): EnvironmentProviders {
           layout: eLayoutType.application,
         },
         {
-          path: '/documents/review',
-          name: '::Menu:DocumentReviewQueue',
-          iconClass: 'fas fa-clipboard-check',
-          parentName: '::Menu:Documents',
-          requiredPolicy: EXTRACT_PERMISSIONS.Documents.ConfirmClassification,
-          order: 2,
-          layout: eLayoutType.application,
-        },
-        {
           path: '/documents/types',
           name: '::Menu:DocumentTypes',
           iconClass: 'fas fa-tags',
