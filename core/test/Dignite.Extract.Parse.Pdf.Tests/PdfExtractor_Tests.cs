@@ -605,4 +605,43 @@ public class PdfExtractor_Tests
         result.Markdown.IndexOf("Master Services Agreement", StringComparison.Ordinal)
             .ShouldBeLessThan(result.Markdown.IndexOf("| Provider |", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task Reads_full_width_clause_prose_below_a_table_in_top_to_bottom_order()
+    {
+        // The page-2 clause-scramble: a multi-column table followed by full-width clause prose whose sentences
+        // wrap across several lines. A page-wide column-wise reading order reads the table's columns vertically
+        // and captures the full-width prose lines into them, so a clause's later line is emitted before its
+        // earlier one (the sentence reads back-to-front). Banding the page at full-width separators makes each
+        // full-width prose line its own band, read strictly top-to-bottom, so the clause reads in order.
+        var pdf = PdfFixtures.BuildPositioned(new[]
+        {
+            ("Item", 50.0, 700.0), ("Qty", 230.0, 700.0), ("Remark", 380.0, 700.0),
+            ("Apple", 50.0, 672.0), ("5", 230.0, 672.0), ("fresh", 380.0, 672.0),
+            ("Pear", 50.0, 644.0), ("9", 230.0, 644.0), ("green", 380.0, 644.0),
+
+            // Two clauses below the table. Each clause is a full-width first line (a band separator) plus a
+            // SHORT continuation line at the left margin — exactly the x of the table's first column, which is
+            // what a page-wide column-wise pass captures into that column and reads out of order.
+            ("ALPHA the provider shall perform the work described in the written specification", 50.0, 600.0),
+            ("with due care here.", 50.0, 578.0),
+            ("BETA the client shall pay each invoice the provider issues by the stated final due", 50.0, 540.0),
+            ("date in full.", 50.0, 518.0)
+        });
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(pdf), PdfContext());
+
+        // The table still reconstructs, and the two clauses read in document order: each clause's first line
+        // (ALPHA / BETA) before its own continuation, and ALPHA's clause entirely before BETA's.
+        result.Markdown.ShouldContain("| Item | Qty | Remark |");
+        var alpha = result.Markdown.IndexOf("ALPHA", StringComparison.Ordinal);
+        var alphaCont = result.Markdown.IndexOf("with due care here.", StringComparison.Ordinal);
+        var beta = result.Markdown.IndexOf("BETA", StringComparison.Ordinal);
+        var betaCont = result.Markdown.IndexOf("date in full.", StringComparison.Ordinal);
+        var table = result.Markdown.IndexOf("| Item | Qty | Remark |", StringComparison.Ordinal);
+        alpha.ShouldBeGreaterThan(table);
+        alphaCont.ShouldBeGreaterThan(alpha);
+        beta.ShouldBeGreaterThan(alphaCont);
+        betaCont.ShouldBeGreaterThan(beta);
+    }
 }

@@ -99,6 +99,12 @@ internal static class PdfReadingOrder
     // reconstructor's: a horizontal gap wider than this many median-block-heights separates two columns.
     private const double ColumnGutterScale = 0.8;
 
+    // A block at least this fraction of the page's content width is treated as a full-width "band separator"
+    // for reading order (SegmentIntoReadingOrder): it spans every column, so content above and below it are
+    // distinct horizontal bands. Sized to catch a full-width prose line (which reaches the right margin) while
+    // leaving a shorter wrapped continuation / a table cell inside its band.
+    private const double FullWidthReadingBandFraction = 0.7;
+
     /// <summary>
     /// Reconstructs visual lines from the page's words: clusters words whose vertical ranges overlap into
     /// one line, orders words left-to-right within a line, and returns lines top-to-bottom.
@@ -877,10 +883,18 @@ internal static class PdfReadingOrder
     /// <see cref="RecursiveXYCut"/> — a top-down "Manhattan layout" segmenter that cuts the page along
     /// whitespace valleys wider than the dominant font metrics, separating columns (vertical gutter cut)
     /// and paragraphs (horizontal line-gap cut). This fits the column/table-structured target corpus
-    /// (contracts / invoices) better than the bottom-up Docstrum clustering. Blocks are ordered by
-    /// <see cref="UnsupervisedReadingOrderDetector"/> in <see cref="UnsupervisedReadingOrderDetector.SpatialReasoningRules.ColumnWise"/>
-    /// mode (read each column top-to-bottom, then move right), which keeps a column's lines contiguous.
-    /// Returns an empty list when there are no meaningful words.
+    /// (contracts / invoices) better than the bottom-up Docstrum clustering.
+    /// <para>
+    /// <b>Band-aware reading order.</b> The blocks are first split into horizontal bands at full-width blocks
+    /// (a full-width prose line / footnote spans every column, so content above and below it reads separately),
+    /// and only <i>within</i> each band are blocks ordered column-wise
+    /// (<see cref="UnsupervisedReadingOrderDetector"/>, <see cref="UnsupervisedReadingOrderDetector.SpatialReasoningRules.ColumnWise"/>).
+    /// A plain page-wide column-wise pass (the prior behavior) reads each column top-to-bottom across the whole
+    /// page, which on a single-column page interleaved with a table reads the table's columns vertically and
+    /// captures the surrounding full-width clause prose into them — scrambling the clause text. Banding keeps a
+    /// genuine multi-column region (no full-width separator → one band) column-wise while reading single-column
+    /// prose between tables in true top-to-bottom order. Returns an empty list when there are no meaningful words.
+    /// </para>
     /// </summary>
     private static IReadOnlyList<DlaTextBlock> SegmentIntoReadingOrder(IReadOnlyList<Word> words)
     {
@@ -897,12 +911,70 @@ internal static class PdfReadingOrder
             return blocks;
         }
 
-        return new UnsupervisedReadingOrderDetector(
-                T: 5,
-                spatialReasoningRule: UnsupervisedReadingOrderDetector.SpatialReasoningRules.ColumnWise,
-                useRenderingOrder: false)
-            .Get(blocks)
-            .ToList();
+        return OrderByBandsThenColumns(blocks);
+    }
+
+    /// <summary>
+    /// Orders blocks into reading order by splitting them into horizontal bands at full-width separators and
+    /// ordering each band column-wise. A block whose width is at least
+    /// <see cref="FullWidthReadingBandFraction"/> of the page's content width spans every column and forms its
+    /// own band; each run of narrower blocks between separators forms a band; bands are read top-to-bottom.
+    /// Within a multi-block band, <see cref="UnsupervisedReadingOrderDetector"/> in column-wise mode keeps a
+    /// genuine column's lines contiguous (the multi-column case that has no full-width separator is a single
+    /// band, so its behavior is unchanged); the table cells of a band reconstruct independently of this order.
+    /// </summary>
+    private static IReadOnlyList<DlaTextBlock> OrderByBandsThenColumns(IReadOnlyList<DlaTextBlock> blocks)
+    {
+        var minLeft = blocks.Min(b => Math.Min(b.BoundingBox.Left, b.BoundingBox.Right));
+        var maxRight = blocks.Max(b => Math.Max(b.BoundingBox.Left, b.BoundingBox.Right));
+        var fullWidth = (maxRight - minLeft) * FullWidthReadingBandFraction;
+
+        // Walk top-to-bottom, flushing the accumulated narrow-block band whenever a full-width separator is hit
+        // (the separator is then its own band). This yields the bands already in top-to-bottom order.
+        var bands = new List<List<DlaTextBlock>>();
+        var current = new List<DlaTextBlock>();
+        foreach (var block in blocks.OrderByDescending(b => b.BoundingBox.Top))
+        {
+            if (Math.Abs(block.BoundingBox.Width) >= fullWidth)
+            {
+                if (current.Count > 0)
+                {
+                    bands.Add(current);
+                    current = new List<DlaTextBlock>();
+                }
+
+                bands.Add(new List<DlaTextBlock> { block });
+            }
+            else
+            {
+                current.Add(block);
+            }
+        }
+
+        if (current.Count > 0)
+        {
+            bands.Add(current);
+        }
+
+        var detector = new UnsupervisedReadingOrderDetector(
+            T: 5,
+            spatialReasoningRule: UnsupervisedReadingOrderDetector.SpatialReasoningRules.ColumnWise,
+            useRenderingOrder: false);
+
+        var result = new List<DlaTextBlock>(blocks.Count);
+        foreach (var band in bands)
+        {
+            if (band.Count == 1)
+            {
+                result.Add(band[0]);
+            }
+            else
+            {
+                result.AddRange(detector.Get(band));
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
