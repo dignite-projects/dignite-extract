@@ -1,13 +1,5 @@
 /* You can add global styles to this file, and also import other style files */
 
-@font-face {
-  font-family: 'ProstoOne';
-  src: url('assets/fonts/ProstoOne-Regular.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
   --lpx-theme-light-bg: url('assets/images/login/login-bg-img-light.svg');
   --lpx-theme-dim-bg: url('assets/images/login/login-bg-img-dim.svg');
@@ -17,14 +9,8 @@
   --lpx-logo-url: var(--lpx-logo-icon);
   --lpx-logo: var(--lpx-logo-icon);
 
-  
   .abp-logo {
     background-repeat: no-repeat;
-  }
-
-  .lpx-brand-name,
-  .lpx-login-name {
-    font-family: 'ProstoOne', sans-serif !important;
   }
 
 
