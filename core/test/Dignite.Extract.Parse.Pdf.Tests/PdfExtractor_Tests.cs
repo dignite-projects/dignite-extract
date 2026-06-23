@@ -756,4 +756,27 @@ public class PdfExtractor_Tests
         result.Markdown.ShouldContain("# Confidentiality");
         result.Markdown.ShouldNotContain("**Confidentiality**");
     }
+
+    [Fact]
+    public async Task Folds_a_loosely_leaded_paragraph_that_was_split_into_per_line_blocks()
+    {
+        // #407 end-to-end: loose leading (baseline pitch 24 ≈ 2.8x the 12pt glyphs) makes the segmenter cut each
+        // justified line into its own block. The paragraph re-fold must merge them back into ONE paragraph
+        // instead of emitting one paragraph per line (the "blank line between every line" bug the user reported).
+        const string longLine = "the provider and the client agree on the following terms of service and support";
+        var pdf = PdfFixtures.Build(new[]
+        {
+            (longLine, 700.0),
+            (longLine, 676.0),
+            (longLine, 652.0),
+            ("and that concludes the recital.", 628.0) // short last line still belongs to the paragraph
+        });
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(pdf), PdfContext());
+
+        // One paragraph: the wrapped lines are space-joined with no blank-line break between them.
+        result.Markdown.ShouldContain(
+            longLine + " " + longLine + " " + longLine + " and that concludes the recital.");
+        result.Markdown.ShouldNotContain("\n\n");
+    }
 }

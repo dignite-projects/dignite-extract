@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using Dignite.Extract.Abstractions.Parse;
 using UglyToad.PdfPig.Content;
@@ -67,6 +68,16 @@ internal static class PdfReadingOrder
     /// </summary>
     internal readonly record struct LineWithWords(PdfRectangle Bounds, string Text, IReadOnlyList<Word> Words);
 
+    /// <summary>
+    /// The page-level model that drives justification-aware paragraph folding (#407): a line that reaches the
+    /// right margin (<see cref="ContentRight"/> within <see cref="FullWidthTolerance"/>) wrapped and continues
+    /// the paragraph; a shorter line ended it. <see cref="SplitPitch"/> is the measured wrap pitch scaled up,
+    /// the gap above which even two margin-reaching lines start a new paragraph (a blank-line / section gap).
+    /// Built by <see cref="BuildParagraphModel"/> and passed into <see cref="Render"/>; <c>null</c> falls back
+    /// to the legacy glyph-height threshold.
+    /// </summary>
+    internal readonly record struct ParagraphModel(double SplitPitch, double ContentRight, double FullWidthTolerance);
+
     // Only bind a nearby text line to a figure when it reads like a figure/table caption. Keeps ordinary
     // adjacent body text from being relocated into the figure block.
     // Latin labels use a word boundary (so "figured"/"tablet" don't match). CJK labels (图/圖/図/表 — zh-Hans,
@@ -81,9 +92,36 @@ internal static class PdfReadingOrder
     // A bound caption must be within this many median-line-heights of the figure (squared centroid distance).
     private const double CaptionMaxDistanceLineHeights = 6.0;
 
-    // New paragraph when the baseline-to-baseline pitch between consecutive lines exceeds this many
-    // median-line-heights (sits between single spacing ~1.0 and double spacing ~2.0).
+    // Legacy / fallback paragraph-split threshold, in median glyph-box heights. Used only when no
+    // ParagraphModel is supplied (a direct Render call, or a page with too few margin-reaching lines to
+    // measure a wrap pitch). NOT reliable on its own: the glyph-box height underestimates the
+    // baseline-to-baseline pitch, so a loosely-leaded document (a JP/CN contract at ~2.8× glyph height per
+    // line) mis-split every wrapped line into its own paragraph (#407). The ParagraphModel path supersedes it.
     private const double ParagraphPitchLineHeights = 1.6;
+
+    // #407 paragraph reconstruction. The within-paragraph line pitch is the document's OWN line spacing, not a
+    // fixed multiple of the glyph height; a wrapped line is one that reached the right margin (justified body),
+    // a paragraph's last line is short. So measure the wrap pitch from margin-reaching lines and split a
+    // paragraph when the upper line did NOT reach the margin (it ended the paragraph) OR the gap exceeds the
+    // wrap pitch by this scale (a blank-line / section gap). Sits between a wrap (1.0) and a paragraph gap.
+    private const double ParagraphPitchScale = 1.2;
+
+    // Minimum number of margin-reaching ("full") line gaps needed before the measured wrap pitch is trusted;
+    // below this the page falls back to the glyph-height threshold (a near-empty / non-prose page).
+    private const int MinFullWidthGapsForModel = 3;
+
+    // A line counts as margin-reaching ("full", i.e. it wrapped) when its right edge is within this many median
+    // glyph heights of the page's typical full-line edge. Tolerates the ragged variance of a justified body
+    // (a wrapped line ends within ~a glyph or two of the margin) while still excluding a paragraph's short last
+    // line, which sits far further left. Measured against a ROBUST right margin (see BuildParagraphModel), not
+    // the max edge, so one anomalously wide line cannot push every normal full line below the bar.
+    private const double FullWidthRightMarginToleranceScale = 2.0;
+
+    // Two consecutive blocks are folded into one paragraph run only when their horizontal extents overlap by at
+    // least this fraction of the narrower extent — i.e. they share a column. A disjoint block is a different
+    // column and starts a new run, so two columns are never merged into one Render (which would interleave them
+    // by Top). #407.
+    private const double ColumnOverlapFraction = 0.5;
 
     // Two blocks share a visual row (table-row grouping) when their vertical ranges overlap by at least this
     // ratio of the shorter block's height — see ClusterTableCandidateBlocks (#310 Phase B).
@@ -347,7 +385,9 @@ internal static class PdfReadingOrder
     /// (and is close enough) consumes that line and renders it as the figure block's label, so the caption
     /// is not duplicated in the body text.
     /// </summary>
-    public static string Render(IReadOnlyList<TextLine> lines, IReadOnlyList<Figure> figures, PdfHeadingScale? headingScale = null)
+    public static string Render(
+        IReadOnlyList<TextLine> lines, IReadOnlyList<Figure> figures, PdfHeadingScale? headingScale = null,
+        ParagraphModel? paragraphModel = null)
     {
         var medianLineHeight = lines.Count > 0
             ? PdfGeometry.Median(lines.Select(l => l.Bounds.Height))
@@ -432,12 +472,15 @@ internal static class PdfReadingOrder
             .ThenBy(it => it.Bounds.Left)
             .ToList();
 
-        // 4. Fold consecutive text lines into paragraphs; figures are standalone blocks. Split when the
-        // baseline-to-baseline pitch (previous Top -> current Top, both descending) exceeds the threshold.
+        // 4. Fold consecutive text lines into paragraphs; figures are standalone blocks. With a ParagraphModel
+        // (#407) a line continues the paragraph only when the PREVIOUS line reached the right margin (it wrapped)
+        // and the gap is within the measured wrap pitch; otherwise — a short (paragraph-ending) previous line or
+        // a blank-line/section gap — it splits. Without a model, fall back to the legacy glyph-height pitch.
         var paragraphPitch = (medianLineHeight > 0 ? medianLineHeight : 0.0) * ParagraphPitchLineHeights;
         var blocks = new List<string>();
         var paragraph = new List<string>();
         double? previousTop = null;
+        var previousFull = false;
 
         void FlushParagraph()
         {
@@ -445,13 +488,15 @@ internal static class PdfReadingOrder
             {
                 // Lines were inline-escaped at item creation; now neutralize a leading block marker on the
                 // folded paragraph (e.g. a contract line "1. Definitions" / "- clause" / "# heading" that
-                // would otherwise be re-parsed as a list / heading). The lines are space-joined into one
-                // output line, so only its start is a line-start position.
-                blocks.Add(MarkdownText.EscapeLineStarts(string.Join(" ", paragraph)));
+                // would otherwise be re-parsed as a list / heading). The lines are joined into one output line
+                // (CJK boundary -> no space, since CJK text is not space-delimited; otherwise a space), so only
+                // its start is a line-start position.
+                blocks.Add(MarkdownText.EscapeLineStarts(JoinWrappedLines(paragraph)));
                 paragraph.Clear();
             }
 
             previousTop = null;
+            previousFull = false;
         }
 
         foreach (var item in orderedItems)
@@ -483,13 +528,25 @@ internal static class PdfReadingOrder
                 continue;
             }
 
-            if (previousTop is double top && paragraphPitch > 0 && (top - item.Bounds.Top) > paragraphPitch)
+            var full = paragraphModel is { } pm && item.Bounds.Right >= pm.ContentRight - pm.FullWidthTolerance;
+            if (previousTop is double top)
             {
-                FlushParagraph();
+                var gap = top - item.Bounds.Top;
+                var continuesParagraph = paragraphModel is { } model
+                    // Justification-aware: only a margin-reaching previous line wraps onto this one, and only
+                    // within the wrap pitch (a larger gap is a blank-line / section break).
+                    ? previousFull && gap <= model.SplitPitch
+                    // Legacy: split purely on the glyph-height pitch.
+                    : paragraphPitch > 0 && gap <= paragraphPitch;
+                if (!continuesParagraph)
+                {
+                    FlushParagraph();
+                }
             }
 
             paragraph.Add(item.Text);
             previousTop = item.Bounds.Top;
+            previousFull = full;
         }
 
         FlushParagraph();
@@ -591,6 +648,14 @@ internal static class PdfReadingOrder
         IReadOnlyList<Word> words, IReadOnlyList<Figure> figures, bool reconstructTables,
         PdfHeadingScale? headingScale)
     {
+        // #407: build the page's justification-aware paragraph model once (right margin + measured wrap pitch)
+        // and feed it to every Render call below, so a paragraph the segmenter cut into per-line blocks re-folds.
+        var pageLines = GroupWordsIntoLines(words);
+        var medianLineHeight = pageLines.Count > 0
+            ? PdfGeometry.Median(pageLines.Select(l => l.Bounds.Height))
+            : 0.0;
+        var paragraphModel = BuildParagraphModel(pageLines, medianLineHeight);
+
         IReadOnlyList<DlaTextBlock> orderedBlocks;
         try
         {
@@ -601,7 +666,7 @@ internal static class PdfReadingOrder
             // Any segmenter/reading-order fault degrades to the flat path: the page still renders and no
             // content is lost (the digital text layer is the channel's primary, non-negotiable payload).
             // A cancellation is NOT swallowed — it propagates so a host/job shutdown aborts promptly.
-            return Render(GroupWordsIntoLines(words), figures, headingScale);
+            return Render(pageLines, figures, headingScale, paragraphModel);
         }
 
         // A single region (or no/one-block segmentation) is exactly the #301 behavior — render the whole
@@ -610,7 +675,7 @@ internal static class PdfReadingOrder
         // attempted here — an accepted #329 first-pass limitation.)
         if (orderedBlocks.Count <= 1)
         {
-            return Render(GroupWordsIntoLines(words), figures, headingScale);
+            return Render(pageLines, figures, headingScale, paragraphModel);
         }
 
         // Non-lossy guard: RecursiveXYCut partitions every word into a leaf, so block words should account
@@ -621,7 +686,7 @@ internal static class PdfReadingOrder
             block => block.TextLines.Sum(line => line.Words.Count(w => !string.IsNullOrWhiteSpace(w.Text))));
         if (blockMeaningful < inputMeaningful)
         {
-            return Render(GroupWordsIntoLines(words), figures, headingScale);
+            return Render(pageLines, figures, headingScale, paragraphModel);
         }
 
         // Attach each figure to the block it reads with (nearest block centroid) so figure inlining +
@@ -635,12 +700,39 @@ internal static class PdfReadingOrder
 
         var rendered = new List<string>(orderedBlocks.Count);
         var emittedTables = new HashSet<int>();
+
+        // #407: accumulate consecutive non-table, same-column blocks into ONE paragraph run, then render the run
+        // through a single Render call so a paragraph the segmenter cut into per-line blocks (loose leading)
+        // re-folds via the justification model. A table, or a block that does not horizontally overlap the
+        // previous one (a different column), flushes the run first — so columns are never interleaved.
+        var runLines = new List<TextLine>();
+        var runFigures = new List<Figure>();
+        PdfRectangle? lastBlockBox = null;
+
+        void FlushRun()
+        {
+            if (runLines.Count > 0 || runFigures.Count > 0)
+            {
+                var runMarkdown = Render(runLines, runFigures, headingScale, paragraphModel);
+                if (!string.IsNullOrWhiteSpace(runMarkdown))
+                {
+                    rendered.Add(runMarkdown);
+                }
+
+                runLines.Clear();
+                runFigures.Clear();
+            }
+
+            lastBlockBox = null;
+        }
+
         for (var b = 0; b < orderedBlocks.Count; b++)
         {
-            // A block that belongs to a reconstructed table: emit the table once, at the reading position of
-            // the cluster's lead (first-encountered, lowest-index) block, then skip the cluster's blocks.
+            // A block that belongs to a reconstructed table: flush the open run, then emit the table once, at
+            // the reading position of the cluster's lead (first-encountered, lowest-index) block.
             if (tables.LeadByBlock.TryGetValue(b, out var lead))
             {
+                FlushRun();
                 if (emittedTables.Add(lead))
                 {
                     rendered.Add(tables.MarkdownByLead[lead]);
@@ -665,6 +757,7 @@ internal static class PdfReadingOrder
 
             // Re-group the block's words into visual lines with the existing robust clustering (rather than
             // the segmenter's own lines), so tall-glyph / CJK handling and paragraph folding are unchanged.
+            var blockBox = orderedBlocks[b].BoundingBox;
             var blockWords = orderedBlocks[b].TextLines.SelectMany(line => line.Words).ToList();
             var blockLines = GroupWordsIntoLines(blockWords);
             var blockFigures = figuresByBlock[b];
@@ -673,13 +766,19 @@ internal static class PdfReadingOrder
                 continue;
             }
 
-            var blockMarkdown = Render(blockLines, blockFigures, headingScale);
-            if (!string.IsNullOrWhiteSpace(blockMarkdown))
+            // A block in a different column (no horizontal overlap with the previous one) starts a new run, so
+            // Render never sees two columns at once (which it would interleave by Top).
+            if (lastBlockBox is { } previous && !HorizontallyOverlap(previous, blockBox))
             {
-                rendered.Add(blockMarkdown);
+                FlushRun();
             }
+
+            runLines.AddRange(blockLines);
+            runFigures.AddRange(blockFigures);
+            lastBlockBox = blockBox;
         }
 
+        FlushRun();
         return string.Join("\n\n", rendered);
     }
 
@@ -1262,6 +1361,119 @@ internal static class PdfReadingOrder
     }
 
     private static bool LooksLikeCaption(string text) => CaptionPattern.IsMatch(text);
+
+    /// <summary>
+    /// Builds the page's justification-aware <see cref="ParagraphModel"/> (#407) from its reconstructed lines:
+    /// the right-margin position (<c>ContentRight</c> = the rightmost line edge) and the wrap pitch (median of
+    /// the baseline-to-baseline gaps below a margin-reaching line — those gaps are genuine line wraps, not
+    /// paragraph breaks). Returns <c>null</c> when there are too few margin-reaching gaps to trust the pitch
+    /// (<see cref="MinFullWidthGapsForModel"/>), so a non-prose / near-empty page falls back to the legacy
+    /// glyph-height threshold rather than splitting on a noisy estimate.
+    /// </summary>
+    private static ParagraphModel? BuildParagraphModel(IReadOnlyList<TextLine> lines, double medianLineHeight)
+    {
+        if (lines.Count <= MinFullWidthGapsForModel || medianLineHeight <= 0)
+        {
+            return null;
+        }
+
+        // Robust right margin: the median right edge among the wider half of lines — the TYPICAL full-line edge,
+        // not the absolute max (which a single anomalously wide line would inflate, pushing every normal full
+        // line below the "reached the margin" bar). A page's short paragraph-ending lines fall in the lower half
+        // and are excluded; the wider half is the wrapped (full) lines, whose median is the working margin.
+        var sortedRights = lines.Select(l => l.Bounds.Right).OrderBy(r => r).ToList();
+        var upperRights = sortedRights.Skip(sortedRights.Count / 2).ToList();
+        var contentRight = upperRights[upperRights.Count / 2];
+        var tolerance = medianLineHeight * FullWidthRightMarginToleranceScale;
+
+        var ordered = lines.OrderByDescending(l => l.Bounds.Top).ToList();
+        var wrapGaps = new List<double>(ordered.Count - 1);
+        for (var i = 1; i < ordered.Count; i++)
+        {
+            var gap = ordered[i - 1].Bounds.Top - ordered[i].Bounds.Top;
+            // Only count the gap below a line that reached the right margin: such a line wrapped, so the gap
+            // is the document's true line pitch. A short line's gap is a paragraph break and is excluded.
+            if (gap > 0 && ordered[i - 1].Bounds.Right >= contentRight - tolerance)
+            {
+                wrapGaps.Add(gap);
+            }
+        }
+
+        if (wrapGaps.Count < MinFullWidthGapsForModel)
+        {
+            return null;
+        }
+
+        var wrapPitch = PdfGeometry.Median(wrapGaps);
+        return wrapPitch > 0 ? new ParagraphModel(wrapPitch * ParagraphPitchScale, contentRight, tolerance) : null;
+    }
+
+    /// <summary>
+    /// Joins a folded paragraph's lines into one output line. A wrap between two CJK glyphs is closed with no
+    /// separator (CJK text is not space-delimited, so a space would be a visible artifact at the former line
+    /// break — the #407 「ウ」/「ェブサイト」 case); every other boundary keeps a single space (Latin word join).
+    /// </summary>
+    private static string JoinWrappedLines(IReadOnlyList<string> lines)
+    {
+        if (lines.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var sb = new StringBuilder(lines[0]);
+        for (var i = 1; i < lines.Count; i++)
+        {
+            if (NeedsSpaceBetween(lines[i - 1], lines[i]))
+            {
+                sb.Append(' ');
+            }
+
+            sb.Append(lines[i]);
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>A space is needed at a wrap boundary unless the glyphs on both sides are CJK (then join directly).</summary>
+    private static bool NeedsSpaceBetween(string previous, string current)
+    {
+        if (previous.Length == 0 || current.Length == 0)
+        {
+            return false;
+        }
+
+        return !(IsCjk(previous[^1]) && IsCjk(current[0]));
+    }
+
+    /// <summary>Whether <paramref name="c"/> is a CJK / kana / fullwidth glyph (text not delimited by spaces).</summary>
+    private static bool IsCjk(char c)
+        => (c >= 0x3040 && c <= 0x30FF)   // Hiragana + Katakana
+        || (c >= 0x3400 && c <= 0x9FFF)   // CJK Unified Ideographs (incl. Ext A)
+        || (c >= 0xF900 && c <= 0xFAFF)   // CJK Compatibility Ideographs
+        || (c >= 0xFF00 && c <= 0xFFEF)   // Halfwidth & Fullwidth Forms
+        || (c >= 0x3000 && c <= 0x303F);  // CJK Symbols & Punctuation
+
+    /// <summary>
+    /// Whether two blocks' horizontal extents overlap by at least <see cref="ColumnOverlapFraction"/> of the
+    /// narrower extent — i.e. they share a column and may fold into one paragraph run (#407). Disjoint blocks
+    /// are different columns and must render separately so their lines are never interleaved by Top.
+    /// </summary>
+    private static bool HorizontallyOverlap(PdfRectangle a, PdfRectangle b)
+    {
+        var aLeft = Math.Min(a.Left, a.Right);
+        var aRight = Math.Max(a.Left, a.Right);
+        var bLeft = Math.Min(b.Left, b.Right);
+        var bRight = Math.Max(b.Left, b.Right);
+
+        var overlap = Math.Min(aRight, bRight) - Math.Max(aLeft, bLeft);
+        if (overlap <= 0)
+        {
+            return false;
+        }
+
+        var minWidth = Math.Min(aRight - aLeft, bRight - bLeft);
+        return minWidth <= 0 || overlap >= minWidth * ColumnOverlapFraction;
+    }
 
     private static PdfRectangle Union(PdfRectangle a, PdfRectangle b)
         => new(

@@ -282,6 +282,91 @@ public class PdfReadingOrder_Tests
             .ShouldBe("Clause 3.14 applies - see above");
     }
 
+    // ---- #407: justification-aware paragraph folding for loosely-leaded documents ----
+    // The model carries the right margin + the measured wrap pitch. A line continues the paragraph only when
+    // the PREVIOUS line reached the margin (it wrapped) and the gap is within the wrap pitch.
+
+    [Fact]
+    public void Render_with_model_folds_loosely_leaded_full_width_lines_into_one_paragraph()
+    {
+        // Pitch 24 ≈ 2.7x the 9-tall glyphs — the loose leading that the old glyph-height threshold mis-split.
+        // The first three lines reach the right margin (Right=500); the short last line (Right=200) ends it.
+        var lines = new List<PdfReadingOrder.TextLine>
+        {
+            new(new PdfRectangle(50, 691, 500, 700), "first wrapped line"),
+            new(new PdfRectangle(50, 667, 500, 676), "second wrapped line"),
+            new(new PdfRectangle(50, 643, 500, 652), "third wrapped line"),
+            new(new PdfRectangle(50, 619, 200, 628), "short last line")
+        };
+        var model = new PdfReadingOrder.ParagraphModel(SplitPitch: 30, ContentRight: 500, FullWidthTolerance: 12);
+
+        PdfReadingOrder.Render(lines, Array.Empty<PdfReadingOrder.Figure>(), null, model)
+            .ShouldBe("first wrapped line second wrapped line third wrapped line short last line");
+    }
+
+    [Fact]
+    public void Render_with_model_splits_a_new_paragraph_after_a_short_line()
+    {
+        // A short (paragraph-ending) line is not full, so the next line — even at the same loose pitch — starts
+        // a new paragraph. The short tail still joins the full line above it.
+        var lines = new List<PdfReadingOrder.TextLine>
+        {
+            new(new PdfRectangle(50, 691, 500, 700), "full line ends paragraph one"),
+            new(new PdfRectangle(50, 667, 250, 676), "short tail one"),
+            new(new PdfRectangle(50, 643, 500, 652), "full line of paragraph two"),
+            new(new PdfRectangle(50, 619, 240, 628), "short tail two")
+        };
+        var model = new PdfReadingOrder.ParagraphModel(30, 500, 12);
+
+        PdfReadingOrder.Render(lines, Array.Empty<PdfReadingOrder.Figure>(), null, model)
+            .ShouldBe("full line ends paragraph one short tail one\n\nfull line of paragraph two short tail two");
+    }
+
+    [Fact]
+    public void Render_with_model_splits_two_full_lines_on_a_blank_line_gap()
+    {
+        // Even two margin-reaching lines split when the gap is a blank-line / section gap (60 > splitPitch 30).
+        var lines = new List<PdfReadingOrder.TextLine>
+        {
+            new(new PdfRectangle(50, 691, 500, 700), "paragraph one only line"),
+            new(new PdfRectangle(50, 631, 500, 640), "paragraph two only line")
+        };
+        var model = new PdfReadingOrder.ParagraphModel(30, 500, 12);
+
+        PdfReadingOrder.Render(lines, Array.Empty<PdfReadingOrder.Figure>(), null, model)
+            .ShouldBe("paragraph one only line\n\nparagraph two only line");
+    }
+
+    [Fact]
+    public void Render_with_model_joins_wrapped_cjk_lines_without_a_space()
+    {
+        // The #407 「ウ」/「ェブサイト」 case: a wrap between two CJK glyphs must close with NO space (CJK text is
+        // not space-delimited), while a Latin boundary keeps its space (covered by the folding tests above).
+        var lines = new List<PdfReadingOrder.TextLine>
+        {
+            new(new PdfRectangle(50, 691, 500, 700), "契約の内容はウ"),
+            new(new PdfRectangle(50, 667, 300, 676), "ェブサイト制作")
+        };
+        var model = new PdfReadingOrder.ParagraphModel(30, 500, 12);
+
+        PdfReadingOrder.Render(lines, Array.Empty<PdfReadingOrder.Figure>(), null, model)
+            .ShouldBe("契約の内容はウェブサイト制作");
+    }
+
+    [Fact]
+    public void Render_without_a_model_keeps_the_legacy_glyph_height_folding()
+    {
+        // No model (a direct Render call) → unchanged legacy behavior: tight lines merge, a blank-line gap splits.
+        var tight = new List<PdfReadingOrder.TextLine>
+        {
+            new(new PdfRectangle(0, 688, 200, 700), "Wrapped line one"),
+            new(new PdfRectangle(0, 674, 200, 686), "wrapped line two")
+        };
+
+        PdfReadingOrder.Render(tight, Array.Empty<PdfReadingOrder.Figure>())
+            .ShouldBe("Wrapped line one wrapped line two");
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;
