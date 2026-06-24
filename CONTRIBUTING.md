@@ -2,6 +2,15 @@
 
 Thank you for considering a contribution. This page covers the practical workflow; the architectural contract lives in [CLAUDE.md](./CLAUDE.md) and is the truth source for what belongs in this repository (and what is explicitly out of scope).
 
+## Questions, ideas, and bugs
+
+Not every contribution starts with code. Pick the right channel so the issue tracker stays scoped to actionable work — this mirrors the [issue chooser](https://github.com/dignite-projects/dignite-extract/issues/new/choose) and the [Discussions welcome post](https://github.com/dignite-projects/dignite-extract/discussions/417):
+
+- **Usage / configuration / "is this in scope?" questions** → [Discussions → Q&A](https://github.com/dignite-projects/dignite-extract/discussions/categories/q-a), **not** an Issue.
+- **Early ideas, before a formal proposal** → [Discussions → Ideas](https://github.com/dignite-projects/dignite-extract/discussions/categories/ideas). Boundary-touching ideas should be floated here first, then promoted to an Issue once there is direction (see [Issue-first principle](#issue-first-principle)).
+- **Reproducible bugs / concrete change proposals** → [open an Issue](https://github.com/dignite-projects/dignite-extract/issues/new/choose) using a template.
+- **Security vulnerabilities** → never a public issue; use [private vulnerability reporting](https://github.com/dignite-projects/dignite-extract/security/advisories/new) (see [SECURITY.md](./SECURITY.md)).
+
 ## Development environment
 
 Follow [README → Getting started](./README.md#getting-started-local-development). In short: .NET SDK 10, Node.js 20+, SQL Server (LocalDB works), optionally Docker Desktop for the PaddleOCR sidecar and the local OpenTelemetry dashboard. An OpenAI-compatible LLM API key is mandatory — see [docs/ai-provider.md](./docs/ai-provider.md).
