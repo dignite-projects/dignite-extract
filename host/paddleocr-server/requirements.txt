@@ -3,4 +3,4 @@ paddleocr>=3.0.0
 paddlex[ocr]>=3.0.0
 fastapi==0.115.12
 uvicorn[standard]==0.34.2
-python-multipart==0.0.20
+python-multipart==0.0.31
