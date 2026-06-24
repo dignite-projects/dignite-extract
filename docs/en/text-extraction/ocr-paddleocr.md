@@ -33,5 +33,5 @@ The first run downloads ~600 MB of model weights and takes 30–60 seconds. Subs
 ## See also
 
 - [Text extraction overview](text-extraction.md) — Markdown-first contract, the two extraction paths, OCR provider comparison
-- [Deployment](deployment.md) — running the sidecar in production
-- [Local development](local-development.md) — the dev sidecar loop
+- [Deployment](../deployment/deployment.md) — running the sidecar in production
+- [Local development](../get-started/local-development.md) — the dev sidecar loop

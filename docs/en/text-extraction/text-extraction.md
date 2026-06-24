@@ -97,6 +97,6 @@ Custom OCR provider projects only need to reference `Dignite.Extract.Ocr` — th
 ## See also
 
 - OCR providers: [PaddleOCR](ocr-paddleocr.md) · [Azure Document Intelligence](ocr-azure-document-intelligence.md) · [Vision-LLM](ocr-vision-llm.md)
-- [Classification pipeline](classification.md) — how the LLM consumes the Markdown
-- [AI provider](ai-provider.md) — provider wiring for the keyed chat clients used by classification / field extraction / title generation
-- [Deployment checklist](deployment-checklist.md) — verifying OCR after a sidecar upgrade
+- [Classification pipeline](../pipeline/classification.md) — how the LLM consumes the Markdown
+- [AI provider](../configuration/ai-provider.md) — provider wiring for the keyed chat clients used by classification / field extraction / title generation
+- [Deployment checklist](../deployment/deployment-checklist.md) — verifying OCR after a sidecar upgrade

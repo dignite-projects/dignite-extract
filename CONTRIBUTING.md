@@ -13,7 +13,7 @@ Not every contribution starts with code. Pick the right channel so the issue tra
 
 ## Development environment
 
-Follow [README → Getting started](./README.md#getting-started-local-development). In short: .NET SDK 10, Node.js 20+, SQL Server (LocalDB works), optionally Docker Desktop for the PaddleOCR sidecar and the local OpenTelemetry dashboard. An OpenAI-compatible LLM API key is mandatory — see [docs/ai-provider.md](./docs/ai-provider.md).
+Follow [README → Getting started](./README.md#getting-started-local-development). In short: .NET SDK 10, Node.js 20+, SQL Server (LocalDB works), optionally Docker Desktop for the PaddleOCR sidecar and the local OpenTelemetry dashboard. An OpenAI-compatible LLM API key is mandatory — see [AI provider](./docs/en/configuration/ai-provider.md).
 
 After cloning, activate the shared git hooks once:
 

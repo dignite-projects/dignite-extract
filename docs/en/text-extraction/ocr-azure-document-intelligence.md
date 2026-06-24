@@ -27,4 +27,4 @@ Dignite Extract fixes the Azure model to `prebuilt-layout` and does not expose i
 ## See also
 
 - [Text extraction overview](text-extraction.md) — Markdown-first contract, the two extraction paths, OCR provider comparison
-- [Deployment](deployment.md)
+- [Deployment](../deployment/deployment.md)

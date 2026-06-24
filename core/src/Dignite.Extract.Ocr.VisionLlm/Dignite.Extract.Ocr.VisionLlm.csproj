@@ -23,7 +23,7 @@
     <!-- Faithful PDF page rasterization (scanned / image-only PDFs) → PNG via PDFium + SkiaSharp.
          There is no pure-managed equivalent; PDFium is the de-facto native renderer.
          Linux deployments additionally need SkiaSharp.NativeAssets.Linux + libfontconfig1
-         (documented in docs/ocr-vision-llm.md). -->
+         (documented in docs/en/text-extraction/ocr-vision-llm.md). -->
     <PackageReference Include="PDFtoImage" />
   </ItemGroup>
 

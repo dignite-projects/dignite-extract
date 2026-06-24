@@ -23,7 +23,7 @@ public class DocumentClassificationWorkflow : ITransientDependency
     /// prompt-unique call — routed through the dedicated keyed client
     /// (<see cref="ExtractConsts.StructuredChatClientKey"/>) so traces stay clean
     /// and hosts can optionally point classification at a smaller / cheaper model than
-    /// the main agentic chat. See <c>docs/ai-provider.md</c> keyed-clients table.
+    /// the main agentic chat. See <c>docs/en/configuration/ai-provider.md</c> keyed-clients table.
     /// </summary>
     private readonly IChatClient _chatClient;
     private readonly IPromptProvider _promptProvider;

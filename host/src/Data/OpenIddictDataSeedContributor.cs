@@ -120,7 +120,7 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
         // is the authorization-server half of the RFC 9728 discovery flow whose resource-server half was
         // wired in #278/#280. We deliberately do NOT implement Dynamic Client Registration (RFC 7591):
         // Extract is a self-hosted channel facing a knowable set of clients, so an open registration
-        // endpoint is pure attack surface. Instead the client_id is documented (docs/mcp-server.md) and
+        // endpoint is pure attack surface. Instead the client_id is documented (docs/en/egress/mcp-server.md) and
         // operators paste it into each client's OAuth settings — every real target supports a manually
         // specified client_id.
         //
@@ -154,7 +154,7 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
             //   http://localhost/oauth/callback/debug   → MCP Inspector manual/debug flow
             //   http://localhost/callback               → Claude Code CLI
             //   https://claude.ai/api/mcp/auth_callback → Claude.ai / Claude Desktop / mobile (fixed hosted callback)
-            // Cursor (custom cursor:// scheme) still needs adding if used. See docs/mcp-server.md.
+            // Cursor (custom cursor:// scheme) still needs adding if used. See docs/en/egress/mcp-server.md.
             var mcpRedirectUris = configurationSection
                 .GetSection("Extract_Mcp:RedirectUris")
                 .Get<List<string>>();

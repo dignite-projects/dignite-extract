@@ -67,17 +67,17 @@ ABP stores some configuration values (e.g. tenant connection strings) encrypted 
 
 ## OCR provider
 
-Dignite Extract ships three OCR options ([comparison](text-extraction.md#ocr--choosing-a-provider)):
+Dignite Extract ships three OCR options ([comparison](../text-extraction/text-extraction.md#ocr--choosing-a-provider)):
 
-- **Vision-LLM** (current default, #259) — `IChatClient`-based, no sidecar; reuses the host's keyed vision chat client. Strongest for phone photos / thermal receipts / image-only PDFs. See [ocr-vision-llm.md](ocr-vision-llm.md).
-- **PaddleOCR** — local Docker sidecar, CPU, never leaves the network. See [ocr-paddleocr.md](ocr-paddleocr.md).
-- **Azure Document Intelligence** — cloud option for production workloads that can leave the network. See [ocr-azure-document-intelligence.md](ocr-azure-document-intelligence.md).
+- **Vision-LLM** (current default, #259) — `IChatClient`-based, no sidecar; reuses the host's keyed vision chat client. Strongest for phone photos / thermal receipts / image-only PDFs. See [ocr-vision-llm.md](../text-extraction/ocr-vision-llm.md).
+- **PaddleOCR** — local Docker sidecar, CPU, never leaves the network. See [ocr-paddleocr.md](../text-extraction/ocr-paddleocr.md).
+- **Azure Document Intelligence** — cloud option for production workloads that can leave the network. See [ocr-azure-document-intelligence.md](../text-extraction/ocr-azure-document-intelligence.md).
 
 Host module wires exactly one via `[DependsOn(...)]` + matching `<ProjectReference>` in `host/src/Dignite.Extract.Host.csproj` (switching to/from Vision-LLM also means adding/removing its keyed vision `IChatClient` registration in `ConfigureAI`).
 
 ## AI provider
 
-The keyed `IChatClient` registrations (title generator + structured, plus a vision client when the default Vision-LLM OCR provider is enabled) and their model id selection are covered in [ai-provider.md](ai-provider.md). Provider wiring is host-only — credentials never reach the Application or Domain layer. The host does **not** register an `IEmbeddingGenerator` — vectorization is downstream RAG's responsibility, not the channel's.
+The keyed `IChatClient` registrations (title generator + structured, plus a vision client when the default Vision-LLM OCR provider is enabled) and their model id selection are covered in [ai-provider.md](../configuration/ai-provider.md). Provider wiring is host-only — credentials never reach the Application or Domain layer. The host does **not** register an `IEmbeddingGenerator` — vectorization is downstream RAG's responsibility, not the channel's.
 
 > **CLAUDE.md constraint**: LLM provider + API key are configured at the host deployment layer, **not** exposed for end-user configuration. Letting business users fill API keys is a product-philosophy mistake (they are not technical users).
 
@@ -104,7 +104,7 @@ cd host/etc/docker
 ./stop-docker.ps1
 ```
 
-For local development without the full image build, see [local-development.md](local-development.md) — it runs the API via `dotnet run` against a local SQL Server (LocalDB or container) and only spins up the PaddleOCR / observability sidecars via `host/docker-compose.yml`.
+For local development without the full image build, see [local-development.md](../get-started/local-development.md) — it runs the API via `dotnet run` against a local SQL Server (LocalDB or container) and only spins up the PaddleOCR / observability sidecars via `host/docker-compose.yml`.
 
 ## Migrations
 
@@ -123,9 +123,9 @@ When deploying to a new environment, upgrading critical dependencies, or shippin
 
 ## See also
 
-- [Local development setup](local-development.md) — running on a developer laptop
-- [Text extraction](text-extraction.md) — choosing and configuring an OCR provider
-- [AI provider](ai-provider.md) — wiring the keyed `IChatClient` registrations
+- [Local development setup](../get-started/local-development.md) — running on a developer laptop
+- [Text extraction](../text-extraction/text-extraction.md) — choosing and configuring an OCR provider
+- [AI provider](../configuration/ai-provider.md) — wiring the keyed `IChatClient` registrations
 - [Deployment checklist](deployment-checklist.md) — release smoke tests
 - [Observability](observability.md) — OpenTelemetry export targets
 

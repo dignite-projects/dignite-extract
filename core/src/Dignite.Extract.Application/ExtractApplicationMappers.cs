@@ -104,7 +104,7 @@ public partial class DocumentPipelineRunToDocumentPipelineRunDtoMapper : MapperB
         }
 
         // When read back from EF Core / ABP persistence, ExtraProperties values are JsonElement.
-        // See docs/pipeline-runs.md "Server-Side Notes".
+        // See docs/en/pipeline/pipeline-runs.md "Server-Side Notes".
         if (raw is JsonElement json && json.ValueKind == JsonValueKind.Array)
         {
             return JsonSerializer.Deserialize<List<PipelineRunCandidate>>(json.GetRawText());

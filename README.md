@@ -76,7 +76,7 @@ Create `host/src/appsettings.Development.json` with your local SQL Server connec
 
 > This file is git-ignored. In Development mode, the application automatically generates temporary OpenIddict certificates — no `.pfx` file is needed. For LocalDB, the committed `appsettings.json` default (`Server=(LocalDb)\MSSQLLocalDB;...`) already works without any override.
 
-An LLM provider is **mandatory** — classification and field extraction have no non-LLM fallback, and the host fails fast at startup while `Extract:ApiKey` is still the committed placeholder. Any OpenAI-compatible endpoint works; with the default Vision LLM OCR provider, `VisionOcrModelId` must point at a vision-capable model. See [docs/ai-provider.md](./docs/ai-provider.md).
+An LLM provider is **mandatory** — classification and field extraction have no non-LLM fallback, and the host fails fast at startup while `Extract:ApiKey` is still the committed placeholder. Any OpenAI-compatible endpoint works; with the default Vision LLM OCR provider, `VisionOcrModelId` must point at a vision-capable model. See [AI provider](./docs/en/configuration/ai-provider.md).
 
 ### 3. Install client-side libraries
 
@@ -119,34 +119,51 @@ SPA: `http://localhost:4200`. Default seeded credentials: `admin` / `1q2w3E*`.
 
 Dignite Extract ships three OCR providers; the host enables exactly one (`[DependsOn(...)]` in `host/src/ExtractHostModule.cs` + the matching `ProjectReference` in `host/src/Dignite.Extract.Host.csproj`):
 
-* **Vision LLM** — the host's current default (#259). Sends images / rasterized PDF pages to a vision-capable `IChatClient` model; the strongest option for phone photos, thermal receipts, and image-only PDFs. No sidecar — only a vision model id. See [docs/ocr-vision-llm.md](./docs/ocr-vision-llm.md).
-* **PaddleOCR** — local Docker sidecar (PP-StructureV3, CPU); data never leaves the network. See [docs/ocr-paddleocr.md](./docs/ocr-paddleocr.md).
-* **Azure Document Intelligence** — cloud option (`prebuilt-layout`, high accuracy) when data is allowed to leave the network. See [docs/ocr-azure-document-intelligence.md](./docs/ocr-azure-document-intelligence.md). **Not yet validated against a live Azure resource — community testing welcome ([#327](https://github.com/dignite-projects/dignite-extract/issues/327)).**
+* **Vision LLM** — the host's current default (#259). Sends images / rasterized PDF pages to a vision-capable `IChatClient` model; the strongest option for phone photos, thermal receipts, and image-only PDFs. No sidecar — only a vision model id. See [docs/en/text-extraction/ocr-vision-llm.md](./docs/en/text-extraction/ocr-vision-llm.md).
+* **PaddleOCR** — local Docker sidecar (PP-StructureV3, CPU); data never leaves the network. See [docs/en/text-extraction/ocr-paddleocr.md](./docs/en/text-extraction/ocr-paddleocr.md).
+* **Azure Document Intelligence** — cloud option (`prebuilt-layout`, high accuracy) when data is allowed to leave the network. See [docs/en/text-extraction/ocr-azure-document-intelligence.md](./docs/en/text-extraction/ocr-azure-document-intelligence.md). **Not yet validated against a live Azure resource — community testing welcome ([#327](https://github.com/dignite-projects/dignite-extract/issues/327)).**
 
-Full selection guidance, configuration, and resource footprint: see [docs/text-extraction.md](./docs/text-extraction.md).
+Full selection guidance, configuration, and resource footprint: see [docs/en/text-extraction/text-extraction.md](./docs/en/text-extraction/text-extraction.md).
 
 ## Deploying to production
 
-For database connection strings, OpenIddict signing certificate, string-encryption key, and the Docker layout, see [docs/deployment.md](./docs/deployment.md). For per-release smoke tests, see [docs/deployment-checklist.md](./docs/deployment-checklist.md).
+For database connection strings, OpenIddict signing certificate, string-encryption key, and the Docker layout, see [docs/en/deployment/deployment.md](./docs/en/deployment/deployment.md). For per-release smoke tests, see [docs/en/deployment/deployment-checklist.md](./docs/en/deployment/deployment-checklist.md).
 
 ## Documentation
 
-Feature docs (start here for any specific topic):
+Start at the **[documentation index](./docs/en/index.md)**. Feature docs are grouped to follow the channel's data flow:
 
-* [Local development setup](./docs/local-development.md) — prerequisites, Docker sidecars, configuration, troubleshooting
-* [Text extraction](./docs/text-extraction.md) — Markdown-first contract, the two extraction paths, OCR provider comparison
-* [PaddleOCR](./docs/ocr-paddleocr.md) — local OCR sidecar (PP-StructureV3, CPU); model choice and resource footprint
-* [Azure Document Intelligence](./docs/ocr-azure-document-intelligence.md) — cloud OCR (`prebuilt-layout`); resource setup and F0 tier limits
-* [Vision-LLM OCR](./docs/ocr-vision-llm.md) — multimodal-`IChatClient` OCR for photos / thermal receipts / image-only PDFs
-* [Classification](./docs/classification.md) — document-type pipeline and prompt tuning
-* [Reprocessing](./docs/reprocessing.md) — bulk re-run of classification / field extraction over existing documents after a config change
-* [Export templates](./docs/export-templates.md) — per-tenant CSV / XLSX file egress: field projection, rename, ordering — zero business transformation
-* [MCP server](./docs/mcp-server.md) — document resources + structured search tool over Streamable HTTP, OpenIddict Bearer auth
-* [AI provider](./docs/ai-provider.md) — provider wiring for the two keyed chat clients (title generator + structured)
-* [Observability](./docs/observability.md) — OpenTelemetry pipeline, aspire-dashboard for local dev, switching OTLP backends
-* [Pipeline runs](./docs/pipeline-runs.md) — run history and review-UI payloads
-* [Deployment](./docs/deployment.md) — DB, certificate, Docker
-* [Deployment checklist](./docs/deployment-checklist.md) — per-release smoke tests
+**Get started**
+
+* [Local development setup](./docs/en/get-started/local-development.md) — prerequisites, Docker sidecars, configuration, troubleshooting
+
+**Text extraction** (OCR + Markdown)
+
+* [Text extraction](./docs/en/text-extraction/text-extraction.md) — Markdown-first contract, the two extraction paths, OCR provider comparison
+* [PaddleOCR](./docs/en/text-extraction/ocr-paddleocr.md) — local OCR sidecar (PP-StructureV3, CPU); model choice and resource footprint
+* [Azure Document Intelligence](./docs/en/text-extraction/ocr-azure-document-intelligence.md) — cloud OCR (`prebuilt-layout`); resource setup and F0 tier limits
+* [Vision-LLM OCR](./docs/en/text-extraction/ocr-vision-llm.md) — multimodal-`IChatClient` OCR for photos / thermal receipts / image-only PDFs
+
+**Pipeline**
+
+* [Classification](./docs/en/pipeline/classification.md) — document-type pipeline and prompt tuning
+* [Reprocessing](./docs/en/pipeline/reprocessing.md) — bulk re-run of classification / field extraction over existing documents after a config change
+* [Pipeline runs](./docs/en/pipeline/pipeline-runs.md) — run history and review-UI payloads
+
+**Egress**
+
+* [Export templates](./docs/en/egress/export-templates.md) — per-tenant CSV / XLSX file egress: field projection, rename, ordering — zero business transformation
+* [MCP server](./docs/en/egress/mcp-server.md) — document resources + structured search tool over Streamable HTTP, OpenIddict Bearer auth
+
+**Configuration**
+
+* [AI provider](./docs/en/configuration/ai-provider.md) — provider wiring for the two keyed chat clients (title generator + structured)
+
+**Deployment & operations**
+
+* [Deployment](./docs/en/deployment/deployment.md) — DB, certificate, Docker
+* [Deployment checklist](./docs/en/deployment/deployment-checklist.md) — per-release smoke tests
+* [Observability](./docs/en/deployment/observability.md) — OpenTelemetry pipeline, aspire-dashboard for local dev, switching OTLP backends
 
 External references:
 
