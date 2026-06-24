@@ -38,7 +38,7 @@ Add the dashboard when you want to see traces / metrics:
 docker compose --profile observability up -d aspire-dashboard
 ```
 
-See [observability.md](./observability.md) for what's emitted and how to point at a different OTLP backend (Jaeger / Datadog / Tempo / Azure Monitor).
+See [observability.md](../deployment/observability.md) for what's emitted and how to point at a different OTLP backend (Jaeger / Datadog / Tempo / Azure Monitor).
 
 Verify PaddleOCR is ready:
 
@@ -86,7 +86,7 @@ An LLM provider is **required**. The host fails fast at startup if `Extract` is 
 
 `TitleGeneratorModelId` / `StructuredModelId` are optional and default to `ChatModelId`; set them only when you want a different model per workload.
 
-To use a non-OpenAI provider (Azure OpenAI, SiliconFlow, OpenRouter, Ollama, etc.), see [docs/ai-provider.md](./ai-provider.md) — for OpenAI-protocol providers you only swap `Endpoint` + `ApiKey` + model ids; for non-OpenAI wire protocols you override `ConfigureAI` in `ExtractHostModule`. For a zero-cost local option, run Ollama and point `Endpoint` at its `/v1` endpoint (use any non-empty token as `ApiKey`).
+To use a non-OpenAI provider (Azure OpenAI, SiliconFlow, OpenRouter, Ollama, etc.), see [docs/ai-provider.md](../configuration/ai-provider.md) — for OpenAI-protocol providers you only swap `Endpoint` + `ApiKey` + model ids; for non-OpenAI wire protocols you override `ConfigureAI` in `ExtractHostModule`. For a zero-cost local option, run Ollama and point `Endpoint` at its `/v1` endpoint (use any non-empty token as `ApiKey`).
 
 > **OpenIddict certificates**: In Development mode, temporary signing and encryption certificates are generated automatically. No `.pfx` file is needed.
 

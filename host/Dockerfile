@@ -3,7 +3,7 @@ WORKDIR /app
 
 # The default OCR provider (VisionLlm) rasterizes PDF pages through PDFtoImage using
 # PDFium + SkiaSharp. SkiaSharp needs libfontconfig1 on Linux to render vector/text
-# content inside PDFs. See docs/ocr-vision-llm.md.
+# content inside PDFs. See docs/en/text-extraction/ocr-vision-llm.md.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libfontconfig1 \
     && rm -rf /var/lib/apt/lists/*

@@ -1,6 +1,6 @@
 # Document Classification
 
-When a document finishes [text extraction](text-extraction.md), Dignite Extract classifies it against `DocumentType` rows that belong to the same layer as the document (Host documents → `TenantId IS NULL` rows; tenant documents → matching tenant rows). The Host deployer creates their types through the admin UI (`IDocumentTypeAppService`); tenants do the same for their own private types. Dignite Extract ships **no built-in types** and **does not register types in Module startup** — every type is owned by the deployer or tenant, never by Dignite Extract itself.
+When a document finishes [text extraction](../text-extraction/text-extraction.md), Dignite Extract classifies it against `DocumentType` rows that belong to the same layer as the document (Host documents → `TenantId IS NULL` rows; tenant documents → matching tenant rows). The Host deployer creates their types through the admin UI (`IDocumentTypeAppService`); tenants do the same for their own private types. Dignite Extract ships **no built-in types** and **does not register types in Module startup** — every type is owned by the deployer or tenant, never by Dignite Extract itself.
 
 The resulting `DocumentTypeCode` is the routing signal that drives the next channel stages — Host field extraction (#168) for type-bound Host fields and tenant field extraction (#169) for tenant-defined fields — and is also broadcast via `DocumentClassifiedEto` over `DistributedEventBus` so downstream business consumers (in their own repositories) can subscribe and persist their own derived records.
 
@@ -51,7 +51,7 @@ Both Host deployers and tenants create their `DocumentType` rows through the adm
 | `MaxDocumentTypesInClassificationPrompt` | `50` | When more than this many types are registered, the prompt keeps the top N by `Priority`. Tune this against your LLM's context window — more types means a longer prompt and slower / more expensive calls. |
 | `MaxTextLengthPerExtraction` | `8000` | Markdown longer than this is truncated before being sent. The first N characters usually contain the most discriminative content (title, table-of-contents, opening clauses). Increase if your documents bury the type signal deep, but watch token cost. |
 
-The prompt language follows `ExtractBehavior:DefaultLanguage` (see [ai-provider.md](ai-provider.md#cross-cutting-llm-behavior-extractbehavior)).
+The prompt language follows `ExtractBehavior:DefaultLanguage` (see [ai-provider.md](../configuration/ai-provider.md#cross-cutting-llm-behavior-extractbehavior)).
 
 ## Outcomes
 
@@ -65,6 +65,6 @@ The prompt language follows `ExtractBehavior:DefaultLanguage` (see [ai-provider.
 
 ## See also
 
-- [Text extraction](text-extraction.md) — produces the `Document.Markdown` consumed here
+- [Text extraction](../text-extraction/text-extraction.md) — produces the `Document.Markdown` consumed here
 - [Pipeline runs](pipeline-runs.md) — the `Candidates` payload schema for the review UI
 - [Reprocessing](reprocessing.md) — re-running classification over existing documents in bulk after you change a type's prompt / threshold or add a new type

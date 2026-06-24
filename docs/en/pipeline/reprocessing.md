@@ -93,4 +93,4 @@ Batch and progress are internal operational state — they are **not** part of t
 
 - [Classification](classification.md) — the pipeline reclassification re-runs, and the per-document `ReclassifyAsync` / `RejectReviewAsync` operator actions
 - [Pipeline runs](pipeline-runs.md) — `DocumentPipelineRun` records, including `field-extraction` runs
-- [AI provider](ai-provider.md) — the LLM client shared by classification and field extraction
+- [AI provider](../configuration/ai-provider.md) — the LLM client shared by classification and field extraction

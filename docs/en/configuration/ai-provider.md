@@ -7,7 +7,7 @@ Dignite Extract delegates all chat-completion calls to `Microsoft.Extensions.AI`
 | `Extract` | Provider wiring (endpoint, credentials, model ids) | Host only — `ExtractHostModule.ConfigureAI` reads it once at startup to register two keyed `IChatClient` instances |
 | `ExtractBehavior` | Workflow behavior knobs (prompt language, truncation) | Application layer via `IOptions<ExtractBehaviorOptions>` — `ExtractApplicationModule.ConfigureServices` binds the section to the type |
 
-The split keeps credentials (`ApiKey`) out of any `IOptions<>` flowing into business code and lets operators tune behavior independently of provider switches. Every downstream feature — [classification](classification.md), Host field extraction, tenant field extraction (mechanism B), document title generation — shares the same provider registration regardless of behavior tuning.
+The split keeps credentials (`ApiKey`) out of any `IOptions<>` flowing into business code and lets operators tune behavior independently of provider switches. Every downstream feature — [classification](../pipeline/classification.md), Host field extraction, tenant field extraction (mechanism B), document title generation — shares the same provider registration regardless of behavior tuning.
 
 > **Dignite Extract is a channel layer.** It does not host chat / RAG / agentic tool-calling paths (those were removed in #166 — see CLAUDE.md "OUT of scope"). The LLM call sites in this repo are backend pipeline workflows plus the admin-facing slug suggestion helper. Downstream RAG / Chat consumers register their own `IChatClient` against their own provider on their side.
 
@@ -67,7 +67,7 @@ For **production**, prefer a model that's strict about schema compliance. Models
 
 Both clients are registered with `UseOpenTelemetry()` + `UseLogging()`. Neither has `UseFunctionInvocation` (no tool calling anywhere in Dignite Extract) or `UseDistributedCache` (every prompt is document-content-derived and therefore unique per call — cache lookups would always miss).
 
-> **Optional third client — vision OCR.** Enabling the [vision-LLM OCR provider](ocr-vision-llm.md) (#259) adds a third keyed client for a multimodal (vision) model. Its key (`VisionLlmOcrConsts.VisionChatClientKey`) lives in the `Dignite.Extract.Ocr.VisionLlm` project, **not** `ExtractConsts` — an OCR provider sits below the Application layer and must not depend on it. Register it in your `ConfigureAI` override only when you enable that provider; the vision model id **cannot** fall back to `ChatModelId` (the main chat model may not be vision-capable), so it requires its own `Extract:VisionOcrModelId`.
+> **Optional third client — vision OCR.** Enabling the [vision-LLM OCR provider](../text-extraction/ocr-vision-llm.md) (#259) adds a third keyed client for a multimodal (vision) model. Its key (`VisionLlmOcrConsts.VisionChatClientKey`) lives in the `Dignite.Extract.Ocr.VisionLlm` project, **not** `ExtractConsts` — an OCR provider sits below the Application layer and must not depend on it. Register it in your `ConfigureAI` override only when you enable that provider; the vision model id **cannot** fall back to `ChatModelId` (the main chat model may not be vision-capable), so it requires its own `Extract:VisionOcrModelId`.
 
 > **Provider-switch gotcha**: When switching `Endpoint` to a non-OpenAI provider (SiliconFlow, Ollama via `/v1` shim, OpenRouter, etc.), override **all three** model id keys together in your environment-specific config — `ChatModelId` alone is not enough if the provider doesn't recognize the default `gpt-4o-mini` placeholder that may be inherited from base `appsettings.json`. The simplest fix: copy all three overrides into your `appsettings.Development.json` / `appsettings.Production.json` / env vars whenever you change `Endpoint`.
 
@@ -178,7 +178,7 @@ These knobs describe *how Dignite Extract calls the model* (language hint, text 
 | `DefaultLanguage` | `"ja"` | Language hint appended to every system prompt. Match this to your primary user base — Dignite Extract prompts are written language-agnostic and switch via this hint |
 | `MaxTextLengthPerExtraction` | `8000` | Per-call character cap on Markdown fed to **classification** and **cabinet suggestion** (both only need the document's opening for a verdict). **Field extraction is not capped** — it sends the full Markdown, since a type-bound field can appear anywhere in the document and tail truncation would silently drop it. CJK-safe (one character ≈ one CJK glyph). Raise for long contracts / policies if your model's context window allows |
 
-Per-pipeline tuning lives in `ExtractBehavior` — see [classification.md](classification.md) for the keys the classification workflow reads.
+Per-pipeline tuning lives in `ExtractBehavior` — see [classification.md](../pipeline/classification.md) for the keys the classification workflow reads.
 
 ## OpenTelemetry signals
 

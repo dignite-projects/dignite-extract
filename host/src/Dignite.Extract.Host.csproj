@@ -104,7 +104,7 @@
     <!-- OCR provider — IOcrProvider implementations are mutually exclusive; enable only one.
          Current default: VisionLlm (photos / thermal receipts / image-only PDFs, #259).
          When switching back to local PaddleOCR or Azure, update both ExtractHostModule [DependsOn]
-         and the ConfigureAI keyed client wiring. See docs/ocr-vision-llm.md. Linux containers also
+         and the ConfigureAI keyed client wiring. See docs/en/text-extraction/ocr-vision-llm.md. Linux containers also
          require SkiaSharp.NativeAssets.Linux + libfontconfig1 (see the Linux deployment section). -->
     <ProjectReference Include="..\..\core\src\Dignite.Extract.Ocr.VisionLlm\Dignite.Extract.Ocr.VisionLlm.csproj" />
     <!-- <ProjectReference Include="..\..\core\src\Dignite.Extract.Ocr.PaddleOcr\Dignite.Extract.Ocr.PaddleOcr.csproj" /> -->
@@ -115,7 +115,7 @@
        through PDFtoImage using PDFium + SkiaSharp. SkiaSharp's Linux native library (libSkiaSharp.so)
        must land in the final executable project, so the host explicitly references NativeAssets.Linux;
        the image also installs libfontconfig1 (see host/Dockerfile). Windows developer machines use
-       their own RID-specific native assets and are unaffected. See docs/ocr-vision-llm.md. -->
+       their own RID-specific native assets and are unaffected. See docs/en/text-extraction/ocr-vision-llm.md. -->
   <ItemGroup>
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
   </ItemGroup>

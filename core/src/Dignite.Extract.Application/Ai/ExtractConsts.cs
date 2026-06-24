@@ -4,7 +4,7 @@ namespace Dignite.Extract.Ai;
 /// DI keys for the keyed <c>IChatClient</c> instances Extract's core LLM call sites resolve.
 /// Registered by the host wiring (<c>ExtractHostModule.ConfigureAI</c>) and consumed by the
 /// classification / field-extraction / slug-suggestion / title-generation paths.
-/// See <c>docs/ai-provider.md</c> for the keyed-clients table and what each is for.
+/// See <c>docs/en/configuration/ai-provider.md</c> for the keyed-clients table and what each is for.
 /// </summary>
 public static class ExtractConsts
 {

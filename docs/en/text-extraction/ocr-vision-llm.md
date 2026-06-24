@@ -105,7 +105,7 @@ This shifts OCR from **free local CPU** (PaddleOCR) to a **paid, per-token cloud
 
 - **Per image** ≈ one call (input image tokens + output transcription tokens, capped by `MaxOutputTokens`).
 - **Per PDF** ≈ **one call per page** — cost scales linearly with page count. `MaxPdfPages` bounds it.
-- Token usage is emitted on the existing OpenTelemetry pipeline (`gen_ai.client.token.usage`, via `.UseOpenTelemetry()` on the keyed client) — monitor spend there. See [observability.md](observability.md).
+- Token usage is emitted on the existing OpenTelemetry pipeline (`gen_ai.client.token.usage`, via `.UseOpenTelemetry()` on the keyed client) — monitor spend there. See [observability.md](../deployment/observability.md).
 
 ## Linux deployment
 
@@ -125,5 +125,5 @@ PDF rasterization uses [PDFtoImage](https://github.com/sungaila/PDFtoImage) (PDF
 ## See also
 
 - [Text extraction overview](text-extraction.md) — Markdown-first contract, the two extraction paths, OCR provider comparison
-- [AI provider](ai-provider.md) — how the keyed `IChatClient` instances are wired
-- [Observability](observability.md) — the `gen_ai.*` token metrics
+- [AI provider](../configuration/ai-provider.md) — how the keyed `IChatClient` instances are wired
+- [Observability](../deployment/observability.md) — the `gen_ai.*` token metrics

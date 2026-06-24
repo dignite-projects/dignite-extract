@@ -137,7 +137,7 @@ namespace Dignite.Extract.Host;
     typeof(ExtractParsePdfModule),             // PdfPig: digital-PDF text layer + embedded-image transcription (#301). Claims .pdf; coexists with ElBruno (catch-all). Omitting it makes .pdf fall back to ElBruno.
     typeof(ExtractParseOpenXmlModule),         // OpenXML: PPTX (slide text/notes, #307) + DOCX (headings/tables/lists/inline formatting/hyperlinks/text boxes, #308), each with charts/tables + embedded-image transcription. Claims .pptx and .docx. REQUIRED for .pptx (ElBruno has no PresentationML converter -> empty Markdown, no OCR fallback since .pptx != .pdf); .docx degrades gracefully to ElBruno if this module is omitted.
     typeof(ExtractParseElBrunoMarkItDownModule),
-    typeof(ExtractVisionLlmOcrModule)                  // Vision-LLM OCR for photos, receipts, and image PDFs; current default OCR provider (#259). IOcrProvider implementations are mutually exclusive: when switching providers, update the .csproj ProjectReference and ConfigureAI keyed vision IChatClient together. See docs/ocr-vision-llm.md.
+    typeof(ExtractVisionLlmOcrModule)                  // Vision-LLM OCR for photos, receipts, and image PDFs; current default OCR provider (#259). IOcrProvider implementations are mutually exclusive: when switching providers, update the .csproj ProjectReference and ConfigureAI keyed vision IChatClient together. See docs/en/text-extraction/ocr-vision-llm.md.
     // typeof(ExtractPaddleOcrModule),                 // Local PaddleOCR sidecar (free CPU, PP-StructureV3); to switch back, uncomment this, comment VisionLlm, and restore its .csproj ProjectReference
     // typeof(ExtractAzureDocumentIntelligenceModule), // Cloud option (higher accuracy); when switching, also comment / enable the matching ProjectReference in .csproj
 )]
@@ -172,7 +172,7 @@ public class ExtractHostModule : AbpModule
         });
 
         // MCP Guided-OAuth clients (RFC 9728 + RFC 8707) MUST send a `resource` parameter naming
-        // the MCP server's canonical URI on every /authorize and /token request (docs/mcp-server.md).
+        // the MCP server's canonical URI on every /authorize and /token request (docs/en/egress/mcp-server.md).
         // OpenIddict's default resource handling would reject that parameter two ways:
         //   - ValidateResources         → ID2190 (invalid_target) unless the URI is pre-registered;
         //   - ValidateResourcePermissions → ID2192 unless the client carries an `rsrc:<uri>` grant.
@@ -560,7 +560,7 @@ public class ExtractHostModule : AbpModule
         // Fail fast at startup instead of letting documents silently fail provider auth on the first
         // pipeline call. The committed appsettings.json ships the "YOUR_API_KEY" placeholder; a real
         // provider must come from appsettings.Development.json / user-secrets / env vars. Hosts that
-        // target a non-OpenAI wire protocol replace this whole method (see docs/ai-provider.md) and
+        // target a non-OpenAI wire protocol replace this whole method (see docs/en/configuration/ai-provider.md) and
         // own their own validation.
         var endpoint = configuration["Extract:Endpoint"];
         var apiKey = configuration["Extract:ApiKey"];
@@ -575,7 +575,7 @@ public class ExtractHostModule : AbpModule
                 "field extraction have no non-LLM fallback. Set Extract:Endpoint, Extract:ApiKey, " +
                 "and Extract:ChatModelId in host/src/appsettings.Development.json (git-ignored), " +
                 "user-secrets, or environment variables. For a zero-cost local option, point Endpoint at a " +
-                "local Ollama /v1 endpoint and use any non-empty token as the key. See docs/ai-provider.md.");
+                "local Ollama /v1 endpoint and use any non-empty token as the key. See docs/en/configuration/ai-provider.md.");
         }
 
         var openAIClient = new OpenAIClient(
@@ -626,7 +626,7 @@ public class ExtractHostModule : AbpModule
                 "VisionLlm is the configured OCR provider but Extract:VisionOcrModelId is not set. " +
                 "Point it at a vision-capable model (e.g. Qwen/Qwen3-VL-8B-Instruct on SiliconFlow) in " +
                 "host/src/appsettings.Development.json (git-ignored), user-secrets, or environment variables. " +
-                "See docs/ocr-vision-llm.md.");
+                "See docs/en/text-extraction/ocr-vision-llm.md.");
         }
         context.Services.AddKeyedChatClient(
             VisionLlmOcrConsts.VisionChatClientKey,
