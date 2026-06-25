@@ -9,7 +9,7 @@ import { Component } from '@angular/core';
           <span>© {{ currentYear }} Dignite Vault Extract</span>
         </div>
         <div class="lpx-footbar-solo-links">
-          <a href="https://dignite.com/extract" target="_blank" rel="noopener">About</a>
+          <a href="https://dignite.com/vault-extract" target="_blank" rel="noopener">About</a>
         </div>
       </div>
     </div>
