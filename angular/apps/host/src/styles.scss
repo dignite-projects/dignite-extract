@@ -40,27 +40,29 @@
 }
 
 /*
- * The top-left sidebar logo uses icon-lite.svg (fill/stroke = currentColor), but
- * the LeptonX theme paints it as a background-image (var(--lpx-logo)). An external
- * SVG referenced via url() resolves currentColor against its own document's default
- * color (black) — the page's `color` cannot reach inside it, which is why
- * `.lpx-brand-logo { color: #fff }` had no effect. The sidebar is dark in every
- * theme, so force this monochrome badge to white with a filter (this covers both
- * the expanded and collapsed states).
+ * The top-left sidebar logo uses icon-lite.svg (fill/stroke = currentColor), but the
+ * LeptonX theme paints it as a background-image (var(--lpx-logo)). An external SVG
+ * referenced via url() resolves currentColor against its own document's default color
+ * (black) — the page's `color` cannot reach inside it, which is why
+ * `.lpx-brand-logo { color: #fff }` had no effect.
+ *
+ * The sidebar is dark in every theme, so recolor the badge with a mask: the SVG gives
+ * the shape (alpha) and `background-color` is the actual ink — set to the brand cream
+ * #FAD7D3 to match the dark-mode logo and the favicons. The mask geometry mirrors the
+ * theme's own background-size/position so the badge lands identically, and
+ * `background-image: none !important` defeats the higher-specificity collapsed-sidebar
+ * rule that would otherwise re-show the black image underneath the mask.
  */
 .lpx-logo-container .lpx-brand-logo {
-  filter: brightness(0) invert(1); /* black -> white */
-}
+  background-image: none !important;
+  background-color: #FAD7D3; /* logo ink — change this one value to recolor */
 
-/*
- * For an exact brand color instead of pure white (e.g. the cream #FAD7D3 used by
- * the dark-mode logo, or brand purple #322488), a filter cannot do it — switch to
- * a mask, where background-color becomes the logo color and can be set freely:
- *
- * .lpx-logo-container .lpx-brand-logo {
- *   background-image: none;
- *   background-color: #FAD7D3;
- *   -webkit-mask: var(--lpx-logo) no-repeat center / contain;
- *           mask: var(--lpx-logo) no-repeat center / contain;
- * }
- */
+  -webkit-mask-image: var(--lpx-logo);
+          mask-image: var(--lpx-logo);
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-position: left 0;
+          mask-position: left 0;
+  -webkit-mask-size: auto 32px;
+          mask-size: auto 32px;
+}
