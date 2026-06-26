@@ -331,6 +331,26 @@ public class ExtractHostModule : AbpModule
         });
 
         ConfigureMcpAuthentication(context);
+        ConfigureMcpApiKey(context);
+    }
+
+    // #428: optional static API-key fallback auth for the /mcp egress, parallel to the OpenIddict Bearer
+    // chain and the #278 OAuth discovery flow. It exists for MCP clients that cannot run the dynamic OAuth
+    // flow but can send a static request header (OpenAI Codex, ABP AI Management); Claude's native custom
+    // connector is OAuth-only and keeps using #278, unaffected. The shipped appsettings.json ships an empty
+    // Mcp:ApiKey:Keys, so the channel is DISABLED by default and OAuth-only deployments are untouched. Real
+    // keys + the key -> service-account mapping are host deployment config (env / user-secrets), never
+    // committed. The channel mechanism (matching, constant-time compare, synthetic-principal construction)
+    // lives in the Mcp egress module (AddExtractMcpApiKey, mirroring #422's AddExtractMcpDiscovery); the
+    // middleware is wired into the pipeline in OnApplicationInitialization via UseExtractMcpApiKey, before
+    // UseAuthentication. See docs/en/egress/mcp-server.md.
+    private void ConfigureMcpApiKey(ServiceConfigurationContext context)
+    {
+        var configuration = context.Services.GetConfiguration();
+        context.Services.AddExtractMcpApiKey(options =>
+        {
+            configuration.GetSection("Mcp:ApiKey").Bind(options);
+        });
     }
 
     // #278: add OAuth Protected Resource Metadata discovery for the /mcp export endpoint (RFC 9728). This is additive
@@ -733,6 +753,12 @@ public class ExtractHostModule : AbpModule
         app.UseAbpStudioLink();
         app.UseAbpSecurityHeaders();
         app.UseCors();
+        // #428: static API-key fallback auth for /mcp, inserted before the OpenIddict Bearer chain. No-op
+        // unless Mcp:ApiKey:Keys is configured. A valid key sets an authenticated least-privilege
+        // service-account principal that the bare RequireAuthorization() on /mcp accepts; a missing/invalid
+        // key falls through unauthenticated, so the Bearer chain and the #278 discovery challenge are
+        // unaffected. Scoped (segment-aware) to the /mcp path inside UseExtractMcpApiKey.
+        app.UseExtractMcpApiKey();
         app.UseAuthentication();
         app.UseAbpOpenIddictValidation();
 
