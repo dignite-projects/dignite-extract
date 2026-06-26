@@ -148,6 +148,21 @@ jobs:
         run: npx nx build vault-extract --configuration production
         working-directory: angular
 
+      # Pack the built library into a versioned .tgz next to the .nupkg files in ./artifacts, so a
+      # single release run always emits both backend (NuGet) and frontend (npm) packages. Pre-release
+      # UI libs are not published to any npm registry (see the stable-only publish step below); this
+      # tarball is the artifact downstream verticals pin as a `file:` dependency.
+      - name: Pack npm tarball
+        run: npm pack ./dist/vault-extract --pack-destination ../artifacts
+        working-directory: angular
+
+      - name: Upload npm tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: artifacts/*.tgz
+          if-no-files-found: error
+
       # npm publishes to npmjs only on stable builds. Pre-release UI builds are still compiled
       # above (validation) but not published anywhere: GitHub Packages npm would force the scope to
       # @dignite-projects/* (it must match the repo owner), colliding with the public @dignite/*
@@ -188,4 +203,5 @@ jobs:
           draft: true
           prerelease: ${{ steps.channel.outputs.channel == 'preview' }}
           body_path: release-notes.md
-          files: artifacts/*.nupkg
+          # Attach both the NuGet packages (.nupkg) and the npm tarball (.tgz) to the draft Release.
+          files: artifacts/*
