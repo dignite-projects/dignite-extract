@@ -72,6 +72,8 @@ Fields are organized into two kinds: **system common fields** (auto-produced by 
 
 > Full system-field table, text-extraction provenance (#210), and mechanism-B implementation form (`FieldDefinition` / `DocumentExtractedField` / unique index / composite key): see `.claude/rules/field-architecture.md` (auto-loaded when editing Document / field code).
 
+> Sub-document segmentation (a **container** document → derived sub-documents): the two-representation model (`DocumentSegment` ledger + derived `Document`), the two-`Kind` red line, and the field lifecycle contract — see `.claude/rules/sub-document-segmentation.md` (decision record #390, auto-loaded when editing Segmentation / `DerivedDocumentSpawner` / `ContainerMarker*` / `DocumentSegment*` code). Relevant to egress too: a container is suppressed from `DocumentReadyEto` (#346); only its sub-documents fire it, each carrying `OriginDocumentId`.
+
 ## Egress contracts
 
 Three live egress channels: **REST API** (HTTP, generic programmatic access) / **MCP server** (Claude Desktop / Cursor / any MCP client) / **EventBus** (ABP DistributedEventBus, business systems / custom consumers); plus **Webhook** (legacy systems) — **planned, not yet implemented**.

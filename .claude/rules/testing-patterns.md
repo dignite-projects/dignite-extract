@@ -1,8 +1,7 @@
 ---
 description: "ABP testing patterns - unit tests and integration tests"
 paths:
-  - "test/**/*.cs"
-  - "tests/**/*.cs"
+  - "**/test/**/*.cs"
   - "**/*Tests*/**/*.cs"
   - "**/*Test*.cs"
 ---

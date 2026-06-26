@@ -1,24 +1,34 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "hooks": {
-    "PostToolUse": [
+    "PreToolUse": [
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "if [[ \"$CLAUDE_FILE_PATHS\" == *.cs ]]; then dotnet format core/Dignite.Vault.Extract.slnx --include \"$CLAUDE_FILE_PATHS\" --no-restore --verbosity quiet 2>/dev/null || true; fi"
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/block-migration-edit.ps1"
           }
         ]
       }
     ],
-    "PreToolUse": [
+    "PostToolUse": [
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "if [[ \"$CLAUDE_FILE_PATHS\" == */Migrations/* ]]; then echo 'Blocked: regenerate via dotnet ef migrations add instead of editing migration files directly' >&2; exit 2; fi"
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/format-cs.ps1"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -c \"[console]::beep(880,200); [console]::beep(1100,200)\""
           }
         ]
       }
