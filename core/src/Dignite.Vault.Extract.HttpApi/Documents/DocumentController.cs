@@ -9,7 +9,7 @@ namespace Dignite.Vault.Extract.HttpApi.Documents;
 
 [Area("vault-extract")]
 [Route("api/vault-extract/documents")]
-public class DocumentController : ExtractController, IDocumentAppService
+public class DocumentController : VaultExtractController, IDocumentAppService
 {
     private readonly IDocumentAppService _documentAppService;
 

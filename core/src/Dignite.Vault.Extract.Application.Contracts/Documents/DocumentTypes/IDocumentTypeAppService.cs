@@ -26,7 +26,7 @@ public interface IDocumentTypeAppService : IApplicationService
     /// <summary>
     /// Restores a soft-deleted document type and cascades restore to field definitions under the same
     /// (TenantId, TypeCode) that were soft-deleted with it. Throws
-    /// <see cref="ExtractErrorCodes.DocumentType.RestoreConflict"/> when an active record with the
+    /// <see cref="VaultExtractErrorCodes.DocumentType.RestoreConflict"/> when an active record with the
     /// same code already exists. Individual fields that conflict with active fields during restore are
     /// skipped defensively, although normal flows should not hit this.
     /// </summary>

@@ -250,7 +250,7 @@ public class DocumentPipelineRunManager : DomainService
         var latestRun = await _runRepo.FindLatestByDocumentAndCodeAsync(documentId, pipelineCode);
         if (latestRun == null)
         {
-            throw new BusinessException(ExtractErrorCodes.Pipeline.NeverRan)
+            throw new BusinessException(VaultExtractErrorCodes.Pipeline.NeverRan)
                 .WithData("PipelineCode", pipelineCode);
         }
 
@@ -258,11 +258,11 @@ public class DocumentPipelineRunManager : DomainService
         {
             case PipelineRunStatus.Pending:
             case PipelineRunStatus.Running:
-                throw new BusinessException(ExtractErrorCodes.Pipeline.RetryInProgress)
+                throw new BusinessException(VaultExtractErrorCodes.Pipeline.RetryInProgress)
                     .WithData("PipelineCode", pipelineCode);
             case PipelineRunStatus.Succeeded:
             case PipelineRunStatus.Skipped:
-                throw new BusinessException(ExtractErrorCodes.Pipeline.NotRetryable)
+                throw new BusinessException(VaultExtractErrorCodes.Pipeline.NotRetryable)
                     .WithData("PipelineCode", pipelineCode)
                     .WithData("Status", latestRun.Status.ToString());
         }
@@ -281,7 +281,7 @@ public class DocumentPipelineRunManager : DomainService
         var latestRun = await _runRepo.FindLatestByDocumentAndCodeAsync(documentId, pipelineCode);
         if (latestRun is { Status: PipelineRunStatus.Pending or PipelineRunStatus.Running })
         {
-            throw new BusinessException(ExtractErrorCodes.Pipeline.RetryInProgress)
+            throw new BusinessException(VaultExtractErrorCodes.Pipeline.RetryInProgress)
                 .WithData("PipelineCode", pipelineCode);
         }
     }
@@ -328,17 +328,17 @@ public class DocumentPipelineRunManager : DomainService
     protected virtual async Task DeriveLifecycleAsync(Document document)
     {
         var latestRuns = await _runRepo.GetLatestRunsByCodesAsync(
-            document.Id, ExtractPipelines.KeyPipelines);
+            document.Id, VaultExtractPipelines.KeyPipelines);
 
         var derivedStatus = DocumentLifecycleStatus.Processing;
         var allSucceeded = true;
 
-        foreach (var pipelineCode in ExtractPipelines.KeyPipelines)
+        foreach (var pipelineCode in VaultExtractPipelines.KeyPipelines)
         {
             // #411: field-extraction is a key pipeline so the duplicate check can gate Ready, but a container runs
             // no field extraction (it holds no single type's fields) — exempt it from that requirement so it still
             // reaches Ready lifecycle (its DocumentReadyEto is separately suppressed in DocumentReadyEventHandler).
-            if (document.IsContainer && pipelineCode == ExtractPipelines.FieldExtraction)
+            if (document.IsContainer && pipelineCode == VaultExtractPipelines.FieldExtraction)
             {
                 continue;
             }

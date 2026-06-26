@@ -9,7 +9,7 @@ namespace Dignite.Vault.Extract.HttpApi.Documents.Exports;
 
 [Area("vault-extract")]
 [Route("api/vault-extract/export-templates")]
-public class ExportTemplateController : ExtractController, IExportTemplateAppService
+public class ExportTemplateController : VaultExtractController, IExportTemplateAppService
 {
     private readonly IExportTemplateAppService _exportTemplateAppService;
 

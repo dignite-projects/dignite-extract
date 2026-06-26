@@ -12,7 +12,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Mcp.Documents;
 
-[DependsOn(typeof(ExtractTestBaseModule))]
+[DependsOn(typeof(VaultExtractTestBaseModule))]
 public class DocumentTypeToolsTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -28,10 +28,10 @@ public class DocumentTypeToolsTestModule : AbpModule
 /// <see cref="IFieldDefinitionAppService.GetListAsync"/> in one batch with DocumentTypeId left blank to
 /// eliminate per-type N+1, and maps results to <see cref="DocumentTypeListResult"/>. displayName is
 /// wrapped by <c>PromptBoundary</c>; results are sorted by TypeCode and truncated to
-/// <see cref="ExtractMcpConsts.MaxDocumentTypeResults"/>, with truncated/totalCount signals when over
+/// <see cref="VaultExtractMcpConsts.MaxDocumentTypeResults"/>, with truncated/totalCount signals when over
 /// limit.
 /// </summary>
-public class DocumentTypeTools_Tests : ExtractTestBase<DocumentTypeToolsTestModule>
+public class DocumentTypeTools_Tests : VaultExtractTestBase<DocumentTypeToolsTestModule>
 {
     private readonly IDocumentTypeAppService _documentTypeAppService;
     private readonly IFieldDefinitionAppService _fieldDefinitionAppService;
@@ -132,7 +132,7 @@ public class DocumentTypeTools_Tests : ExtractTestBase<DocumentTypeToolsTestModu
     {
         // Exactly at the limit: return all results with no truncation signal; within-limit behavior is
         // unchanged.
-        var total = ExtractMcpConsts.MaxDocumentTypeResults;
+        var total = VaultExtractMcpConsts.MaxDocumentTypeResults;
         _documentTypeAppService.GetVisibleAsync().Returns(BuildTypes(total));
         _fieldDefinitionAppService
             .GetListAsync(Arg.Any<GetFieldDefinitionListInput>())
@@ -152,7 +152,7 @@ public class DocumentTypeTools_Tests : ExtractTestBase<DocumentTypeToolsTestModu
         // Hard result-set limit (llm-call-anti-patterns counterexample B point 3): tenant admins can
         // create arbitrarily many types. Over-limit results must be truncated and explicitly tell the LLM
         // there are more via truncated + totalCount.
-        var total = ExtractMcpConsts.MaxDocumentTypeResults + 5;
+        var total = VaultExtractMcpConsts.MaxDocumentTypeResults + 5;
         _documentTypeAppService.GetVisibleAsync().Returns(BuildTypes(total));
         _fieldDefinitionAppService
             .GetListAsync(Arg.Any<GetFieldDefinitionListInput>())
@@ -161,13 +161,13 @@ public class DocumentTypeTools_Tests : ExtractTestBase<DocumentTypeToolsTestModu
         var result = await DocumentTypeTools.ListAsync(
             _documentTypeAppService, _fieldDefinitionAppService);
 
-        result.Types.Count.ShouldBe(ExtractMcpConsts.MaxDocumentTypeResults);
+        result.Types.Count.ShouldBe(VaultExtractMcpConsts.MaxDocumentTypeResults);
         result.TotalCount.ShouldBe(total);
         result.Truncated.ShouldBeTrue();
         // Stable sort by TypeCode before truncation, independent from AppService return order. Keep the
         // lexicographically first segment and discard the tail.
         result.Types[0].TypeCode.ShouldBe(TypeCodeOf(0));
-        result.Types[^1].TypeCode.ShouldBe(TypeCodeOf(ExtractMcpConsts.MaxDocumentTypeResults - 1));
+        result.Types[^1].TypeCode.ShouldBe(TypeCodeOf(VaultExtractMcpConsts.MaxDocumentTypeResults - 1));
         // Truncation must not amplify query count: field definitions still allow only one batch call.
         await _fieldDefinitionAppService.Received(1).GetListAsync(
             Arg.Is<GetFieldDefinitionListInput>(i => i.DocumentTypeId == null));

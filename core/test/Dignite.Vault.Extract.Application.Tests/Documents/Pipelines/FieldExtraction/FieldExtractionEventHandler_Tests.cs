@@ -23,7 +23,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class FieldExtractionEventHandlerTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -59,7 +59,7 @@ public class FieldExtractionEventHandlerTestModule : AbpModule
 /// Tests derive stable Guids from name / code to keep mocks consistent.
 /// </summary>
 public class FieldExtractionEventHandler_Tests
-    : ExtractApplicationTestBase<FieldExtractionEventHandlerTestModule>
+    : VaultExtractApplicationTestBase<FieldExtractionEventHandlerTestModule>
 {
     private readonly FieldExtractionEventHandler _handler;
     private readonly FieldExtractionService _service;

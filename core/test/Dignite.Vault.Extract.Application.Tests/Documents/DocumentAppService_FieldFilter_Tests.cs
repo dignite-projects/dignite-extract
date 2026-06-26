@@ -22,7 +22,7 @@ namespace Dignite.Vault.Extract.Documents;
 /// <c>EfCoreDocumentRepositorySearch_Tests</c> against real EF (SQLite).
 /// </summary>
 public class DocumentAppService_FieldFilter_Tests
-    : ExtractApplicationTestBase<DocumentAppServiceReviewTestModule>
+    : VaultExtractApplicationTestBase<DocumentAppServiceReviewTestModule>
 {
     private readonly IDocumentAppService _appService;
     private readonly IDocumentTypeRepository _documentTypeRepository;
@@ -103,6 +103,6 @@ public class DocumentAppService_FieldFilter_Tests
             FieldFilters = new List<DocumentFieldFilter> { new() { Name = "ghost", Value = "x" } }
         }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.ExtractedField.Unknown);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.ExtractedField.Unknown);
     }
 }

@@ -22,7 +22,7 @@ public class PdfExtractor_Tests
         int minImagePixels = 0,
         int maxImagesPerPdf = 50,
         bool skipFullPageScanBackground = true,
-        ExtractOcrOptions? ocrOptions = null)
+        VaultExtractOcrOptions? ocrOptions = null)
         => new(
             _ocr,
             Options.Create(new PdfExtractorOptions
@@ -34,7 +34,7 @@ public class PdfExtractor_Tests
                 SkipFullPageScanBackground = skipFullPageScanBackground
             }),
             // Default to empty hints so unrelated tests don't get defaults injected unexpectedly.
-            Options.Create(ocrOptions ?? new ExtractOcrOptions { DefaultLanguageHints = new List<string>() }));
+            Options.Create(ocrOptions ?? new VaultExtractOcrOptions { DefaultLanguageHints = new List<string>() }));
 
     // A full-page raster inset 10pt inside the fixture page — clears the coverage bar on both axes
     // (~0.97). Derived from PdfFixtures' page size so a fixture page-size change can't silently flip the
@@ -296,7 +296,7 @@ public class PdfExtractor_Tests
             images: new[] { (png, new PdfRectangle(50, 400, 200, 550)) });
 
         // Context carries no hints; the host default {ja,en} must be applied (same as the whole-page path).
-        var extractor = CreateExtractor(ocrOptions: new ExtractOcrOptions());
+        var extractor = CreateExtractor(ocrOptions: new VaultExtractOcrOptions());
         await extractor.ExtractAsync(new MemoryStream(pdf), PdfContext());
 
         await _ocr.Received(1).RecognizeAsync(

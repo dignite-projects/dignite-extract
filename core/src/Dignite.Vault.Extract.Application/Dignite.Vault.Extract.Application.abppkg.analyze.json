@@ -8,12 +8,12 @@
         {
           "declaringAssemblyName": "Dignite.Vault.Extract.Domain",
           "namespace": "Dignite.Vault.Extract",
-          "name": "ExtractDomainModule"
+          "name": "VaultExtractDomainModule"
         },
         {
           "declaringAssemblyName": "Dignite.Vault.Extract.Application.Contracts",
           "namespace": "Dignite.Vault.Extract",
-          "name": "ExtractApplicationContractsModule"
+          "name": "VaultExtractApplicationContractsModule"
         },
         {
           "declaringAssemblyName": "Volo.Abp.Ddd.Application",
@@ -76,7 +76,7 @@
         }
       ],
       "contentType": "abpModule",
-      "name": "ExtractApplicationModule",
+      "name": "VaultExtractApplicationModule",
       "summary": null
     }
   ]

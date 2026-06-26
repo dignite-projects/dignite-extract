@@ -19,7 +19,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class DocumentAppServiceRetryTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -28,7 +28,7 @@ public class DocumentAppServiceRetryTestModule : AbpModule
         context.Services.AddSingleton(Substitute.For<IDocumentTypeRepository>());
         context.Services.AddSingleton(Substitute.For<IFieldDefinitionRepository>());
         context.Services.AddSingleton(Substitute.For<ICabinetRepository>());
-        context.Services.AddSingleton(Substitute.For<IBlobContainer<ExtractDocumentContainer>>());
+        context.Services.AddSingleton(Substitute.For<IBlobContainer<VaultExtractDocumentContainer>>());
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
         // #216: Manager depends on IDocumentPipelineRunRepository; use the closure-state fake so
@@ -43,7 +43,7 @@ public class DocumentAppServiceRetryTestModule : AbpModule
 /// rejected. It creates a Pending Run first, then enqueues the matching BackgroundJob.
 /// </summary>
 public class DocumentAppService_Retry_Tests
-    : ExtractApplicationTestBase<DocumentAppServiceRetryTestModule>
+    : VaultExtractApplicationTestBase<DocumentAppServiceRetryTestModule>
 {
     private readonly IDocumentAppService _appService;
     private readonly IDocumentRepository _documentRepository;
@@ -66,15 +66,15 @@ public class DocumentAppService_Retry_Tests
     public async Task RetryPipelineAsync_Enqueues_Parse_Job_When_Failed()
     {
         var doc = CreateDocument();
-        var run = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Parse);
+        var run = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _pipelineRunManager.FailAsync(doc, run, errorMessage: "OCR engine timeout");
         StubGet(doc);
 
         await _appService.RetryPipelineAsync(
             doc.Id,
-            new RetryPipelineInput { PipelineCode = ExtractPipelines.Parse });
+            new RetryPipelineInput { PipelineCode = VaultExtractPipelines.Parse });
 
-        var retryRun = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Parse);
+        var retryRun = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Parse);
         retryRun.ShouldNotBeNull();
         retryRun.Status.ShouldBe(PipelineRunStatus.Pending);
         retryRun.AttemptNumber.ShouldBe(2);
@@ -91,13 +91,13 @@ public class DocumentAppService_Retry_Tests
     public async Task RetryPipelineAsync_Enqueues_Classification_Job_When_Failed()
     {
         var doc = CreateDocument();
-        var run = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Classification);
+        var run = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _pipelineRunManager.FailAsync(doc, run, errorMessage: "LLM unavailable");
         StubGet(doc);
 
         await _appService.RetryPipelineAsync(
             doc.Id,
-            new RetryPipelineInput { PipelineCode = ExtractPipelines.Classification });
+            new RetryPipelineInput { PipelineCode = VaultExtractPipelines.Classification });
 
         await _backgroundJobManager.Received(1).EnqueueAsync(
             Arg.Is<DocumentClassificationJobArgs>(a => a.DocumentId == doc.Id),
@@ -109,16 +109,16 @@ public class DocumentAppService_Retry_Tests
     public async Task RetryPipelineAsync_Throws_When_Latest_Run_Is_Succeeded()
     {
         var doc = CreateDocument();
-        var run = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Parse);
+        var run = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _pipelineRunManager.CompleteAsync(doc, run);
         StubGet(doc);
 
         var ex = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.RetryPipelineAsync(
                 doc.Id,
-                new RetryPipelineInput { PipelineCode = ExtractPipelines.Parse }));
+                new RetryPipelineInput { PipelineCode = VaultExtractPipelines.Parse }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Pipeline.NotRetryable);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Pipeline.NotRetryable);
         await _backgroundJobManager.DidNotReceive().EnqueueAsync(
             Arg.Any<DocumentParseJobArgs>(),
             Arg.Any<BackgroundJobPriority>(),
@@ -129,16 +129,16 @@ public class DocumentAppService_Retry_Tests
     public async Task RetryPipelineAsync_Throws_When_Latest_Run_Is_Skipped()
     {
         var doc = CreateDocument();
-        var run = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Classification);
+        var run = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _pipelineRunManager.SkipAsync(doc, run, reason: "document too short");
         StubGet(doc);
 
         var ex = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.RetryPipelineAsync(
                 doc.Id,
-                new RetryPipelineInput { PipelineCode = ExtractPipelines.Classification }));
+                new RetryPipelineInput { PipelineCode = VaultExtractPipelines.Classification }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Pipeline.NotRetryable);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Pipeline.NotRetryable);
     }
 
     [Fact]
@@ -146,15 +146,15 @@ public class DocumentAppService_Retry_Tests
     {
         var doc = CreateDocument();
         // StartAsync leaves the run in Running state (it calls MarkRunning internally).
-        await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Classification);
+        await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Classification);
         StubGet(doc);
 
         var ex = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.RetryPipelineAsync(
                 doc.Id,
-                new RetryPipelineInput { PipelineCode = ExtractPipelines.Classification }));
+                new RetryPipelineInput { PipelineCode = VaultExtractPipelines.Classification }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Pipeline.RetryInProgress);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Pipeline.RetryInProgress);
         await _backgroundJobManager.DidNotReceive().EnqueueAsync(
             Arg.Any<DocumentClassificationJobArgs>(),
             Arg.Any<BackgroundJobPriority>(),
@@ -170,9 +170,9 @@ public class DocumentAppService_Retry_Tests
         var ex = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.RetryPipelineAsync(
                 doc.Id,
-                new RetryPipelineInput { PipelineCode = ExtractPipelines.Parse }));
+                new RetryPipelineInput { PipelineCode = VaultExtractPipelines.Parse }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Pipeline.NeverRan);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Pipeline.NeverRan);
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class DocumentAppService_Retry_Tests
                 doc.Id,
                 new RetryPipelineInput { PipelineCode = "contracts.field-extraction" }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Pipeline.UnknownCode);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Pipeline.UnknownCode);
         // Unknown PipelineCode must be rejected before reading Document; otherwise business modules would
         // get a bypass for scheduling core jobs.
         await _documentRepository.DidNotReceive().GetAsync(
@@ -212,7 +212,7 @@ public class DocumentAppService_Retry_Tests
             await Should.ThrowAsync<EntityNotFoundException>(async () =>
                 await _appService.RetryPipelineAsync(
                     doc.Id,
-                    new RetryPipelineInput { PipelineCode = ExtractPipelines.Parse }));
+                    new RetryPipelineInput { PipelineCode = VaultExtractPipelines.Parse }));
         }
 
         await _backgroundJobManager.DidNotReceive().EnqueueAsync(
@@ -225,7 +225,7 @@ public class DocumentAppService_Retry_Tests
     public async Task RetryPipelineAsync_Throws_BusinessException_When_Document_Soft_Deleted()
     {
         var doc = CreateDocument();
-        var run = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Parse);
+        var run = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _pipelineRunManager.FailAsync(doc, run, errorMessage: "boom");
         doc.IsDeleted = true;
         StubGet(doc);
@@ -233,9 +233,9 @@ public class DocumentAppService_Retry_Tests
         var ex = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.RetryPipelineAsync(
                 doc.Id,
-                new RetryPipelineInput { PipelineCode = ExtractPipelines.Parse }));
+                new RetryPipelineInput { PipelineCode = VaultExtractPipelines.Parse }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Document.InRecycleBin);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Document.InRecycleBin);
         await _backgroundJobManager.DidNotReceive().EnqueueAsync(
             Arg.Any<DocumentParseJobArgs>(),
             Arg.Any<BackgroundJobPriority>(),
@@ -248,11 +248,11 @@ public class DocumentAppService_Retry_Tests
         var doc = CreateDocument();
 
         // Attempt 1 — fail
-        var run1 = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Parse);
+        var run1 = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _pipelineRunManager.FailAsync(doc, run1, errorMessage: "timeout");
 
         // Attempt 2 — also fail
-        var run2 = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Parse);
+        var run2 = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _pipelineRunManager.FailAsync(doc, run2, errorMessage: "timeout again");
         run2.AttemptNumber.ShouldBe(2);
 
@@ -260,7 +260,7 @@ public class DocumentAppService_Retry_Tests
 
         await _appService.RetryPipelineAsync(
             doc.Id,
-            new RetryPipelineInput { PipelineCode = ExtractPipelines.Parse });
+            new RetryPipelineInput { PipelineCode = VaultExtractPipelines.Parse });
 
         await _backgroundJobManager.Received(1).EnqueueAsync(
             Arg.Is<DocumentParseJobArgs>(a => a.DocumentId == doc.Id),

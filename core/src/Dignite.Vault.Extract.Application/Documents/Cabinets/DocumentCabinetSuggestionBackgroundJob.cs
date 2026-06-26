@@ -45,7 +45,7 @@ public class DocumentCabinetSuggestionBackgroundJob
     private readonly CabinetSuggestionWorkflow _workflow;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
     private readonly ICurrentTenant _currentTenant;
-    private readonly ExtractBehaviorOptions _options;
+    private readonly VaultExtractBehaviorOptions _options;
     // ABP BackgroundJobExecuter pushes the job cancellation token into ambient state before calling
     // ExecuteAsync. The default worker source is the host shutdown token, so slow external work such
     // as LLM calls can cancel promptly during shutdown, matching DocumentParseBackgroundJob.
@@ -57,7 +57,7 @@ public class DocumentCabinetSuggestionBackgroundJob
         CabinetSuggestionWorkflow workflow,
         IUnitOfWorkManager unitOfWorkManager,
         ICurrentTenant currentTenant,
-        IOptions<ExtractBehaviorOptions> options,
+        IOptions<VaultExtractBehaviorOptions> options,
         ICancellationTokenProvider cancellationTokenProvider)
     {
         _documentRepository = documentRepository;

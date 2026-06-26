@@ -39,14 +39,14 @@ namespace Dignite.Vault.Extract.Slugging;
 ///         Create path still goes through FieldDefinition/DocumentType whitelist validation.</item>
 /// </list>
 /// </summary>
-[Authorize(ExtractPermissions.Documents.ConfirmClassification)]
-public class SlugSuggestionAppService : ExtractAppService, ISlugSuggestionAppService
+[Authorize(VaultExtractPermissions.Documents.ConfirmClassification)]
+public class SlugSuggestionAppService : VaultExtractAppService, ISlugSuggestionAppService
 {
     private readonly IChatClient _chatClient;
     private readonly ILogger<SlugSuggestionAppService> _logger;
 
     public SlugSuggestionAppService(
-        [FromKeyedServices(ExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
+        [FromKeyedServices(VaultExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
         ILogger<SlugSuggestionAppService> logger)
     {
         _chatClient = chatClient;

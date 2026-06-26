@@ -41,13 +41,13 @@ public class Program
             {
                 builder.Services.AddDataMigrationEnvironment();
             }
-            await builder.AddApplicationAsync<ExtractHostModule>();
+            await builder.AddApplicationAsync<VaultExtractHostModule>();
             var app = builder.Build();
             await app.InitializeApplicationAsync();
 
             if (IsMigrateDatabase(args))
             {
-                await app.Services.GetRequiredService<ExtractHostDbMigrationService>().MigrateAsync();
+                await app.Services.GetRequiredService<VaultExtractHostDbMigrationService>().MigrateAsync();
                 var previous = Console.ForegroundColor;
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("Migration completed.");

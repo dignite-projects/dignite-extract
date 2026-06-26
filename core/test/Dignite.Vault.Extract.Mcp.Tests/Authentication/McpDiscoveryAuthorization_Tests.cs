@@ -116,8 +116,8 @@ public class McpDiscoveryAuthorization_Tests
                     {
                         // Drive the real reusable wiring (the #422 contract) instead of hand-rolling
                         // AddMcp + the IAuthorizationMiddlewareResultHandler Replace, so a regression in
-                        // AddExtractMcpDiscovery (e.g. a dropped Replace) is caught by this guard.
-                        services.AddExtractMcpDiscovery(metadata =>
+                        // AddVaultExtractMcpDiscovery (e.g. a dropped Replace) is caught by this guard.
+                        services.AddVaultExtractMcpDiscovery(metadata =>
                         {
                             metadata.AuthorizationServers = new List<string> { "https://auth.example/" };
                             metadata.ScopesSupported = new List<string> { "VaultExtract" };

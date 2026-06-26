@@ -35,7 +35,7 @@ public class ExportTemplateManager : DomainService
         var existing = await _repository.FindByNameAsync(name);
         if (existing != null)
         {
-            throw new BusinessException(ExtractErrorCodes.Export.TemplateNameAlreadyExists)
+            throw new BusinessException(VaultExtractErrorCodes.Export.TemplateNameAlreadyExists)
                 .WithData("Name", name);
         }
     }

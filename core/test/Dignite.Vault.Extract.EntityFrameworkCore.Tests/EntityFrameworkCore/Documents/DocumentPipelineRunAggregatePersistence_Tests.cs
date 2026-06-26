@@ -10,7 +10,7 @@ using Xunit;
 namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 
 public class DocumentPipelineRunAggregatePersistence_Tests
-    : ExtractEntityFrameworkCoreTestBase
+    : VaultExtractEntityFrameworkCoreTestBase
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly IDocumentPipelineRunRepository _runRepository;
@@ -41,7 +41,7 @@ public class DocumentPipelineRunAggregatePersistence_Tests
             // #216: after PipelineRun was split into an independent aggregate root, GetAsync no longer
             // eager-loads runs; Manager.QueueAsync inserts through runRepo.
             var document = await _documentRepository.GetAsync(documentId, includeDetails: false);
-            var run = await _pipelineRunManager.QueueAsync(document, ExtractPipelines.Classification);
+            var run = await _pipelineRunManager.QueueAsync(document, VaultExtractPipelines.Classification);
             runId = run.Id;
 
             await _documentRepository.UpdateAsync(document, autoSave: true);
@@ -54,7 +54,7 @@ public class DocumentPipelineRunAggregatePersistence_Tests
             var persistedRun = await _runRepository.FindAsync(runId);
             persistedRun.ShouldNotBeNull();
             persistedRun.DocumentId.ShouldBe(documentId);
-            persistedRun.PipelineCode.ShouldBe(ExtractPipelines.Classification);
+            persistedRun.PipelineCode.ShouldBe(VaultExtractPipelines.Classification);
             persistedRun.Status.ShouldBe(PipelineRunStatus.Pending);
         });
     }
@@ -81,17 +81,17 @@ public class DocumentPipelineRunAggregatePersistence_Tests
                 _guidGenerator.Create(),
                 documentId,
                 tenantId: null,
-                ExtractPipelines.Classification,
+                VaultExtractPipelines.Classification,
                 attemptNumber: 1);
             await _runRepository.InsertAsync(run, autoSave: false);
 
             var latest = await _runRepository.GetLatestRunsByCodesAsync(
                 documentId,
-                new[] { ExtractPipelines.Classification });
+                new[] { VaultExtractPipelines.Classification });
 
-            latest.ShouldContainKey(ExtractPipelines.Classification);
-            latest[ExtractPipelines.Classification].Id.ShouldBe(run.Id);
-            latest[ExtractPipelines.Classification].Status.ShouldBe(PipelineRunStatus.Pending);
+            latest.ShouldContainKey(VaultExtractPipelines.Classification);
+            latest[VaultExtractPipelines.Classification].Id.ShouldBe(run.Id);
+            latest[VaultExtractPipelines.Classification].Status.ShouldBe(PipelineRunStatus.Pending);
         });
     }
 
@@ -123,7 +123,7 @@ public class DocumentPipelineRunAggregatePersistence_Tests
             });
         });
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Pipeline.RetryInProgress);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Pipeline.RetryInProgress);
     }
 
     private DocumentPipelineRun NewRun(Guid documentId, int attemptNumber)
@@ -132,7 +132,7 @@ public class DocumentPipelineRunAggregatePersistence_Tests
             _guidGenerator.Create(),
             documentId,
             tenantId: null,
-            ExtractPipelines.Classification,
+            VaultExtractPipelines.Classification,
             attemptNumber);
     }
 

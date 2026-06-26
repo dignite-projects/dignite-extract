@@ -20,7 +20,7 @@ public interface IPromptProvider
     /// <summary>
     /// Title generation prompt. It <b>does not</b> accept a language parameter because the title
     /// strategy is "follow the document language"; the prompt includes "Respond in the same language
-    /// as the document." It is not affected by <c>ExtractBehaviorOptions.DefaultLanguage</c>.
+    /// as the document." It is not affected by <c>VaultExtractBehaviorOptions.DefaultLanguage</c>.
     /// </summary>
     PromptTemplate GetTitleGenerationPrompt();
 }

@@ -9,9 +9,9 @@ using Volo.Abp.EntityFrameworkCore;
 namespace Dignite.Vault.Extract.Documents.DocumentTypes;
 
 public class EfCoreDocumentTypeRepository
-    : EfCoreRepository<ExtractDbContext, DocumentType, Guid>, IDocumentTypeRepository
+    : EfCoreRepository<VaultExtractDbContext, DocumentType, Guid>, IDocumentTypeRepository
 {
-    public EfCoreDocumentTypeRepository(IDbContextProvider<ExtractDbContext> dbContextProvider)
+    public EfCoreDocumentTypeRepository(IDbContextProvider<VaultExtractDbContext> dbContextProvider)
         : base(dbContextProvider) { }
 
     public async Task<DocumentType?> FindByTypeCodeAsync(

@@ -17,10 +17,10 @@ namespace Dignite.Vault.Extract.Documents;
 /// </summary>
 public class CabinetSuggestionWorkflow_Tests
 {
-    private static CabinetSuggestionWorkflow CreateWorkflow(ExtractBehaviorOptions? options = null)
+    private static CabinetSuggestionWorkflow CreateWorkflow(VaultExtractBehaviorOptions? options = null)
         => new(
             Substitute.For<IChatClient>(),
-            Options.Create(options ?? new ExtractBehaviorOptions()));
+            Options.Create(options ?? new VaultExtractBehaviorOptions()));
 
     private static List<Cabinet> Candidates(params string[] names)
     {

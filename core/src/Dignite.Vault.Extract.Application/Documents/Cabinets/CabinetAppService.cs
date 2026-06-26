@@ -11,8 +11,8 @@ namespace Dignite.Vault.Extract.Documents.Cabinets;
 /// Cabinet management (#194). Matches the current layer only and never unions across layers.
 /// Permissions fail closed through method-level Cabinets.* assertions.
 /// </summary>
-[Authorize(ExtractPermissions.Cabinets.Default)]
-public class CabinetAppService : ExtractAppService, ICabinetAppService
+[Authorize(VaultExtractPermissions.Cabinets.Default)]
+public class CabinetAppService : VaultExtractAppService, ICabinetAppService
 {
     private readonly ICabinetRepository _repository;
     private readonly IDocumentRepository _documentRepository;
@@ -36,7 +36,7 @@ public class CabinetAppService : ExtractAppService, ICabinetAppService
         return ObjectMapper.Map<List<Cabinet>, List<CabinetDto>>(list);
     }
 
-    [Authorize(ExtractPermissions.Cabinets.Create)]
+    [Authorize(VaultExtractPermissions.Cabinets.Create)]
     public virtual async Task<CabinetDto> CreateAsync(CreateCabinetDto input)
     {
         await _cabinetManager.CheckNameAvailableAsync(input.Name);
@@ -46,7 +46,7 @@ public class CabinetAppService : ExtractAppService, ICabinetAppService
         return ObjectMapper.Map<Cabinet, CabinetDto>(entity);
     }
 
-    [Authorize(ExtractPermissions.Cabinets.Update)]
+    [Authorize(VaultExtractPermissions.Cabinets.Update)]
     public virtual async Task<CabinetDto> UpdateAsync(Guid id, UpdateCabinetDto input)
     {
         var entity = await _repository.GetAsync(id);
@@ -69,7 +69,7 @@ public class CabinetAppService : ExtractAppService, ICabinetAppService
         return ObjectMapper.Map<Cabinet, CabinetDto>(entity);
     }
 
-    [Authorize(ExtractPermissions.Cabinets.Delete)]
+    [Authorize(VaultExtractPermissions.Cabinets.Delete)]
     public virtual async Task DeleteAsync(Guid id)
     {
         var entity = await _repository.GetAsync(id);

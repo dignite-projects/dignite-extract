@@ -4,7 +4,7 @@ namespace Dignite.Vault.Extract.Mcp.Authentication;
 /// One configured API key and the ABP identity it authenticates as (#428). This is host-owned deployment
 /// config — the key → service-account mapping is a deployment decision; the Mcp egress module only provides
 /// the matching + principal-construction mechanism. Each key SHOULD map to a dedicated, least-privilege
-/// service-account user granted <b>only</b> <c>ExtractPermissions.Documents.Default</c>
+/// service-account user granted <b>only</b> <c>VaultExtractPermissions.Documents.Default</c>
 /// (<c>"VaultExtract.Documents"</c>), with no roles, so an API-key caller can never exceed an OAuth user.
 /// </summary>
 public class McpApiKeyEntry
@@ -25,7 +25,7 @@ public class McpApiKeyEntry
     /// <summary>
     /// Optional tenant <c>Guid</c> (stamped as <c>AbpClaimTypes.TenantId</c>). Null/empty = host space.
     /// <b>Only takes effect when the host runs multi-tenant</b> (i.e. <c>UseMultiTenancy</c> is in the
-    /// pipeline). While <c>ExtractHostModule.IsMultiTenant</c> is <c>false</c> the claim is inert and all
+    /// pipeline). While <c>VaultExtractHostModule.IsMultiTenant</c> is <c>false</c> the claim is inert and all
     /// access resolves to the host space. When multi-tenancy is enabled this MUST be set so the ambient
     /// <c>IMultiTenant</c> filter scopes LLM-triggered queries to the right layer.
     /// </summary>

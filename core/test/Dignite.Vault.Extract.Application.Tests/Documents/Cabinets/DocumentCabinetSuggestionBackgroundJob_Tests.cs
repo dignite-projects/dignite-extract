@@ -15,7 +15,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class DocumentCabinetSuggestionJobTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -25,10 +25,10 @@ public class DocumentCabinetSuggestionJobTestModule : AbpModule
 
         var workflow = Substitute.ForPartsOf<CabinetSuggestionWorkflow>(
             Substitute.For<IChatClient>(),
-            Options.Create(new ExtractBehaviorOptions()));
+            Options.Create(new VaultExtractBehaviorOptions()));
         context.Services.AddSingleton(workflow);
 
-        context.Services.Configure<ExtractBehaviorOptions>(_ => { });
+        context.Services.Configure<VaultExtractBehaviorOptions>(_ => { });
     }
 }
 
@@ -38,7 +38,7 @@ public class DocumentCabinetSuggestionJobTestModule : AbpModule
 /// are both replaced with NSubstitute, with no real LLM.
 /// </summary>
 public class DocumentCabinetSuggestionBackgroundJob_Tests
-    : ExtractApplicationTestBase<DocumentCabinetSuggestionJobTestModule>
+    : VaultExtractApplicationTestBase<DocumentCabinetSuggestionJobTestModule>
 {
     private readonly DocumentCabinetSuggestionBackgroundJob _job;
     private readonly IDocumentRepository _documentRepository;

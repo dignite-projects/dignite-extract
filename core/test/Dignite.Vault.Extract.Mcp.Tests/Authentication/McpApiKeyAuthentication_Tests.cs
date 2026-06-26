@@ -24,7 +24,7 @@ namespace Dignite.Vault.Extract.Mcp.Authentication;
 /// <summary>
 /// #428 guard for the static API-key fallback auth channel on /mcp. Uses a minimal TestServer pipeline
 /// (no ABP host / DB / OpenIddict) that mirrors the host seam precisely: a default Bearer-stub scheme,
-/// <c>UseExtractMcpApiKey</c> BEFORE <c>UseAuthentication</c>, and the bare scheme-free
+/// <c>UseVaultExtractMcpApiKey</c> BEFORE <c>UseAuthentication</c>, and the bare scheme-free
 /// <c>RequireAuthorization()</c> the host uses on /mcp.
 ///
 /// The load-bearing behaviours locked here:
@@ -214,7 +214,7 @@ public class McpApiKeyAuthentication_Tests
 
                     services.AddAuthorization();
 
-                    services.AddExtractMcpApiKey(options =>
+                    services.AddVaultExtractMcpApiKey(options =>
                     {
                         options.HeaderName = HeaderName;
                         options.PathPrefix = "/mcp";
@@ -241,7 +241,7 @@ public class McpApiKeyAuthentication_Tests
                 web.Configure(app =>
                 {
                     app.UseRouting();
-                    app.UseExtractMcpApiKey();   // before authentication, mirroring the host
+                    app.UseVaultExtractMcpApiKey();   // before authentication, mirroring the host
                     app.UseAuthentication();
                     app.UseAuthorization();
 

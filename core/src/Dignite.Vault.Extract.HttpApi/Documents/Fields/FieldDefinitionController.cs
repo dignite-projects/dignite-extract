@@ -8,7 +8,7 @@ namespace Dignite.Vault.Extract.HttpApi.Documents.Fields;
 
 [Area("vault-extract")]
 [Route("api/vault-extract/field-definitions")]
-public class FieldDefinitionController : ExtractController, IFieldDefinitionAppService
+public class FieldDefinitionController : VaultExtractController, IFieldDefinitionAppService
 {
     private readonly IFieldDefinitionAppService _fieldDefinitionAppService;
 

@@ -53,7 +53,7 @@ public class FieldDefinitionManager : DomainService
 
         if (existing != null)
         {
-            throw new BusinessException(ExtractErrorCodes.FieldDefinition.AlreadyExists)
+            throw new BusinessException(VaultExtractErrorCodes.FieldDefinition.AlreadyExists)
                 .WithData("DocumentTypeCode", await ResolveTypeCodeAsync(documentTypeId))
                 .WithData("Name", name);
         }
@@ -82,7 +82,7 @@ public class FieldDefinitionManager : DomainService
     {
         if (await HasActiveNameConflictAsync(entity.DocumentTypeId, entity.Name))
         {
-            throw new BusinessException(ExtractErrorCodes.FieldDefinition.RestoreConflict)
+            throw new BusinessException(VaultExtractErrorCodes.FieldDefinition.RestoreConflict)
                 .WithData("DocumentTypeCode", await ResolveTypeCodeAsync(entity.DocumentTypeId))
                 .WithData("Name", entity.Name);
         }

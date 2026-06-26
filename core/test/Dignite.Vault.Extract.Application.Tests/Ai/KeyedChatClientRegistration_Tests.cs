@@ -31,25 +31,25 @@ namespace Dignite.Vault.Extract.Ai;
 ///
 /// <para>
 /// The <see cref="HostRegisteredKeys"/> set below is a deliberate snapshot — when
-/// <c>ExtractHostModule.ConfigureAI</c> adds or removes a <c>AddKeyedChatClient(...)</c> call,
+/// <c>VaultExtractHostModule.ConfigureAI</c> adds or removes a <c>AddKeyedChatClient(...)</c> call,
 /// this constant must be updated in the same change.
 /// </para>
 /// </summary>
 public class KeyedChatClientRegistration_Tests
 {
     /// <summary>
-    /// Snapshot of <c>ExtractHostModule.ConfigureAI</c>'s <c>AddKeyedChatClient(...)</c>
+    /// Snapshot of <c>VaultExtractHostModule.ConfigureAI</c>'s <c>AddKeyedChatClient(...)</c>
     /// calls. KEEP IN SYNC with that method.
     /// </summary>
     private static readonly HashSet<string> HostRegisteredKeys = new()
     {
-        ExtractConsts.TitleGeneratorChatClientKey,
-        ExtractConsts.StructuredChatClientKey,
+        VaultExtractConsts.TitleGeneratorChatClientKey,
+        VaultExtractConsts.StructuredChatClientKey,
     };
 
     private static readonly Assembly[] ProductionAssemblies =
     {
-        typeof(ExtractConsts).Assembly,                    // Dignite.Vault.Extract.Abstractions
+        typeof(VaultExtractConsts).Assembly,                    // Dignite.Vault.Extract.Abstractions
         typeof(IDocumentRepository).Assembly,                  // Dignite.Vault.Extract.Domain
         typeof(DocumentDto).Assembly,                          // Dignite.Vault.Extract.Application.Contracts
         typeof(DocumentClassificationWorkflow).Assembly,       // Dignite.Vault.Extract.Application (where keyed consumers live)
@@ -66,7 +66,7 @@ public class KeyedChatClientRegistration_Tests
 
         orphans.ShouldBeEmpty(
             "These [FromKeyedServices(...)] consumers reference keys NOT registered by " +
-            "ExtractHostModule.ConfigureAI. Either add the AddKeyedChatClient call there, " +
+            "VaultExtractHostModule.ConfigureAI. Either add the AddKeyedChatClient call there, " +
             "or remove the [FromKeyedServices] consumer / fix the typo: " +
             string.Join("; ", orphans.Select(o => $"{o.TypeName}.{o.ParamName} = \"{o.Key}\"")));
     }

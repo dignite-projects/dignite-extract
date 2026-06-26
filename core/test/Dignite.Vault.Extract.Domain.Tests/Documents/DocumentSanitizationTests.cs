@@ -21,7 +21,7 @@ namespace Dignite.Vault.Extract.Documents;
 /// <see cref="DocumentPipelineRunManager.CompleteParseAsync"/>, as in
 /// <see cref="DocumentPipelineRunManagerTests"/>.
 /// </summary>
-public class DocumentSanitizationTests : ExtractDomainTestBase<ExtractDomainTestModule>
+public class DocumentSanitizationTests : VaultExtractDomainTestBase<VaultExtractDomainTestModule>
 {
     private readonly DocumentPipelineRunManager _manager;
 
@@ -54,7 +54,7 @@ public class DocumentSanitizationTests : ExtractDomainTestBase<ExtractDomainTest
     private async Task<Document> CompleteExtractionAsync(string? title = null, string? language = null)
     {
         var doc = CreateDocument();
-        var run = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var run = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _manager.CompleteParseAsync(
             doc, run, markdown: "# Doc\n\nbody", title: title, language: language);
         return doc;

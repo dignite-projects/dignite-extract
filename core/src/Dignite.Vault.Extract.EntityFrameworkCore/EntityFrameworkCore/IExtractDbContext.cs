@@ -5,8 +5,8 @@ using Volo.Abp.EntityFrameworkCore;
 
 namespace Dignite.Vault.Extract.EntityFrameworkCore;
 
-[ConnectionStringName(ExtractDbProperties.ConnectionStringName)]
-public interface IExtractDbContext : IEfCoreDbContext
+[ConnectionStringName(VaultExtractDbProperties.ConnectionStringName)]
+public interface IVaultExtractDbContext : IEfCoreDbContext
 {
     DbSet<Document> Documents { get; }
     DbSet<DocumentPipelineRun> DocumentPipelineRuns { get; }

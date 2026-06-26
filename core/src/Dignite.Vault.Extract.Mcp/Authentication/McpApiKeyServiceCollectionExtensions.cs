@@ -10,19 +10,19 @@ namespace Dignite.Vault.Extract.Mcp.Authentication;
 /// <summary>
 /// Reusable wiring for the optional static API-key fallback auth channel on <c>/mcp</c> (#428), exported by
 /// the Mcp egress module so any host enables it with one <c>Add</c> + one <c>Use</c> call. Mirrors the #422
-/// <c>AddExtractMcpDiscovery</c> split: the deployment-agnostic MECHANISM (header matching, constant-time
+/// <c>AddVaultExtractMcpDiscovery</c> split: the deployment-agnostic MECHANISM (header matching, constant-time
 /// compare, synthetic-principal construction) lives in this module; the HOST owns all configuration and the
-/// key → service-account mapping, and calls <see cref="UseExtractMcpApiKey"/> from its
+/// key → service-account mapping, and calls <see cref="UseVaultExtractMcpApiKey"/> from its
 /// <c>OnApplicationInitialization</c> — so the "middleware only wired in host" rule holds.
 /// </summary>
 public static class McpApiKeyServiceCollectionExtensions
 {
     /// <summary>
     /// Registers and fail-fast-validates the API-key options. A no-op feature when no keys are configured
-    /// (OAuth-only deployment). Pair with <see cref="UseExtractMcpApiKey"/> in the pipeline, before
+    /// (OAuth-only deployment). Pair with <see cref="UseVaultExtractMcpApiKey"/> in the pipeline, before
     /// <c>UseAuthentication</c>.
     /// </summary>
-    public static IServiceCollection AddExtractMcpApiKey(
+    public static IServiceCollection AddVaultExtractMcpApiKey(
         this IServiceCollection services,
         Action<McpApiKeyOptions> configure)
     {
@@ -47,7 +47,7 @@ public static class McpApiKeyServiceCollectionExtensions
     /// it never runs for the admin UI / REST / Swagger. A no-op when no keys are configured. MUST be called
     /// before <c>UseAuthentication</c>.
     /// </summary>
-    public static IApplicationBuilder UseExtractMcpApiKey(this IApplicationBuilder app)
+    public static IApplicationBuilder UseVaultExtractMcpApiKey(this IApplicationBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
 

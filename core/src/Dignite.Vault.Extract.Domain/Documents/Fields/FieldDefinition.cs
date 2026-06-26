@@ -115,7 +115,7 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
         Check.NotNullOrWhiteSpace(name, nameof(name), FieldDefinitionConsts.MaxNameLength);
         if (!NameRegex.IsMatch(name))
         {
-            throw new BusinessException(ExtractErrorCodes.FieldDefinition.InvalidName)
+            throw new BusinessException(VaultExtractErrorCodes.FieldDefinition.InvalidName)
                 .WithData("name", name)
                 .WithData("pattern", FieldDefinitionConsts.NamePattern);
         }
@@ -132,7 +132,7 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
 
         if (displayName.Any(c => char.IsControl(c)))
         {
-            throw new BusinessException(ExtractErrorCodes.FieldDefinition.InvalidDisplayName)
+            throw new BusinessException(VaultExtractErrorCodes.FieldDefinition.InvalidDisplayName)
                 .WithData("displayName", displayName);
         }
 
@@ -203,7 +203,7 @@ public class FieldDefinition : FullAuditedAggregateRoot<Guid>, IMultiTenant
     {
         if (allowMultiple && dataType != FieldDataType.Text)
         {
-            throw new BusinessException(ExtractErrorCodes.FieldDefinition.MultiValueRequiresStringType)
+            throw new BusinessException(VaultExtractErrorCodes.FieldDefinition.MultiValueRequiresStringType)
                 .WithData("dataType", dataType.ToString());
         }
 

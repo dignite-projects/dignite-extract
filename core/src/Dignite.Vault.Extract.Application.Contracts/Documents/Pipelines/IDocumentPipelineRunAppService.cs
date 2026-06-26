@@ -20,7 +20,7 @@ public interface IDocumentPipelineRunAppService : IApplicationService
 {
     /// <summary>
     /// Returns all pipeline runs for <paramref name="documentId"/>, ordered by
-    /// (PipelineCode, AttemptNumber). Permission: <c>ExtractPermissions.Documents.Default</c>.
+    /// (PipelineCode, AttemptNumber). Permission: <c>VaultExtractPermissions.Documents.Default</c>.
     /// Tenant isolation is automatically applied by the ABP <c>IMultiTenant</c> global filter.
     /// Nonexistent or cross-tenant documents throw <c>EntityNotFoundException</c>.
     /// </summary>

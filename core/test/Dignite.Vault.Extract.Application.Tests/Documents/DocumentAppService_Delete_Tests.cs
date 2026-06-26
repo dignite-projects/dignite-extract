@@ -17,7 +17,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class DocumentAppServiceDeleteTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -26,19 +26,19 @@ public class DocumentAppServiceDeleteTestModule : AbpModule
         context.Services.AddSingleton(Substitute.For<IDocumentTypeRepository>());
         context.Services.AddSingleton(Substitute.For<IFieldDefinitionRepository>());
         context.Services.AddSingleton(Substitute.For<ICabinetRepository>());
-        context.Services.AddSingleton(Substitute.For<IBlobContainer<ExtractDocumentContainer>>());
+        context.Services.AddSingleton(Substitute.For<IBlobContainer<VaultExtractDocumentContainer>>());
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
     }
 }
 
 public class DocumentAppService_Delete_Tests
-    : ExtractApplicationTestBase<DocumentAppServiceDeleteTestModule>
+    : VaultExtractApplicationTestBase<DocumentAppServiceDeleteTestModule>
 {
     private readonly IDocumentAppService _appService;
     private readonly IDocumentRepository _documentRepository;
     private readonly IDistributedEventBus _distributedEventBus;
-    private readonly IBlobContainer<ExtractDocumentContainer> _blobContainer;
+    private readonly IBlobContainer<VaultExtractDocumentContainer> _blobContainer;
     private readonly IDocumentTypeRepository _documentTypeRepository;
     private readonly ICabinetRepository _cabinetRepository;
 
@@ -47,7 +47,7 @@ public class DocumentAppService_Delete_Tests
         _appService = GetRequiredService<IDocumentAppService>();
         _documentRepository = GetRequiredService<IDocumentRepository>();
         _distributedEventBus = GetRequiredService<IDistributedEventBus>();
-        _blobContainer = GetRequiredService<IBlobContainer<ExtractDocumentContainer>>();
+        _blobContainer = GetRequiredService<IBlobContainer<VaultExtractDocumentContainer>>();
         _documentTypeRepository = GetRequiredService<IDocumentTypeRepository>();
         _cabinetRepository = GetRequiredService<ICabinetRepository>();
 
@@ -104,7 +104,7 @@ public class DocumentAppService_Delete_Tests
             await _appService.DeleteAsync(doc.Id);
         });
 
-        exception.Code.ShouldBe(ExtractErrorCodes.Document.HasSubDocuments);
+        exception.Code.ShouldBe(VaultExtractErrorCodes.Document.HasSubDocuments);
 
         // Fail closed: neither the soft-delete nor the DocumentDeletedEto fire when the guard trips.
         await _documentRepository.DidNotReceive().DeleteAsync(doc.Id, Arg.Any<bool>(), Arg.Any<CancellationToken>());
@@ -168,7 +168,7 @@ public class DocumentAppService_Delete_Tests
             await _appService.UploadAsync(CreateUploadInput([1, 2, 3]));
         });
 
-        exception.Code.ShouldBe(ExtractErrorCodes.DocumentType.NoneConfigured);
+        exception.Code.ShouldBe(VaultExtractErrorCodes.DocumentType.NoneConfigured);
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public class DocumentAppService_Delete_Tests
             await _appService.UploadAsync(CreateUploadInput([1, 2, 3]));
         });
 
-        exception.Code.ShouldBe(ExtractErrorCodes.Document.Duplicate);
+        exception.Code.ShouldBe(VaultExtractErrorCodes.Document.Duplicate);
     }
 
     [Fact]
@@ -203,7 +203,7 @@ public class DocumentAppService_Delete_Tests
             await _appService.UploadAsync(CreateUploadInput([1, 2, 3]));
         });
 
-        exception.Code.ShouldBe(ExtractErrorCodes.Document.InRecycleBin);
+        exception.Code.ShouldBe(VaultExtractErrorCodes.Document.InRecycleBin);
         exception.Data["ExistingDocumentId"].ShouldBe(existing.Id);
     }
 
@@ -238,7 +238,7 @@ public class DocumentAppService_Delete_Tests
         var exception = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.UploadAsync(input));
 
-        exception.Code.ShouldBe(ExtractErrorCodes.Cabinet.InvalidId);
+        exception.Code.ShouldBe(VaultExtractErrorCodes.Cabinet.InvalidId);
     }
 
     [Fact]
@@ -250,7 +250,7 @@ public class DocumentAppService_Delete_Tests
         var exception = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.UploadAsync(input));
 
-        exception.Code.ShouldBe(ExtractErrorCodes.Document.UnsupportedFileType);
+        exception.Code.ShouldBe(VaultExtractErrorCodes.Document.UnsupportedFileType);
         await _documentRepository.DidNotReceive().InsertAsync(
             Arg.Any<Document>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
         await _blobContainer.DidNotReceive().SaveAsync(
@@ -267,7 +267,7 @@ public class DocumentAppService_Delete_Tests
         var exception = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.UploadAsync(input));
 
-        exception.Code.ShouldBe(ExtractErrorCodes.Document.UnsupportedFileType);
+        exception.Code.ShouldBe(VaultExtractErrorCodes.Document.UnsupportedFileType);
     }
 
     [Fact]
@@ -288,7 +288,7 @@ public class DocumentAppService_Delete_Tests
         var exception = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.UploadAsync(input));
 
-        exception.Code.ShouldBe(ExtractErrorCodes.Document.FileTooLarge);
+        exception.Code.ShouldBe(VaultExtractErrorCodes.Document.FileTooLarge);
     }
 
     [Fact]
@@ -314,7 +314,7 @@ public class DocumentAppService_Delete_Tests
             var exception = await Should.ThrowAsync<BusinessException>(async () =>
                 await _appService.UploadAsync(input));
 
-            exception.Code.ShouldBe(ExtractErrorCodes.Document.FileTooLarge);
+            exception.Code.ShouldBe(VaultExtractErrorCodes.Document.FileTooLarge);
         }
         finally
         {

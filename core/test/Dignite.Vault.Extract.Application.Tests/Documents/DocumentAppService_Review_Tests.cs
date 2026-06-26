@@ -19,14 +19,14 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class DocumentAppServiceReviewTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         context.Services.AddSingleton(Substitute.For<IDocumentRepository>());
         context.Services.AddSingleton(Substitute.For<ICabinetRepository>());
-        context.Services.AddSingleton(Substitute.For<IBlobContainer<ExtractDocumentContainer>>());
+        context.Services.AddSingleton(Substitute.For<IBlobContainer<VaultExtractDocumentContainer>>());
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
 
@@ -57,7 +57,7 @@ public class DocumentAppServiceReviewTestModule : AbpModule
 /// </para>
 /// </summary>
 public class DocumentAppService_Review_Tests
-    : ExtractApplicationTestBase<DocumentAppServiceReviewTestModule>
+    : VaultExtractApplicationTestBase<DocumentAppServiceReviewTestModule>
 {
     private readonly IDocumentAppService _appService;
     private readonly IDocumentRepository _documentRepository;
@@ -297,9 +297,9 @@ public class DocumentAppService_Review_Tests
     private async Task<Document> CreatePendingReviewDocumentAsync(string reason)
     {
         var doc = CreateDocument();
-        var textRun = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Parse);
+        var textRun = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _pipelineRunManager.CompleteAsync(doc, textRun);
-        var classRun = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Classification);
+        var classRun = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _pipelineRunManager.CompleteClassificationWithLowConfidenceAsync(doc, classRun, reason: reason);
         return doc;
     }
@@ -316,7 +316,7 @@ public class DocumentAppService_Review_Tests
             Substitute.For<IDocumentTypeRepository>(),
             Substitute.For<IFieldDefinitionRepository>(),
             Substitute.For<ICabinetRepository>(),
-            Substitute.For<IBlobContainer<ExtractDocumentContainer>>(),
+            Substitute.For<IBlobContainer<VaultExtractDocumentContainer>>(),
             new DocumentPipelineRunManager(runRepoSubstitute),
             new DocumentPipelineJobScheduler(
                 Substitute.For<IDocumentRepository>(),

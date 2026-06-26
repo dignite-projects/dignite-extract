@@ -12,7 +12,7 @@ namespace Dignite.Vault.Extract.Documents.Pipelines;
 /// <c>DocumentAppService</c>, because <c>[Authorize]</c> does not fire on reflection / LLM tool paths.
 /// Tenant isolation: ABP <c>IMultiTenant</c> global filter applies automatically.
 /// </summary>
-public class DocumentPipelineRunAppService : ExtractAppService, IDocumentPipelineRunAppService
+public class DocumentPipelineRunAppService : VaultExtractAppService, IDocumentPipelineRunAppService
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly IDocumentPipelineRunRepository _runRepository;
@@ -30,7 +30,7 @@ public class DocumentPipelineRunAppService : ExtractAppService, IDocumentPipelin
 
     public virtual async Task<List<DocumentPipelineRunDto>> GetListAsync(Guid documentId)
     {
-        await CheckPolicyAsync(ExtractPermissions.Documents.Default);
+        await CheckPolicyAsync(VaultExtractPermissions.Documents.Default);
 
         // Fail-closed safety gate: assert visibility through the document read path before returning
         // its orchestration state. CheckPolicyAsync alone is insufficient. PipelineRun has its own
@@ -45,7 +45,7 @@ public class DocumentPipelineRunAppService : ExtractAppService, IDocumentPipelin
         var runs = await _runRepository.GetListByDocumentAsync(documentId);
         // Call the child mapper Map(source) directly instead of ObjectMapper so AfterMap decodes
         // Candidates, matching the original [UseMapper] nested-path behavior; see
-        // ExtractApplicationMappers comments.
+        // VaultExtractApplicationMappers comments.
         return runs.Select(_runMapper.Map).ToList();
     }
 }

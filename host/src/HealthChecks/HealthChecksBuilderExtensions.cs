@@ -5,11 +5,11 @@ namespace Dignite.Vault.Extract.Host.HealthChecks;
 
 public static class HealthChecksBuilderExtensions
 {
-    public static void AddExtractHealthChecks(this IServiceCollection services)
+    public static void AddVaultExtractHealthChecks(this IServiceCollection services)
     {
         // Add your health checks here
         var healthChecksBuilder = services.AddHealthChecks();
-        healthChecksBuilder.AddCheck<ExtractHostDatabaseCheck>("Extract DbContext Check", tags: new string[] { "database" });
+        healthChecksBuilder.AddCheck<VaultExtractHostDatabaseCheck>("Extract DbContext Check", tags: new string[] { "database" });
 
         var configuration = services.GetConfiguration();
         var healthCheckUrl = configuration["App:HealthCheckUrl"];

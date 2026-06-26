@@ -9,7 +9,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class DocumentStatisticsAppServiceTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -24,7 +24,7 @@ public class DocumentStatisticsAppServiceTestModule : AbpModule
 /// <c>EfCoreDocumentRepositoryStatistics_Tests</c>.
 /// </summary>
 public class DocumentStatisticsAppService_Tests
-    : ExtractApplicationTestBase<DocumentStatisticsAppServiceTestModule>
+    : VaultExtractApplicationTestBase<DocumentStatisticsAppServiceTestModule>
 {
     private readonly IDocumentStatisticsAppService _appService;
     private readonly IDocumentRepository _documentRepository;

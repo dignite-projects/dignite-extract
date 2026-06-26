@@ -16,7 +16,7 @@ namespace Dignite.Vault.Extract.Mcp.Authentication;
 ///
 /// This type is a reusable protocol-layer building block exported by the Mcp egress adapter: any host
 /// that deploys the Vault Extract MCP egress and wants the OAuth discovery flow wires it via
-/// <see cref="McpDiscoveryServiceCollectionExtensions.AddExtractMcpDiscovery"/> rather than
+/// <see cref="McpDiscoveryServiceCollectionExtensions.AddVaultExtractMcpDiscovery"/> rather than
 /// re-authoring it. Endpoint mapping (<c>MapMcp</c>) and the <see cref="McpDiscoveryChallengeMarker"/>
 /// metadata attachment stay host-only.
 ///

@@ -21,20 +21,20 @@ public class DocumentClassificationWorkflow : ITransientDependency
     /// <summary>
     /// Structured-output (<c>RunAsync&lt;ClassificationResponse&gt;</c>), tool-free,
     /// prompt-unique call — routed through the dedicated keyed client
-    /// (<see cref="ExtractConsts.StructuredChatClientKey"/>) so traces stay clean
+    /// (<see cref="VaultExtractConsts.StructuredChatClientKey"/>) so traces stay clean
     /// and hosts can optionally point classification at a smaller / cheaper model than
     /// the main agentic chat. See <c>docs/en/configuration/ai-provider.md</c> keyed-clients table.
     /// </summary>
     private readonly IChatClient _chatClient;
     private readonly IPromptProvider _promptProvider;
-    private readonly ExtractBehaviorOptions _options;
+    private readonly VaultExtractBehaviorOptions _options;
 
     public ILogger<DocumentClassificationWorkflow> Logger { get; set; }
         = NullLogger<DocumentClassificationWorkflow>.Instance;
 
     public DocumentClassificationWorkflow(
-        [FromKeyedServices(ExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
-        IOptions<ExtractBehaviorOptions> options,
+        [FromKeyedServices(VaultExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
+        IOptions<VaultExtractBehaviorOptions> options,
         IPromptProvider promptProvider)
     {
         _chatClient = chatClient;

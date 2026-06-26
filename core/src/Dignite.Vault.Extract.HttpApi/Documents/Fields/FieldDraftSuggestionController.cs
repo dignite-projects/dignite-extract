@@ -7,7 +7,7 @@ namespace Dignite.Vault.Extract.HttpApi.Documents.Fields;
 
 [Area("vault-extract")]
 [Route("api/vault-extract/field-draft-suggestion")]
-public class FieldDraftSuggestionController : ExtractController, IFieldDraftSuggestionAppService
+public class FieldDraftSuggestionController : VaultExtractController, IFieldDraftSuggestionAppService
 {
     private readonly IFieldDraftSuggestionAppService _fieldDraftSuggestionAppService;
 

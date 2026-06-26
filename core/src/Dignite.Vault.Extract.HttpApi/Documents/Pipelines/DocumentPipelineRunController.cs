@@ -8,13 +8,13 @@ namespace Dignite.Vault.Extract.HttpApi.Documents.Pipelines;
 
 // #216 split PipelineRun into an independent aggregate root and added
 // IDocumentPipelineRunAppService, but this handwritten controller was missed then. host Auto API only
-// covers ExtractHostModule.Assembly (see ExtractHostModule.ConfigureAutoApiControllers), so
+// covers VaultExtractHostModule.Assembly (see VaultExtractHostModule.ConfigureAutoApiControllers), so
 // AppServices in the Application assembly are exposed only through explicit HttpApi controllers. Without
 // this forwarding layer, frontend calls to /api/vault-extract/document-pipeline-runs hit a 404 with null
 // body and break the document detail page forkJoin.
 [Area("vault-extract")]
 [Route("api/vault-extract/document-pipeline-runs")]
-public class DocumentPipelineRunController : ExtractController, IDocumentPipelineRunAppService
+public class DocumentPipelineRunController : VaultExtractController, IDocumentPipelineRunAppService
 {
     private readonly IDocumentPipelineRunAppService _documentPipelineRunAppService;
 

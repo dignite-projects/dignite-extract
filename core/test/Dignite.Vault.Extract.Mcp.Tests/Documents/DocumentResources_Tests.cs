@@ -10,7 +10,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Mcp.Documents;
 
-[DependsOn(typeof(ExtractTestBaseModule))]
+[DependsOn(typeof(VaultExtractTestBaseModule))]
 public class DocumentResourcesTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -30,7 +30,7 @@ public class DocumentResourcesTestModule : AbpModule
 /// path is exercised end-to-end (<see cref="DocumentResources.ReadAsync"/>) because <c>BuildPayload</c> is
 /// private; AppService behaviors are covered elsewhere and mocked here.
 /// </summary>
-public class DocumentResources_Tests : ExtractTestBase<DocumentResourcesTestModule>
+public class DocumentResources_Tests : VaultExtractTestBase<DocumentResourcesTestModule>
 {
     private readonly IDocumentAppService _documentAppService;
 

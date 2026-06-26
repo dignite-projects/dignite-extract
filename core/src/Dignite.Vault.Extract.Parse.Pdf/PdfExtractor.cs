@@ -43,14 +43,14 @@ public class PdfExtractor : IMarkdownTextProvider, ITransientDependency
 
     private readonly IOcrProvider _ocrProvider;
     private readonly PdfExtractorOptions _options;
-    private readonly ExtractOcrOptions _ocrOptions;
+    private readonly VaultExtractOcrOptions _ocrOptions;
 
     public ILogger<PdfExtractor> Logger { get; set; } = NullLogger<PdfExtractor>.Instance;
 
     public PdfExtractor(
         IOcrProvider ocrProvider,
         IOptions<PdfExtractorOptions> options,
-        IOptions<ExtractOcrOptions> ocrOptions)
+        IOptions<VaultExtractOcrOptions> ocrOptions)
     {
         _ocrProvider = ocrProvider;
         _options = options.Value;

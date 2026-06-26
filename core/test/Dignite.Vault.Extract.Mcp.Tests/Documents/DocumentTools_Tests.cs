@@ -15,7 +15,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Mcp.Documents;
 
-[DependsOn(typeof(ExtractTestBaseModule))]
+[DependsOn(typeof(VaultExtractTestBaseModule))]
 public class DocumentToolsTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -29,7 +29,7 @@ public class DocumentToolsTestModule : AbpModule
 /// <see cref="IDocumentAppService.GetAsync"/> and maps to <see cref="DocumentDetailResult"/>, with title
 /// / markdown wrapped by <c>PromptBoundary</c>.
 /// </summary>
-public class DocumentTools_Tests : ExtractTestBase<DocumentToolsTestModule>
+public class DocumentTools_Tests : VaultExtractTestBase<DocumentToolsTestModule>
 {
     private readonly IDocumentAppService _documentAppService;
 

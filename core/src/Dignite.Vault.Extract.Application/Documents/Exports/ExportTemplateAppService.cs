@@ -15,7 +15,7 @@ using Volo.Abp.Domain.Entities;
 namespace Dignite.Vault.Extract.Documents.Exports;
 
 [Authorize]
-public class ExportTemplateAppService : ExtractAppService, IExportTemplateAppService
+public class ExportTemplateAppService : VaultExtractAppService, IExportTemplateAppService
 {
     // Fixed exported system field headers (#207 / #287): LifecycleStatus / ReviewStatus (disposition axis) /
     // ReviewReasons (reason axis) / Title. Always exported and not configured through template columns.
@@ -47,14 +47,14 @@ public class ExportTemplateAppService : ExtractAppService, IExportTemplateAppSer
 
     public virtual async Task<ExportTemplateDto> GetAsync(Guid id)
     {
-        await CheckPolicyAsync(ExtractPermissions.Documents.Templates.Default);
+        await CheckPolicyAsync(VaultExtractPermissions.Documents.Templates.Default);
         var entity = await GetOwnedTemplateAsync(id);
         return ObjectMapper.Map<ExportTemplate, ExportTemplateDto>(entity);
     }
 
     public virtual async Task<List<ExportTemplateDto>> GetListAsync()
     {
-        await CheckPolicyAsync(ExtractPermissions.Documents.Templates.Default);
+        await CheckPolicyAsync(VaultExtractPermissions.Documents.Templates.Default);
         // Tenant isolation is enforced by the ambient IMultiTenant filter; Name ASC ordering is kept in memory.
         var list = (await _templateRepository.GetListAsync())
             .OrderBy(t => t.Name)
@@ -62,7 +62,7 @@ public class ExportTemplateAppService : ExtractAppService, IExportTemplateAppSer
         return ObjectMapper.Map<List<ExportTemplate>, List<ExportTemplateDto>>(list);
     }
 
-    [Authorize(ExtractPermissions.Documents.Templates.Create)]
+    [Authorize(VaultExtractPermissions.Documents.Templates.Create)]
     public virtual async Task<ExportTemplateDto> CreateAsync(CreateExportTemplateDto input)
     {
         await _exportTemplateManager.CheckNameAvailableAsync(input.Name);
@@ -81,7 +81,7 @@ public class ExportTemplateAppService : ExtractAppService, IExportTemplateAppSer
         return ObjectMapper.Map<ExportTemplate, ExportTemplateDto>(entity);
     }
 
-    [Authorize(ExtractPermissions.Documents.Templates.Update)]
+    [Authorize(VaultExtractPermissions.Documents.Templates.Update)]
     public virtual async Task<ExportTemplateDto> UpdateAsync(Guid id, UpdateExportTemplateDto input)
     {
         var entity = await GetOwnedTemplateAsync(id);
@@ -100,14 +100,14 @@ public class ExportTemplateAppService : ExtractAppService, IExportTemplateAppSer
         return ObjectMapper.Map<ExportTemplate, ExportTemplateDto>(entity);
     }
 
-    [Authorize(ExtractPermissions.Documents.Templates.Delete)]
+    [Authorize(VaultExtractPermissions.Documents.Templates.Delete)]
     public virtual async Task DeleteAsync(Guid id)
     {
         var entity = await GetOwnedTemplateAsync(id);
         await _templateRepository.DeleteAsync(entity);
     }
 
-    [Authorize(ExtractPermissions.Documents.Export)]
+    [Authorize(VaultExtractPermissions.Documents.Export)]
     public virtual async Task<IRemoteStreamContent> ExportAsync(ExportDocumentsInput input)
     {
         var template = await GetOwnedTemplateAsync(input.TemplateId);
@@ -169,7 +169,7 @@ public class ExportTemplateAppService : ExtractAppService, IExportTemplateAppSer
 
         if (rows.Count > limit)
         {
-            throw new BusinessException(ExtractErrorCodes.Export.DocumentLimitExceeded)
+            throw new BusinessException(VaultExtractErrorCodes.Export.DocumentLimitExceeded)
                 .WithData("count", limit + "+")
                 .WithData("max", limit);
         }

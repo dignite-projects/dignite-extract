@@ -14,7 +14,7 @@ namespace Dignite.Vault.Extract.Documents.DocumentTypes;
 /// drives the REST endpoints through the MVC pipeline (routing, model binding, validation, authorization,
 /// serialization, the application service, and EF persistence) over an in-memory SQLite database.
 /// </summary>
-public class DocumentTypeController_Tests : ExtractHttpApiTestBase
+public class DocumentTypeController_Tests : VaultExtractHttpApiTestBase
 {
     private const string Url = "/api/vault-extract/document-types";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

@@ -2,8 +2,8 @@ namespace Dignite.Vault.Extract.Ocr.VisionLlm;
 
 /// <summary>
 /// Behaviour knobs for the vision-LLM OCR provider. Bound from the <c>VisionLlmOcr</c> configuration
-/// section by <see cref="ExtractVisionLlmOcrModule"/>. The vision model id / endpoint / key are NOT
-/// here — those are host deployment concerns wired in <c>ExtractHostModule.ConfigureAI</c> as a keyed
+/// section by <see cref="VaultExtractVisionLlmOcrModule"/>. The vision model id / endpoint / key are NOT
+/// here — those are host deployment concerns wired in <c>VaultExtractHostModule.ConfigureAI</c> as a keyed
 /// <c>IChatClient</c> (see <see cref="VisionLlmOcrConsts.VisionChatClientKey"/>).
 /// </summary>
 public class VisionLlmOcrOptions

@@ -12,7 +12,7 @@ namespace Dignite.Vault.Extract.Documents;
 /// bin. Neither filter is disabled, so statistics never leak across layers and never include soft-deleted rows.
 /// </para>
 /// </summary>
-public class DocumentStatisticsAppService : ExtractAppService, IDocumentStatisticsAppService
+public class DocumentStatisticsAppService : VaultExtractAppService, IDocumentStatisticsAppService
 {
     private readonly IDocumentRepository _documentRepository;
 
@@ -26,7 +26,7 @@ public class DocumentStatisticsAppService : ExtractAppService, IDocumentStatisti
         // Programmatic assertion (not an [Authorize] attribute) to match the read-path convention of
         // DocumentAppService.GetListAsync / GetAsync. Same permission as the document list: if you can see the
         // list, you can see its aggregate counts.
-        await CheckPolicyAsync(ExtractPermissions.Documents.Default);
+        await CheckPolicyAsync(VaultExtractPermissions.Documents.Default);
 
         var statistics = await _documentRepository.GetStatisticsAsync();
         return ObjectMapper.Map<DocumentStatisticsModel, DocumentStatisticsDto>(statistics);

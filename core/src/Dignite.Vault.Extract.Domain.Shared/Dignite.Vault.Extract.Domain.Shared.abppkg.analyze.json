@@ -61,7 +61,7 @@
         }
       ],
       "contentType": "abpModule",
-      "name": "ExtractDomainSharedModule",
+      "name": "VaultExtractDomainSharedModule",
       "summary": null
     }
   ]

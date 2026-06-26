@@ -14,7 +14,7 @@ namespace Dignite.Vault.Extract.Documents.DocumentTypes;
 // Authorization is declared per method (#223): schema reads (GetVisibleAsync) are decoupled from schema management.
 // Therefore there is no class-level [Authorize]; each method explicitly declares its own permission gate,
 // using the same programmatic pattern as DocumentAppService.
-public class DocumentTypeAppService : ExtractAppService, IDocumentTypeAppService
+public class DocumentTypeAppService : VaultExtractAppService, IDocumentTypeAppService
 {
     private readonly IDocumentTypeRepository _repository;
     private readonly IDocumentRepository _documentRepository;
@@ -42,8 +42,8 @@ public class DocumentTypeAppService : ExtractAppService, IDocumentTypeAppService
         // for type filters / classification assignment / dynamic field columns, while schema admins (DocumentTypes.Default)
         // need to read their own management list. Either permission is enough: fail-closed OR assertion.
         // Programmatic because [Authorize] does not trigger on reflection / non-HTTP paths.
-        if (!await AuthorizationService.IsGrantedAsync(ExtractPermissions.Documents.Default) &&
-            !await AuthorizationService.IsGrantedAsync(ExtractPermissions.DocumentTypes.Default))
+        if (!await AuthorizationService.IsGrantedAsync(VaultExtractPermissions.Documents.Default) &&
+            !await AuthorizationService.IsGrantedAsync(VaultExtractPermissions.DocumentTypes.Default))
         {
             throw new AbpAuthorizationException();
         }
@@ -57,7 +57,7 @@ public class DocumentTypeAppService : ExtractAppService, IDocumentTypeAppService
         return ObjectMapper.Map<List<DocumentType>, List<DocumentTypeDto>>(list);
     }
 
-    [Authorize(ExtractPermissions.DocumentTypes.Default)]
+    [Authorize(VaultExtractPermissions.DocumentTypes.Default)]
     public virtual async Task<List<DocumentTypeDto>> GetDeletedAsync()
     {
         // Trash view is consumed only by schema management screens, so keep the admin gate (#223).
@@ -73,7 +73,7 @@ public class DocumentTypeAppService : ExtractAppService, IDocumentTypeAppService
         }
     }
 
-    [Authorize(ExtractPermissions.DocumentTypes.Create)]
+    [Authorize(VaultExtractPermissions.DocumentTypes.Create)]
     public virtual async Task<DocumentTypeDto> CreateAsync(CreateDocumentTypeDto input)
     {
         // Strict single-layer duplicate check, owned by the domain service (#304): TypeCode is a per-layer namespace;
@@ -95,7 +95,7 @@ public class DocumentTypeAppService : ExtractAppService, IDocumentTypeAppService
         return ObjectMapper.Map<DocumentType, DocumentTypeDto>(entity);
     }
 
-    [Authorize(ExtractPermissions.DocumentTypes.Update)]
+    [Authorize(VaultExtractPermissions.DocumentTypes.Update)]
     public virtual async Task<DocumentTypeDto> UpdateAsync(Guid id, UpdateDocumentTypeDto input)
     {
         var entity = await _repository.GetAsync(id);
@@ -119,7 +119,7 @@ public class DocumentTypeAppService : ExtractAppService, IDocumentTypeAppService
         return ObjectMapper.Map<DocumentType, DocumentTypeDto>(entity);
     }
 
-    [Authorize(ExtractPermissions.DocumentTypes.Delete)]
+    [Authorize(VaultExtractPermissions.DocumentTypes.Delete)]
     public virtual async Task DeleteAsync(Guid id)
     {
         var entity = await _repository.GetAsync(id);
@@ -134,7 +134,7 @@ public class DocumentTypeAppService : ExtractAppService, IDocumentTypeAppService
             documentQueryable.Where(d => d.DocumentTypeId == entity.Id));
         if (inUse)
         {
-            throw new BusinessException(ExtractErrorCodes.DocumentType.InUse)
+            throw new BusinessException(VaultExtractErrorCodes.DocumentType.InUse)
                 .WithData("TypeCode", entity.TypeCode);
         }
 
@@ -149,7 +149,7 @@ public class DocumentTypeAppService : ExtractAppService, IDocumentTypeAppService
         await _repository.DeleteAsync(entity);
     }
 
-    [Authorize(ExtractPermissions.DocumentTypes.Delete)]
+    [Authorize(VaultExtractPermissions.DocumentTypes.Delete)]
     public virtual async Task<DocumentTypeDto> RestoreAsync(Guid id)
     {
         // The whole restore block runs with ISoftDelete disabled: queries can see deleted rows and writes can set IsDeleted=false.

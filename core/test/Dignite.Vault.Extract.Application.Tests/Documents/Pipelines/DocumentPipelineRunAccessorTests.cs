@@ -7,13 +7,13 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class DocumentPipelineRunAccessorTestModule : AbpModule
 {
 }
 
 public class DocumentPipelineRunAccessorTests
-    : ExtractApplicationTestBase<DocumentPipelineRunAccessorTestModule>
+    : VaultExtractApplicationTestBase<DocumentPipelineRunAccessorTestModule>
 {
     private readonly DocumentPipelineRunAccessor _accessor;
     private readonly DocumentPipelineRunManager _pipelineRunManager;
@@ -28,13 +28,13 @@ public class DocumentPipelineRunAccessorTests
     public async Task BeginOrStart_Uses_Pending_Run_For_Expected_Pipeline_When_JobArgs_RunId_Belongs_To_Another_Pipeline()
     {
         var document = CreateDocument();
-        var textExtractionRun = await _pipelineRunManager.QueueAsync(document, ExtractPipelines.Parse);
-        var classificationRun = await _pipelineRunManager.QueueAsync(document, ExtractPipelines.Classification);
+        var textExtractionRun = await _pipelineRunManager.QueueAsync(document, VaultExtractPipelines.Parse);
+        var classificationRun = await _pipelineRunManager.QueueAsync(document, VaultExtractPipelines.Classification);
 
         var actualRun = await _accessor.BeginOrStartAsync(
             document,
             textExtractionRun.Id,
-            ExtractPipelines.Classification);
+            VaultExtractPipelines.Classification);
 
         actualRun.ShouldBe(classificationRun);
         classificationRun.Status.ShouldBe(PipelineRunStatus.Running);
@@ -50,10 +50,10 @@ public class DocumentPipelineRunAccessorTests
         var actualRun = await _accessor.BeginOrStartAsync(
             document,
             missingRunId,
-            ExtractPipelines.Classification);
+            VaultExtractPipelines.Classification);
 
         actualRun.Id.ShouldBe(missingRunId);
-        actualRun.PipelineCode.ShouldBe(ExtractPipelines.Classification);
+        actualRun.PipelineCode.ShouldBe(VaultExtractPipelines.Classification);
         actualRun.Status.ShouldBe(PipelineRunStatus.Running);
     }
 

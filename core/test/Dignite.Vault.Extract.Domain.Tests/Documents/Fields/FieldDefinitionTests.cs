@@ -41,7 +41,7 @@ public class FieldDefinitionTests
     public void Should_Reject_Name_With_Invalid_Chars(string name)
     {
         var ex = Should.Throw<BusinessException>(() => CreateDefinition(name));
-        ex.Code.ShouldBe(ExtractErrorCodes.FieldDefinition.InvalidName);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.FieldDefinition.InvalidName);
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class FieldDefinitionTests
     public void Should_Reject_DisplayName_With_Control_Chars(string displayName)
     {
         var ex = Should.Throw<BusinessException>(() => CreateDefinition("amount", displayName));
-        ex.Code.ShouldBe(ExtractErrorCodes.FieldDefinition.InvalidDisplayName);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.FieldDefinition.InvalidDisplayName);
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class FieldDefinitionTests
         var def = CreateDefinition("amount", "Amount");
         Should.Throw<BusinessException>(() =>
                 def.Update("amount", "Bad\nName", "Extract", FieldDataType.Text, 0, false, false, false))
-            .Code.ShouldBe(ExtractErrorCodes.FieldDefinition.InvalidDisplayName);
+            .Code.ShouldBe(VaultExtractErrorCodes.FieldDefinition.InvalidDisplayName);
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class FieldDefinitionTests
         var def = CreateDefinition("amount", "Amount");
         Should.Throw<BusinessException>(() =>
                 def.Update("bad name", "Amount", "Extract", FieldDataType.Text, 0, false, false, false))
-            .Code.ShouldBe(ExtractErrorCodes.FieldDefinition.InvalidName);
+            .Code.ShouldBe(VaultExtractErrorCodes.FieldDefinition.InvalidName);
     }
 
     // ─── NormalizeDisplayName contract (#264: draft assistant prefill must pass ValidateDisplayName) ─────────
@@ -187,7 +187,7 @@ public class FieldDefinitionTests
             Guid.NewGuid(), null, Guid.NewGuid(), "f", "F", "Extract.",
             dataType, allowMultiple: true));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.FieldDefinition.MultiValueRequiresStringType);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.FieldDefinition.MultiValueRequiresStringType);
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public class FieldDefinitionTests
         var def = CreateDefinition("amount", "Amount");
         Should.Throw<BusinessException>(() =>
                 def.Update("amount", "Amount", "Extract", FieldDataType.Number, 0, false, allowMultiple: true, isUniqueKey: false))
-            .Code.ShouldBe(ExtractErrorCodes.FieldDefinition.MultiValueRequiresStringType);
+            .Code.ShouldBe(VaultExtractErrorCodes.FieldDefinition.MultiValueRequiresStringType);
     }
 
     private static FieldDefinition CreateDefinition(string name, string displayName = "Amount") =>

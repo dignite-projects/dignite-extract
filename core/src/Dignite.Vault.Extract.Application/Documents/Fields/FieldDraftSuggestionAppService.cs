@@ -40,13 +40,13 @@ namespace Dignite.Vault.Extract.Documents.Fields;
 /// </list>
 /// </summary>
 [Authorize]
-public class FieldDraftSuggestionAppService : ExtractAppService, IFieldDraftSuggestionAppService
+public class FieldDraftSuggestionAppService : VaultExtractAppService, IFieldDraftSuggestionAppService
 {
     private readonly IChatClient _chatClient;
     private readonly ILogger<FieldDraftSuggestionAppService> _logger;
 
     public FieldDraftSuggestionAppService(
-        [FromKeyedServices(ExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
+        [FromKeyedServices(VaultExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
         ILogger<FieldDraftSuggestionAppService> logger)
     {
         _chatClient = chatClient;
@@ -106,8 +106,8 @@ public class FieldDraftSuggestionAppService : ExtractAppService, IFieldDraftSugg
     /// </summary>
     protected virtual async Task CheckDraftPermissionAsync()
     {
-        if (!await AuthorizationService.IsGrantedAsync(ExtractPermissions.FieldDefinitions.Create)
-            && !await AuthorizationService.IsGrantedAsync(ExtractPermissions.FieldDefinitions.Update))
+        if (!await AuthorizationService.IsGrantedAsync(VaultExtractPermissions.FieldDefinitions.Create)
+            && !await AuthorizationService.IsGrantedAsync(VaultExtractPermissions.FieldDefinitions.Update))
         {
             throw new AbpAuthorizationException();
         }

@@ -19,10 +19,10 @@ namespace Dignite.Vault.Extract.Documents.Pipelines;
 /// predicate is needed.
 /// </summary>
 public class EfCoreDocumentPipelineRunRepository
-    : EfCoreRepository<ExtractDbContext, DocumentPipelineRun, Guid>, IDocumentPipelineRunRepository
+    : EfCoreRepository<VaultExtractDbContext, DocumentPipelineRun, Guid>, IDocumentPipelineRunRepository
 {
     public EfCoreDocumentPipelineRunRepository(
-        IDbContextProvider<ExtractDbContext> dbContextProvider)
+        IDbContextProvider<VaultExtractDbContext> dbContextProvider)
         : base(dbContextProvider)
     {
     }
@@ -131,7 +131,7 @@ public class EfCoreDocumentPipelineRunRepository
             // inserted the next AttemptNumber and moved the run to Pending; the loser collides and is
             // translated to RetryInProgress ("an attempt is already in progress"), matching the
             // concurrency guard semantics in EnsureRetryableAsync.
-            throw new BusinessException(ExtractErrorCodes.Pipeline.RetryInProgress, innerException: ex)
+            throw new BusinessException(VaultExtractErrorCodes.Pipeline.RetryInProgress, innerException: ex)
                 .WithData("PipelineCode", run.PipelineCode)
                 .WithData("DocumentId", run.DocumentId);
         }

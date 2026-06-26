@@ -15,7 +15,7 @@ public class DefaultPromptProvider : IPromptProvider, ITransientDependency
 {
     /// <summary>
     /// Fallback value for the language clause when the language argument is invalid. Kept aligned with
-    /// the default <see cref="ExtractBehaviorOptions.DefaultLanguage"/>, which is the value hosts
+    /// the default <see cref="VaultExtractBehaviorOptions.DefaultLanguage"/>, which is the value hosts
     /// already get when unconfigured. Compile-time constant; no runtime string concatenation.
     /// </summary>
     private const string FallbackLanguage = "ja";
@@ -50,7 +50,7 @@ public class DefaultPromptProvider : IPromptProvider, ITransientDependency
         "decorative crop), and do NOT set it when isContainer is true (a container's constituents are handled " +
         "separately). When in doubt, set containsEmbeddedDocument to false. " +
         // Defensive validation: language comes from host trust-domain configuration
-        // (ExtractBehaviorOptions.DefaultLanguage), so it does not violate the "compile-time
+        // (VaultExtractBehaviorOptions.DefaultLanguage), so it does not violate the "compile-time
         // constants for instructions" safety rule. Still, before interpolation into the system prompt,
         // it passes through the LanguageTagValidator whitelist, the same defense as Document.SetLanguage.
         // If configuration accidentally contains a full sentence / multiline text, fall back to the

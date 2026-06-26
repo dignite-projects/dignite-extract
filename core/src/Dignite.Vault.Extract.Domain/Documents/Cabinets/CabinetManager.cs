@@ -37,7 +37,7 @@ public class CabinetManager : DomainService
         var existing = await _repository.FindByNameAsync(name);
         if (existing != null)
         {
-            throw new BusinessException(ExtractErrorCodes.Cabinet.NameAlreadyExists)
+            throw new BusinessException(VaultExtractErrorCodes.Cabinet.NameAlreadyExists)
                 .WithData("Name", name);
         }
     }

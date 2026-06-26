@@ -37,7 +37,7 @@ public static class McpDiscoveryServiceCollectionExtensions
     /// Populates the RFC 9728 metadata advertised at <c>/.well-known/oauth-protected-resource</c> and in
     /// the 401 challenge pointer. Deployment-specific values stay with the caller.
     /// </param>
-    public static IServiceCollection AddExtractMcpDiscovery(
+    public static IServiceCollection AddVaultExtractMcpDiscovery(
         this IServiceCollection services,
         Action<ProtectedResourceMetadata> configureResourceMetadata)
     {

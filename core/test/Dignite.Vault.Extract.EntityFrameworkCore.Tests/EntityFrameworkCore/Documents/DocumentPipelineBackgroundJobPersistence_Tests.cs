@@ -26,35 +26,35 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 
-[DependsOn(typeof(ExtractEntityFrameworkCoreTestModule))]
+[DependsOn(typeof(VaultExtractEntityFrameworkCoreTestModule))]
 public class DocumentPipelineBackgroundJobPersistenceTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         context.Services.AddSingleton(Substitute.For<ITextExtractor>());
-        context.Services.AddSingleton(Substitute.For<IBlobContainer<ExtractDocumentContainer>>());
+        context.Services.AddSingleton(Substitute.For<IBlobContainer<VaultExtractDocumentContainer>>());
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
         context.Services.AddSingleton(Substitute.For<IChatClient>());
         context.Services.AddSingleton(Substitute.For<IPromptProvider>());
         // DocumentParseBackgroundJob now depends on the title-generator keyed
-        // IChatClient (see ExtractConsts.TitleGeneratorChatClientKey); register a
+        // IChatClient (see VaultExtractConsts.TitleGeneratorChatClientKey); register a
         // substitute so DI can construct the job. Title generation is best-effort and
         // its failures are swallowed, so the substitute returning null is fine.
         context.Services.AddKeyedSingleton(
-            ExtractConsts.TitleGeneratorChatClientKey,
+            VaultExtractConsts.TitleGeneratorChatClientKey,
             Substitute.For<IChatClient>());
     }
 }
 
 public class DocumentPipelineBackgroundJobPersistence_Tests
-    : ExtractTestBase<DocumentPipelineBackgroundJobPersistenceTestModule>
+    : VaultExtractTestBase<DocumentPipelineBackgroundJobPersistenceTestModule>
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly IDocumentPipelineRunRepository _runRepository;
     private readonly DocumentPipelineJobScheduler _pipelineJobScheduler;
     private readonly DocumentParseBackgroundJob _textExtractionJob;
     private readonly ITextExtractor _textExtractor;
-    private readonly IBlobContainer<ExtractDocumentContainer> _blobContainer;
+    private readonly IBlobContainer<VaultExtractDocumentContainer> _blobContainer;
     private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
@@ -68,7 +68,7 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
         _pipelineJobScheduler = GetRequiredService<DocumentPipelineJobScheduler>();
         _textExtractionJob = GetRequiredService<DocumentParseBackgroundJob>();
         _textExtractor = GetRequiredService<ITextExtractor>();
-        _blobContainer = GetRequiredService<IBlobContainer<ExtractDocumentContainer>>();
+        _blobContainer = GetRequiredService<IBlobContainer<VaultExtractDocumentContainer>>();
         _backgroundJobManager = GetRequiredService<IBackgroundJobManager>();
         _guidGenerator = GetRequiredService<IGuidGenerator>();
         _unitOfWorkManager = GetRequiredService<IUnitOfWorkManager>();
@@ -96,7 +96,7 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
             var textExtractionRun = await _runRepository.FindAsync(textExtractionRunId);
             var allRuns = await _runRepository.GetListByDocumentAsync(documentId);
             var classificationRuns = allRuns
-                .Where(x => x.PipelineCode == ExtractPipelines.Classification)
+                .Where(x => x.PipelineCode == VaultExtractPipelines.Classification)
                 .ToList();
 
             textExtractionRun.ShouldNotBeNull();
@@ -183,7 +183,7 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
             var allRuns = await _runRepository.GetListByDocumentAsync(documentId);
 
             allRuns.Single(r => r.Id == textExtractionRunId).Status.ShouldBe(PipelineRunStatus.Succeeded);
-            allRuns.Count(x => x.PipelineCode == ExtractPipelines.Classification).ShouldBe(1);
+            allRuns.Count(x => x.PipelineCode == VaultExtractPipelines.Classification).ShouldBe(1);
             document.ReviewDisposition.ShouldBe(DocumentReviewDisposition.NotReviewed);
         });
 
@@ -412,7 +412,7 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
                 originDocumentId: sourceId, originConstituentKey: segmentKey);
             await _documentRepository.InsertAsync(derived, autoSave: true);
 
-            var run = await _pipelineJobScheduler.QueueAsync(derived, ExtractPipelines.Parse);
+            var run = await _pipelineJobScheduler.QueueAsync(derived, VaultExtractPipelines.Parse);
             runId = run.Id;
         });
 
@@ -444,7 +444,7 @@ public class DocumentPipelineBackgroundJobPersistence_Tests
             var document = CreateDocument(documentId);
             await _documentRepository.InsertAsync(document, autoSave: true);
 
-            var run = await _pipelineJobScheduler.QueueAsync(document, ExtractPipelines.Parse);
+            var run = await _pipelineJobScheduler.QueueAsync(document, VaultExtractPipelines.Parse);
             textExtractionRunId = run.Id;
         });
         return textExtractionRunId;

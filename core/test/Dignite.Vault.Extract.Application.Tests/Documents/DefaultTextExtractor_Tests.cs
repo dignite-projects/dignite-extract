@@ -184,8 +184,8 @@ public class DefaultTextExtractor_Tests : AbpIntegratedTest<DefaultTextExtractor
     }
 
     [DependsOn(
-        typeof(ExtractParseModule),
-        typeof(ExtractParseElBrunoMarkItDownModule))]
+        typeof(VaultExtractParseModule),
+        typeof(VaultExtractParseElBrunoMarkItDownModule))]
     public class ParseTestModule : AbpModule
     {
         public override void ConfigureServices(ServiceConfigurationContext context)

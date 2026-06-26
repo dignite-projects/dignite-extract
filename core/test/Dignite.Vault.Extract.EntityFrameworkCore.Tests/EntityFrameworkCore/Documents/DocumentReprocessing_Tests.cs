@@ -17,7 +17,7 @@ namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 /// <see cref="IDocumentRepository.GetIdsForReprocessingAsync"/>) plus <c>field-extraction</c> pipeline
 /// lifecycle neutrality.
 /// </summary>
-public class DocumentReprocessing_Tests : ExtractEntityFrameworkCoreTestBase
+public class DocumentReprocessing_Tests : VaultExtractEntityFrameworkCoreTestBase
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly IDocumentTypeRepository _documentTypeRepository;
@@ -136,9 +136,9 @@ public class DocumentReprocessing_Tests : ExtractEntityFrameworkCoreTestBase
             doc.ApplyAutomaticClassificationResult(TypeAId, 0.99);
             await _documentRepository.InsertAsync(doc, autoSave: true);
 
-            var te = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Parse);
+            var te = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Parse);
             await _pipelineRunManager.CompleteAsync(doc, te);
-            var cls = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Classification);
+            var cls = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Classification);
             await _pipelineRunManager.CompleteAsync(doc, cls);
             await _documentRepository.UpdateAsync(doc, autoSave: true);
         });
@@ -150,7 +150,7 @@ public class DocumentReprocessing_Tests : ExtractEntityFrameworkCoreTestBase
         await WithUnitOfWorkAsync(async () =>
         {
             var doc = await _documentRepository.GetAsync(documentId);
-            var fe = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.FieldExtraction);
+            var fe = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.FieldExtraction);
             await _pipelineRunManager.CompleteAsync(doc, fe);
             await _documentRepository.UpdateAsync(doc, autoSave: true);
         });
@@ -161,7 +161,7 @@ public class DocumentReprocessing_Tests : ExtractEntityFrameworkCoreTestBase
         await WithUnitOfWorkAsync(async () =>
         {
             var doc = await _documentRepository.GetAsync(documentId);
-            var fe = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.FieldExtraction);
+            var fe = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.FieldExtraction);
             // StartAsync ran Queue(Pending) -> Begin(Running); the new run is not yet Succeeded, so Ready is withdrawn.
             doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Processing);
             await _pipelineRunManager.CompleteAsync(doc, fe);

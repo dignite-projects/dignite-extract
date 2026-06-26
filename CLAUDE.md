@@ -27,6 +27,8 @@ Content requiring IDP: scans / photos / PDF images / Office files / digital-born
 
 Business modules (contract / invoice / HR management, etc.) are **not** in this repo — they live on the downstream consumer side and integrate via EventBus / MCP / REST.
 
+> **Naming convention**: the C# type / module prefix is **`VaultExtract`** — the namespace `Dignite.Vault.Extract` minus the company token, mirroring ABP's `Volo.Abp.Identity` → `AbpIdentity*Module` (e.g. `VaultExtractHttpApiModule`, `VaultExtractDbContext`, `VaultExtractErrorCodes`). **`Extract` alone is the extraction *verb*, never a type prefix** — `ExtractedField` / `*Extractor` / `TextExtraction*` / `FieldExtraction*` / `ExtractAsync` stay as-is. **Serialized string contracts are frozen even where they still read `Extract`**: error codes `"Extract:*"`, the `/Localization/Extract/` resource, config sections `Vault:Extract*`, the `"extract-documents"` blob container — rename the holder class, never the persisted string value (that is a wire / DB / i18n break → open an Issue first).
+
 ## Architecture (two layers + Host)
 
 Dignite Vault Extract is a **two-layer architecture** (the business layer is out of scope):

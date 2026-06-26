@@ -60,7 +60,7 @@ public class Cabinet : FullAuditedAggregateRoot<Guid>, IMultiTenant
 
         if (name.Any(char.IsControl))
         {
-            throw new BusinessException(ExtractErrorCodes.Cabinet.InvalidName)
+            throw new BusinessException(VaultExtractErrorCodes.Cabinet.InvalidName)
                 .WithData("name", name);
         }
 
@@ -84,7 +84,7 @@ public class Cabinet : FullAuditedAggregateRoot<Guid>, IMultiTenant
 
         if (description.Any(char.IsControl))
         {
-            throw new BusinessException(ExtractErrorCodes.Cabinet.InvalidDescription)
+            throw new BusinessException(VaultExtractErrorCodes.Cabinet.InvalidDescription)
                 .WithData("description", description);
         }
 

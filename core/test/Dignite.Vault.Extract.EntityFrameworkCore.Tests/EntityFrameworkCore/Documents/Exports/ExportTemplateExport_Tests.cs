@@ -26,7 +26,7 @@ namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 /// Field type is decided by FieldDefinition.DataType (#208) and is not persisted in field-value rows, so export
 /// joins FieldDefinition for each template column to get DataType. SeedSchemaAsync seeds those field definition rows.
 /// </summary>
-public class ExportTemplateExport_Tests : ExtractEntityFrameworkCoreTestBase
+public class ExportTemplateExport_Tests : VaultExtractEntityFrameworkCoreTestBase
 {
     private readonly IExportTemplateAppService _appService;
     private readonly IDocumentRepository _documentRepository;
@@ -289,7 +289,7 @@ public class ExportTemplateExport_Tests : ExtractEntityFrameworkCoreTestBase
             {
                 var ex = await Should.ThrowAsync<BusinessException>(() =>
                     _appService.ExportAsync(new ExportDocumentsInput { TemplateId = templateId }));
-                ex.Code.ShouldBe(ExtractErrorCodes.Export.DocumentLimitExceeded);
+                ex.Code.ShouldBe(VaultExtractErrorCodes.Export.DocumentLimitExceeded);
             });
         }
         finally

@@ -66,8 +66,8 @@ public class MarkdownProviderDispatch_Tests : AbpIntegratedTest<MarkdownProvider
     }
 
     [DependsOn(
-        typeof(ExtractParseModule),
-        typeof(ExtractParseElBrunoMarkItDownModule))]
+        typeof(VaultExtractParseModule),
+        typeof(VaultExtractParseElBrunoMarkItDownModule))]
     public class DispatchTestModule : AbpModule
     {
         public override void ConfigureServices(ServiceConfigurationContext context)

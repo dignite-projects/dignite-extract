@@ -164,7 +164,7 @@ public class DefaultTextExtractorDispatch_Tests
     public async Task Should_Fall_Back_To_Default_Language_Hints_When_Context_Has_None()
     {
         var ocr = TestDoubles.OcrReturning();
-        var options = new ExtractOcrOptions { DefaultLanguageHints = new List<string> { "it", "es" } };
+        var options = new VaultExtractOcrOptions { DefaultLanguageHints = new List<string> { "it", "es" } };
         var sut = TestDoubles.Extractor(ocr, new[] { TestDoubles.MarkdownProvider(0, ".x") }, options);
 
         await sut.ExtractAsync(TestDoubles.Bytes(0xFF, 0xD8), Context(".jpg", "image/jpeg"));

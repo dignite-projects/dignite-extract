@@ -14,7 +14,7 @@ namespace Dignite.Vault.Extract.Documents.Pipelines.FieldExtraction;
 /// while external LLM extraction delegates to the shared #289 step 1 engine
 /// <see cref="FieldExtractionService"/>.
 /// <para>
-/// <b>Lifecycle-affecting since #411</b>: <see cref="ExtractPipelines.FieldExtraction"/> is now a key pipeline
+/// <b>Lifecycle-affecting since #411</b>: <see cref="VaultExtractPipelines.FieldExtraction"/> is now a key pipeline
 /// (so the duplicate check can gate Ready). <c>DeriveLifecycleAsync</c> triggered by BeginRun / CompleteRun
 /// therefore participates in the Ready gate: the first run releases the document to Ready, and a re-extraction of
 /// an already-Ready document bounces it <c>Ready -&gt; Processing -&gt; Ready</c>, re-firing <c>DocumentReadyEto</c>
@@ -61,7 +61,7 @@ public class DocumentFieldExtractionBackgroundJob
         }
         catch (Exception ex)
         {
-            await FailRunAsync(documentId, runId, ex.Message, ExtractPipelines.FieldExtraction);
+            await FailRunAsync(documentId, runId, ex.Message, VaultExtractPipelines.FieldExtraction);
             throw;
         }
     }
@@ -72,7 +72,7 @@ public class DocumentFieldExtractionBackgroundJob
 
         var document = await DocumentRepository.GetAsync(args.DocumentId, includeDetails: false);
         var run = await PipelineRunAccessor.BeginOrStartAsync(
-            document, args.PipelineRunId, ExtractPipelines.FieldExtraction);
+            document, args.PipelineRunId, VaultExtractPipelines.FieldExtraction);
         await DocumentRepository.UpdateAsync(document, autoSave: true);
 
         await uow.CompleteAsync();
@@ -84,7 +84,7 @@ public class DocumentFieldExtractionBackgroundJob
     {
         using var uow = UnitOfWorkManager.Begin(requiresNew: true);
 
-        var (document, run) = await LoadDocumentAndRunAsync(documentId, runId, ExtractPipelines.FieldExtraction);
+        var (document, run) = await LoadDocumentAndRunAsync(documentId, runId, VaultExtractPipelines.FieldExtraction);
         await PipelineRunManager.CompleteAsync(document, run);
         await DocumentRepository.UpdateAsync(document, autoSave: true);
 

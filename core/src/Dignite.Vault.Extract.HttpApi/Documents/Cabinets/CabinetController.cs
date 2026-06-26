@@ -8,7 +8,7 @@ namespace Dignite.Vault.Extract.HttpApi.Documents.Cabinets;
 
 [Area("vault-extract")]
 [Route("api/vault-extract/cabinets")]
-public class CabinetController : ExtractController, ICabinetAppService
+public class CabinetController : VaultExtractController, ICabinetAppService
 {
     private readonly ICabinetAppService _cabinetAppService;
 

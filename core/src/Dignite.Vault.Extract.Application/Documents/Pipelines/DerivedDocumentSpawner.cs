@@ -127,7 +127,7 @@ public class DerivedDocumentSpawner : ITransientDependency
 
             // Run the derived document through the full normal pipeline. Its text-extraction job seeds Markdown from
             // the constituent (figure transcription / segment slice) instead of re-extracting it.
-            await _pipelineJobScheduler.QueueAsync(derived, ExtractPipelines.Parse);
+            await _pipelineJobScheduler.QueueAsync(derived, VaultExtractPipelines.Parse);
 
             await uow.CompleteAsync();
             return derivedDocumentId;

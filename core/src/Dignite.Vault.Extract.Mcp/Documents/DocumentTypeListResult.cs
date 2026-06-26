@@ -5,7 +5,7 @@ namespace Dignite.Vault.Extract.Mcp.Documents;
 /// <summary>
 /// Structured return value for the <c>list_document_types</c> tool (LLM-facing).
 /// <see cref="Types"/> is stably sorted by TypeCode and truncated to
-/// <see cref="ExtractMcpConsts.MaxDocumentTypeResults"/>, a hard result cap from
+/// <see cref="VaultExtractMcpConsts.MaxDocumentTypeResults"/>, a hard result cap from
 /// llm-call-anti-patterns counterexample B point 3. When over the limit, <see cref="Truncated"/> +
 /// <see cref="TotalCount"/> explicitly tell the LLM more exist. Truncation is a safety boundary, not
 /// pagination, so this tool provides no paging parameters.

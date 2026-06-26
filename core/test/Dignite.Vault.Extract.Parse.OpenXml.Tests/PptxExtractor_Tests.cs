@@ -22,7 +22,7 @@ public class PptxExtractor_Tests
         int maxImages = 50,
         bool includeNotes = true,
         long maxImageBytes = 16L * 1024 * 1024,
-        ExtractOcrOptions? ocrOptions = null)
+        VaultExtractOcrOptions? ocrOptions = null)
         => new(
             _ocr,
             Options.Create(new OpenXmlExtractorOptions
@@ -33,7 +33,7 @@ public class PptxExtractor_Tests
                 IncludeSpeakerNotes = includeNotes
             }),
             // Default to empty hints so unrelated tests don't get defaults injected unexpectedly.
-            Options.Create(ocrOptions ?? new ExtractOcrOptions { DefaultLanguageHints = new List<string>() }));
+            Options.Create(ocrOptions ?? new VaultExtractOcrOptions { DefaultLanguageHints = new List<string>() }));
 
     private static TextExtractionContext PptxContext()
         => new() { ContentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation", FileExtension = ".pptx" };
@@ -572,7 +572,7 @@ public class PptxExtractor_Tests
         var extractor = new PptxExtractor(
             _ocr,
             Options.Create(new OpenXmlExtractorOptions()),
-            Options.Create(new ExtractOcrOptions { DefaultLanguageHints = new List<string>() }));
+            Options.Create(new VaultExtractOcrOptions { DefaultLanguageHints = new List<string>() }));
 
         var pptx = PptxFixtures.Build(new PptxFixtures.SlideSpec()
             .Text("Visible content")
@@ -699,7 +699,7 @@ public class PptxExtractor_Tests
             .Text("Body text")
             .Image(Png(alt: null, x: 100, y: 1_000_000)));
 
-        var extractor = CreateExtractor(ocrOptions: new ExtractOcrOptions());
+        var extractor = CreateExtractor(ocrOptions: new VaultExtractOcrOptions());
         await extractor.ExtractAsync(new MemoryStream(pptx), PptxContext());
 
         await _ocr.Received(1).RecognizeAsync(

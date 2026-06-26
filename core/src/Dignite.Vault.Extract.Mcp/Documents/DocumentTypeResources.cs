@@ -18,7 +18,7 @@ namespace Dignite.Vault.Extract.Mcp.Documents;
 /// allowMultiple / displayName / required, plus the type displayName. This lets downstream AI
 /// discover which fields exist for a type and what data types they use, so it can populate the search
 /// tool's <c>fieldFilters</c> / <c>includeFields</c> with correct field names. "Which types exist" is
-/// dynamically enumerated by resources/list: the handler is registered in <c>ExtractMcpModule</c>,
+/// dynamically enumerated by resources/list: the handler is registered in <c>VaultExtractMcpModule</c>,
 /// while projection logic lives in <see cref="ListVisibleAsync"/>. This differs from documents, whose
 /// count is unbounded, so they are not enumerated and are discovered by id through the search tool.
 /// list and read responsibilities stay separate: list enumerates through the handler, while read is
@@ -97,11 +97,11 @@ public sealed class DocumentTypeResources
 
     /// <summary>
     /// Dynamic enumeration projection for <c>resources/list</c>, called by the list handler in
-    /// <c>ExtractMcpModule</c>. It has no <c>[McpServerResource]</c> attribute and does not
+    /// <c>VaultExtractMcpModule</c>. It has no <c>[McpServerResource]</c> attribute and does not
     /// participate in read-template scanning. It delegates to
     /// <see cref="IDocumentTypeAppService.GetVisibleAsync"/>: fail-closed authorization and ambient
     /// tenant isolation are both centralized inside the AppService. Results are stably ordered by
-    /// TypeCode and truncated to <see cref="ExtractMcpConsts.MaxDocumentTypeResults"/>, a hard
+    /// TypeCode and truncated to <see cref="VaultExtractMcpConsts.MaxDocumentTypeResults"/>, a hard
     /// result cap from llm-call-anti-patterns counterexample B point 3 because tenant admins can
     /// create any number of types. resources/list protocol entries cannot carry a truncation signal,
     /// so direct truncation is acceptable; full discovery with truncated / totalCount signals is
@@ -115,7 +115,7 @@ public sealed class DocumentTypeResources
         {
             Resources = types
                 .OrderBy(t => t.TypeCode, StringComparer.Ordinal)
-                .Take(ExtractMcpConsts.MaxDocumentTypeResults)
+                .Take(VaultExtractMcpConsts.MaxDocumentTypeResults)
                 .Select(t => new Resource
                 {
                     Uri = DocumentTypeResourceUri.Format(t.TypeCode),

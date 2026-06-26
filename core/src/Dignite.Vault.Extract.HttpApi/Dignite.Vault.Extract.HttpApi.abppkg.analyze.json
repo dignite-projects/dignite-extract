@@ -8,7 +8,7 @@
         {
           "declaringAssemblyName": "Dignite.Vault.Extract.Application.Contracts",
           "namespace": "Dignite.Vault.Extract",
-          "name": "ExtractApplicationContractsModule"
+          "name": "VaultExtractApplicationContractsModule"
         },
         {
           "declaringAssemblyName": "Volo.Abp.AspNetCore.Mvc",
@@ -61,7 +61,7 @@
         }
       ],
       "contentType": "abpModule",
-      "name": "ExtractHttpApiModule",
+      "name": "VaultExtractHttpApiModule",
       "summary": null
     }
   ]

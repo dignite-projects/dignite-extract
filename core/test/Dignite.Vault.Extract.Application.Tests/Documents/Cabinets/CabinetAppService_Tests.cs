@@ -12,7 +12,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents.Cabinets;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class CabinetAppServiceTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -28,7 +28,7 @@ public class CabinetAppServiceTestModule : AbpModule
 /// CabinetId on documents in that cabinet, truly unfiling them; otherwise documents point to a deleted
 /// cabinet.
 /// </summary>
-public class CabinetAppService_Tests : ExtractApplicationTestBase<CabinetAppServiceTestModule>
+public class CabinetAppService_Tests : VaultExtractApplicationTestBase<CabinetAppServiceTestModule>
 {
     private readonly ICabinetAppService _appService;
     private readonly ICabinetRepository _cabinetRepository;

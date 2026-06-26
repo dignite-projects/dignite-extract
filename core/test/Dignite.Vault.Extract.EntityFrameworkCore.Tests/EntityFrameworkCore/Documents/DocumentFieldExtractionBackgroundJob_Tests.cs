@@ -22,7 +22,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 
-[DependsOn(typeof(ExtractEntityFrameworkCoreTestModule))]
+[DependsOn(typeof(VaultExtractEntityFrameworkCoreTestModule))]
 public class FieldExtractionJobTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -45,7 +45,7 @@ public class FieldExtractionJobTestModule : AbpModule
 /// through real EF.
 /// </summary>
 public class DocumentFieldExtractionBackgroundJob_Tests
-    : ExtractTestBase<FieldExtractionJobTestModule>
+    : VaultExtractTestBase<FieldExtractionJobTestModule>
 {
     private readonly DocumentFieldExtractionBackgroundJob _job;
     private readonly FieldExtractionWorkflow _workflow;
@@ -107,7 +107,7 @@ public class DocumentFieldExtractionBackgroundJob_Tests
 
         await WithUnitOfWorkAsync(async () =>
         {
-            var run = await _runRepository.FindLatestByDocumentAndCodeAsync(documentId, ExtractPipelines.FieldExtraction);
+            var run = await _runRepository.FindLatestByDocumentAndCodeAsync(documentId, VaultExtractPipelines.FieldExtraction);
             run.ShouldNotBeNull();
             run!.Status.ShouldBe(PipelineRunStatus.Succeeded);
 

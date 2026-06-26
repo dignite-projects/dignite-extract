@@ -25,7 +25,7 @@ namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 /// for DocumentType / FieldDefinition; active-only for the recycle-bin-less Cabinet / ExportTemplate).</item>
 /// </list>
 /// </summary>
-public class LayeredUniqueness_Tests : ExtractEntityFrameworkCoreTestBase
+public class LayeredUniqueness_Tests : VaultExtractEntityFrameworkCoreTestBase
 {
     private readonly IDocumentTypeAppService _documentTypeAppService;
     private readonly IFieldDefinitionAppService _fieldDefinitionAppService;
@@ -85,7 +85,7 @@ public class LayeredUniqueness_Tests : ExtractEntityFrameworkCoreTestBase
 
         var ex = await Should.ThrowAsync<BusinessException>(() =>
             WithUnitOfWorkAsync(() => _documentTypeAppService.CreateAsync(NewType("contract"))));
-        ex.Code.ShouldBe(ExtractErrorCodes.DocumentType.CodeAlreadyExists);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.DocumentType.CodeAlreadyExists);
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class LayeredUniqueness_Tests : ExtractEntityFrameworkCoreTestBase
         // original cannot produce two active rows with the same (TenantId, TypeCode).
         var ex = await Should.ThrowAsync<BusinessException>(() =>
             WithUnitOfWorkAsync(() => _documentTypeAppService.CreateAsync(NewType("contract"))));
-        ex.Code.ShouldBe(ExtractErrorCodes.DocumentType.CodeAlreadyExists);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.DocumentType.CodeAlreadyExists);
 
         // Restoring the soft-deleted row succeeds because no active row holds the code.
         var restored = await WithUnitOfWorkAsync(() => _documentTypeAppService.RestoreAsync(id));
@@ -117,7 +117,7 @@ public class LayeredUniqueness_Tests : ExtractEntityFrameworkCoreTestBase
 
         var ex = await Should.ThrowAsync<BusinessException>(() =>
             WithUnitOfWorkAsync(() => _fieldDefinitionAppService.CreateAsync(NewField(typeId, "amount"))));
-        ex.Code.ShouldBe(ExtractErrorCodes.FieldDefinition.AlreadyExists);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.FieldDefinition.AlreadyExists);
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class LayeredUniqueness_Tests : ExtractEntityFrameworkCoreTestBase
         // Recreate the same name while a soft-deleted field holds it -> rejected (soft-delete-aware).
         var ex = await Should.ThrowAsync<BusinessException>(() =>
             WithUnitOfWorkAsync(() => _fieldDefinitionAppService.CreateAsync(NewField(typeId, "amount"))));
-        ex.Code.ShouldBe(ExtractErrorCodes.FieldDefinition.AlreadyExists);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.FieldDefinition.AlreadyExists);
 
         var restored = await WithUnitOfWorkAsync(() => _fieldDefinitionAppService.RestoreAsync(fieldId));
         restored.Name.ShouldBe("amount");
@@ -167,7 +167,7 @@ public class LayeredUniqueness_Tests : ExtractEntityFrameworkCoreTestBase
 
         var ex = await Should.ThrowAsync<BusinessException>(() =>
             WithUnitOfWorkAsync(() => _cabinetAppService.CreateAsync(new CreateCabinetDto { Name = "Legal" })));
-        ex.Code.ShouldBe(ExtractErrorCodes.Cabinet.NameAlreadyExists);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Cabinet.NameAlreadyExists);
     }
 
     [Fact]
@@ -233,7 +233,7 @@ public class LayeredUniqueness_Tests : ExtractEntityFrameworkCoreTestBase
 
         var ex = await Should.ThrowAsync<BusinessException>(() =>
             WithUnitOfWorkAsync(() => _exportTemplateAppService.CreateAsync(NewTemplate("Monthly", typeId, fieldId))));
-        ex.Code.ShouldBe(ExtractErrorCodes.Export.TemplateNameAlreadyExists);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Export.TemplateNameAlreadyExists);
     }
 
     [Fact]

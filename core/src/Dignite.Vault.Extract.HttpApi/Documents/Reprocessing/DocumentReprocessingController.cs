@@ -10,7 +10,7 @@ namespace Dignite.Vault.Extract.HttpApi.Documents.Reprocessing;
 // controller forwarding; otherwise frontend calls hit 404.
 [Area("vault-extract")]
 [Route("api/vault-extract/document-reprocessing")]
-public class DocumentReprocessingController : ExtractController, IDocumentReprocessingAppService
+public class DocumentReprocessingController : VaultExtractController, IDocumentReprocessingAppService
 {
     private readonly IDocumentReprocessingAppService _appService;
 

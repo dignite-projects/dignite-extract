@@ -64,7 +64,7 @@ public sealed class GrantSetAuthorizationService : IAbpAuthorizationService
     }
 }
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class SchemaReadAuthorizationTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -90,7 +90,7 @@ public class SchemaReadAuthorizationTestModule : AbpModule
 /// (<c>GetVisibleAsync</c> / active-field <c>GetListAsync</c>) accept either <c>Documents.Default</c>
 /// or the corresponding schema-admin permission; trash reads remain schema-admin only.
 /// </summary>
-public class SchemaReadAuthorization_Tests : ExtractApplicationTestBase<SchemaReadAuthorizationTestModule>
+public class SchemaReadAuthorization_Tests : VaultExtractApplicationTestBase<SchemaReadAuthorizationTestModule>
 {
     private readonly IDocumentTypeAppService _documentTypeAppService;
     private readonly IFieldDefinitionAppService _fieldDefinitionAppService;
@@ -124,7 +124,7 @@ public class SchemaReadAuthorization_Tests : ExtractApplicationTestBase<SchemaRe
     {
         // #223 fix point: document operators without DocumentTypes.Default can still read type schema
         // for filters, field columns, and classification assignment.
-        Grant(ExtractPermissions.Documents.Default);
+        Grant(VaultExtractPermissions.Documents.Default);
         _documentTypeRepository.GetListAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new List<DocumentType> { new(Guid.NewGuid(), null, "host.general", "General") });
 
@@ -137,7 +137,7 @@ public class SchemaReadAuthorization_Tests : ExtractApplicationTestBase<SchemaRe
     public async Task GetVisibleAsync_Succeeds_For_DocumentTypes_Default_Only()
     {
         // Schema administrators without Documents.Default can still read their management list.
-        Grant(ExtractPermissions.DocumentTypes.Default);
+        Grant(VaultExtractPermissions.DocumentTypes.Default);
         _documentTypeRepository.GetListAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new List<DocumentType> { new(Guid.NewGuid(), null, "host.general", "General") });
 
@@ -166,7 +166,7 @@ public class SchemaReadAuthorization_Tests : ExtractApplicationTestBase<SchemaRe
     {
         // #223 fix point: document operators read field schema for dynamic field columns,
         // detail-field editing, and export-column selection.
-        Grant(ExtractPermissions.Documents.Default);
+        Grant(VaultExtractPermissions.Documents.Default);
         _fieldDefinitionRepository.GetListAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new List<FieldDefinition>());
 
@@ -182,7 +182,7 @@ public class SchemaReadAuthorization_Tests : ExtractApplicationTestBase<SchemaRe
     [Fact]
     public async Task FieldDefinition_GetListAsync_Active_Succeeds_For_FieldDefinitions_Default_Only()
     {
-        Grant(ExtractPermissions.FieldDefinitions.Default);
+        Grant(VaultExtractPermissions.FieldDefinitions.Default);
         _fieldDefinitionRepository.GetListAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new List<FieldDefinition>());
 
@@ -202,7 +202,7 @@ public class SchemaReadAuthorization_Tests : ExtractApplicationTestBase<SchemaRe
     {
         // The trash view keeps the admin gate. Documents.Default cannot open it through the OR rule because
         // CheckPolicyAsync runs before the query.
-        Grant(ExtractPermissions.Documents.Default);
+        Grant(VaultExtractPermissions.Documents.Default);
 
         await Should.ThrowAsync<AbpAuthorizationException>(() =>
             _fieldDefinitionAppService.GetListAsync(new GetFieldDefinitionListInput

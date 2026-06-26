@@ -18,13 +18,13 @@ namespace Dignite.Vault.Extract.Documents.Reprocessing;
 /// one dispatcher and returns immediately; the dispatcher keyset-paginates the scope in the
 /// background and enqueues per-document jobs in batches.
 /// <para>
-/// Security: admin-level <see cref="ExtractPermissions.Documents.Reprocessing"/> permission. Scope
+/// Security: admin-level <see cref="VaultExtractPermissions.Documents.Reprocessing"/> permission. Scope
 /// count / enumeration is automatically isolated by the ABP <c>IMultiTenant</c> global filter using
 /// <see cref="ApplicationService.CurrentTenant"/>; no handwritten TenantId predicates are used. The
 /// dispatcher restores the ambient layer from the passed <c>CurrentTenant.Id</c>.
 /// </para>
 /// </summary>
-public class DocumentReprocessingAppService : ExtractAppService, IDocumentReprocessingAppService
+public class DocumentReprocessingAppService : VaultExtractAppService, IDocumentReprocessingAppService
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly IDocumentTypeRepository _documentTypeRepository;
@@ -43,7 +43,7 @@ public class DocumentReprocessingAppService : ExtractAppService, IDocumentReproc
         _backgroundJobManager = backgroundJobManager;
     }
 
-    [Authorize(ExtractPermissions.Documents.Reprocessing.FieldExtraction)]
+    [Authorize(VaultExtractPermissions.Documents.Reprocessing.FieldExtraction)]
     public virtual async Task<FieldReextractionPreviewDto> PreviewFieldExtractionAsync(Guid documentTypeId)
     {
         await EnsureTypeInCurrentLayerAsync(documentTypeId);
@@ -60,7 +60,7 @@ public class DocumentReprocessingAppService : ExtractAppService, IDocumentReproc
         };
     }
 
-    [Authorize(ExtractPermissions.Documents.Reprocessing.FieldExtraction)]
+    [Authorize(VaultExtractPermissions.Documents.Reprocessing.FieldExtraction)]
     public virtual async Task<ReprocessingStartResultDto> StartFieldExtractionAsync(StartFieldReextractionInput input)
     {
         await EnsureTypeInCurrentLayerAsync(input.DocumentTypeId);
@@ -83,7 +83,7 @@ public class DocumentReprocessingAppService : ExtractAppService, IDocumentReproc
         return new ReprocessingStartResultDto { EstimatedDocumentCount = count };
     }
 
-    [Authorize(ExtractPermissions.Documents.Reprocessing.Reclassification)]
+    [Authorize(VaultExtractPermissions.Documents.Reprocessing.Reclassification)]
     public virtual async Task<ReclassificationPreviewDto> PreviewReclassificationAsync(ReclassificationScopeInput input)
     {
         var (typeId, withReason, excludeConfirmed) = await ResolveScopeAsync(input);
@@ -93,7 +93,7 @@ public class DocumentReprocessingAppService : ExtractAppService, IDocumentReproc
         return new ReclassificationPreviewDto { DocumentCount = count };
     }
 
-    [Authorize(ExtractPermissions.Documents.Reprocessing.Reclassification)]
+    [Authorize(VaultExtractPermissions.Documents.Reprocessing.Reclassification)]
     public virtual async Task<ReprocessingStartResultDto> StartReclassificationAsync(ReclassificationScopeInput input)
     {
         var (typeId, withReason, excludeConfirmed) = await ResolveScopeAsync(input);

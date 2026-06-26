@@ -37,7 +37,7 @@ public class DocumentTypeTests
     public void Should_Reject_DisplayName_With_Control_Chars(string displayName)
     {
         var ex = Should.Throw<BusinessException>(() => CreateDocumentType(displayName));
-        ex.Code.ShouldBe(ExtractErrorCodes.DocumentType.InvalidDisplayName);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.DocumentType.InvalidDisplayName);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class DocumentTypeTests
         // invariants through the Update API.
         var type = CreateDocumentType("Contract");
         Should.Throw<BusinessException>(() => type.Update("host.test", "Bad\nName", null, 0.7, 0))
-            .Code.ShouldBe(ExtractErrorCodes.DocumentType.InvalidDisplayName);
+            .Code.ShouldBe(VaultExtractErrorCodes.DocumentType.InvalidDisplayName);
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class DocumentTypeTests
         // Unlocking rename does not skip the regex allowlist; invalid TypeCode is still rejected.
         var type = CreateDocumentType("Contract");
         Should.Throw<BusinessException>(() => type.Update("bad code", "Contract", null, 0.7, 0))
-            .Code.ShouldBe(ExtractErrorCodes.DocumentType.InvalidCodeFormat);
+            .Code.ShouldBe(VaultExtractErrorCodes.DocumentType.InvalidCodeFormat);
     }
 
     [Theory]
@@ -104,7 +104,7 @@ public class DocumentTypeTests
             Guid.NewGuid(), null,
             typeCode: typeCode,
             displayName: "Contract"));
-        ex.Code.ShouldBe(ExtractErrorCodes.DocumentType.InvalidCodeFormat);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.DocumentType.InvalidCodeFormat);
     }
 
     // ---- Description (#262 classification helper text): same-origin control-character defense as DisplayName + nullable normalization ----
@@ -140,7 +140,7 @@ public class DocumentTypeTests
     {
         var ex = Should.Throw<BusinessException>(() => new DocumentType(
             Guid.NewGuid(), null, "host.test", "Contract", description: description));
-        ex.Code.ShouldBe(ExtractErrorCodes.DocumentType.InvalidDescription);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.DocumentType.InvalidDescription);
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class DocumentTypeTests
         // the Update API.
         var type = CreateDocumentType("Contract");
         Should.Throw<BusinessException>(() => type.Update("host.test", "Contract", "Bad\nDescription", 0.7, 0))
-            .Code.ShouldBe(ExtractErrorCodes.DocumentType.InvalidDescription);
+            .Code.ShouldBe(VaultExtractErrorCodes.DocumentType.InvalidDescription);
     }
 
     private static DocumentType CreateDocumentType(string displayName) =>

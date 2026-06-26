@@ -22,16 +22,16 @@ namespace Dignite.Vault.Extract.Documents.Cabinets;
 /// </summary>
 public class CabinetSuggestionWorkflow : ITransientDependency
 {
-    /// <summary>Uses the same <see cref="ExtractConsts.StructuredChatClientKey"/> keyed client as classification (structured-output, tool-free), so hosts can point it at a smaller / cheaper model.</summary>
+    /// <summary>Uses the same <see cref="VaultExtractConsts.StructuredChatClientKey"/> keyed client as classification (structured-output, tool-free), so hosts can point it at a smaller / cheaper model.</summary>
     private readonly IChatClient _chatClient;
-    private readonly ExtractBehaviorOptions _options;
+    private readonly VaultExtractBehaviorOptions _options;
 
     public ILogger<CabinetSuggestionWorkflow> Logger { get; set; }
         = NullLogger<CabinetSuggestionWorkflow>.Instance;
 
     public CabinetSuggestionWorkflow(
-        [FromKeyedServices(ExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
-        IOptions<ExtractBehaviorOptions> options)
+        [FromKeyedServices(VaultExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
+        IOptions<VaultExtractBehaviorOptions> options)
     {
         _chatClient = chatClient;
         _options = options.Value;

@@ -21,7 +21,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class FieldExtractionServiceTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -45,7 +45,7 @@ public class FieldExtractionServiceTestModule : AbpModule
 /// class focuses on bulk / single-document re-extraction semantics when calling the engine directly.
 /// </summary>
 public class FieldExtractionService_Tests
-    : ExtractApplicationTestBase<FieldExtractionServiceTestModule>
+    : VaultExtractApplicationTestBase<FieldExtractionServiceTestModule>
 {
     private readonly FieldExtractionService _service;
     private readonly IDocumentRepository _documentRepository;

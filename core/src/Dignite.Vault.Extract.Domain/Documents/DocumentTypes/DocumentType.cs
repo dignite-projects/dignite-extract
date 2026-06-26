@@ -88,7 +88,7 @@ public class DocumentType : FullAuditedAggregateRoot<Guid>, IMultiTenant
 
         if (!TypeCodeRegex.IsMatch(typeCode))
         {
-            throw new BusinessException(ExtractErrorCodes.DocumentType.InvalidCodeFormat)
+            throw new BusinessException(VaultExtractErrorCodes.DocumentType.InvalidCodeFormat)
                 .WithData("typeCode", typeCode)
                 .WithData("pattern", DocumentTypeConsts.TypeCodePattern);
         }
@@ -110,7 +110,7 @@ public class DocumentType : FullAuditedAggregateRoot<Guid>, IMultiTenant
         // primary prompt-injection vector here.
         if (displayName.Any(c => char.IsControl(c)))
         {
-            throw new BusinessException(ExtractErrorCodes.DocumentType.InvalidDisplayName)
+            throw new BusinessException(VaultExtractErrorCodes.DocumentType.InvalidDisplayName)
                 .WithData("displayName", displayName);
         }
 
@@ -135,7 +135,7 @@ public class DocumentType : FullAuditedAggregateRoot<Guid>, IMultiTenant
 
         if (description.Any(c => char.IsControl(c)))
         {
-            throw new BusinessException(ExtractErrorCodes.DocumentType.InvalidDescription)
+            throw new BusinessException(VaultExtractErrorCodes.DocumentType.InvalidDescription)
                 .WithData("description", description);
         }
 

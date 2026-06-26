@@ -97,7 +97,7 @@ public class PaddleOcrProvider : IOcrProvider, ITransientDependency
         content.Add(new StringContent(string.Join(",", languages)), "languages");
         content.Add(new StringContent(modelName), "model_name");
 
-        var client = _httpClientFactory.CreateClient(ExtractPaddleOcrModule.HttpClientName);
+        var client = _httpClientFactory.CreateClient(VaultExtractPaddleOcrModule.HttpClientName);
         var response = await client.PostAsync($"{_options.Endpoint.TrimEnd('/')}/ocr", content, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {

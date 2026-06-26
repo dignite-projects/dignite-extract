@@ -30,7 +30,7 @@ public class CabinetTests
     public void Should_Reject_Name_With_Control_Chars(string name)
     {
         var ex = Should.Throw<BusinessException>(() => new Cabinet(Guid.NewGuid(), null, name));
-        ex.Code.ShouldBe(ExtractErrorCodes.Cabinet.InvalidName);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Cabinet.InvalidName);
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public class CabinetTests
         // invariants through the Update API.
         var cabinet = new Cabinet(Guid.NewGuid(), null, "Legal");
         Should.Throw<BusinessException>(() => cabinet.Update("Bad\nName"))
-            .Code.ShouldBe(ExtractErrorCodes.Cabinet.InvalidName);
+            .Code.ShouldBe(VaultExtractErrorCodes.Cabinet.InvalidName);
     }
 
     [Theory]
@@ -70,7 +70,7 @@ public class CabinetTests
     {
         var ex = Should.Throw<BusinessException>(
             () => new Cabinet(Guid.NewGuid(), null, "Legal", description));
-        ex.Code.ShouldBe(ExtractErrorCodes.Cabinet.InvalidDescription);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Cabinet.InvalidDescription);
     }
 
     [Fact]
@@ -78,6 +78,6 @@ public class CabinetTests
     {
         var cabinet = new Cabinet(Guid.NewGuid(), null, "Legal");
         Should.Throw<BusinessException>(() => cabinet.Update("Legal", "Bad\nDescription"))
-            .Code.ShouldBe(ExtractErrorCodes.Cabinet.InvalidDescription);
+            .Code.ShouldBe(VaultExtractErrorCodes.Cabinet.InvalidDescription);
     }
 }

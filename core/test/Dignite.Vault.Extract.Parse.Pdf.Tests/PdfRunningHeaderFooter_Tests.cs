@@ -24,7 +24,7 @@ public class PdfRunningHeaderFooter_Tests
         => new(
             _ocr,
             Options.Create(new PdfExtractorOptions()),
-            Options.Create(new ExtractOcrOptions { DefaultLanguageHints = new List<string>() }));
+            Options.Create(new VaultExtractOcrOptions { DefaultLanguageHints = new List<string>() }));
 
     private static TextExtractionContext PdfContext()
         => new() { ContentType = "application/pdf", FileExtension = ".pdf" };

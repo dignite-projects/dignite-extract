@@ -26,7 +26,7 @@ namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 /// Coverage: equality / range for each DataType, multi-field AND, tenant isolation, soft delete,
 /// reclassification whole-set replacement, and loud fail-closed behavior.
 /// </summary>
-public class EfCoreDocumentRepositorySearch_Tests : ExtractEntityFrameworkCoreTestBase
+public class EfCoreDocumentRepositorySearch_Tests : VaultExtractEntityFrameworkCoreTestBase
 {
     private const string TypeCode = "contract.general";
 
@@ -97,7 +97,7 @@ public class EfCoreDocumentRepositorySearch_Tests : ExtractEntityFrameworkCoreTe
                 TypeId(TypeCode),
                 new[] { Query("party", FieldDataType.Text, min: "a", max: "z") }));
 
-            ex.Code.ShouldBe(ExtractErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange);
+            ex.Code.ShouldBe(VaultExtractErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange);
         });
     }
 
@@ -110,7 +110,7 @@ public class EfCoreDocumentRepositorySearch_Tests : ExtractEntityFrameworkCoreTe
                 TypeId(TypeCode),
                 new[] { Query("active", FieldDataType.Boolean, min: "false", max: "true") }));
 
-            ex.Code.ShouldBe(ExtractErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange);
+            ex.Code.ShouldBe(VaultExtractErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange);
         });
     }
 
@@ -124,7 +124,7 @@ public class EfCoreDocumentRepositorySearch_Tests : ExtractEntityFrameworkCoreTe
                 TypeId(TypeCode),
                 new[] { Query("count", FieldDataType.Number, value: "abc") }));
 
-            ex.Code.ShouldBe(ExtractErrorCodes.ExtractedField.InvalidValue);
+            ex.Code.ShouldBe(VaultExtractErrorCodes.ExtractedField.InvalidValue);
         });
     }
 
@@ -139,7 +139,7 @@ public class EfCoreDocumentRepositorySearch_Tests : ExtractEntityFrameworkCoreTe
                 TypeId(TypeCode),
                 new[] { Query("count", FieldDataType.Number) }));
 
-            ex.Code.ShouldBe(ExtractErrorCodes.ExtractedField.InvalidValue);
+            ex.Code.ShouldBe(VaultExtractErrorCodes.ExtractedField.InvalidValue);
         });
     }
 
@@ -156,7 +156,7 @@ public class EfCoreDocumentRepositorySearch_Tests : ExtractEntityFrameworkCoreTe
                 TypeId(TypeCode),
                 new[] { Query("created", FieldDataType.DateTime, value: offsetInput) }));
 
-            ex.Code.ShouldBe(ExtractErrorCodes.ExtractedField.InvalidValue);
+            ex.Code.ShouldBe(VaultExtractErrorCodes.ExtractedField.InvalidValue);
         });
     }
 

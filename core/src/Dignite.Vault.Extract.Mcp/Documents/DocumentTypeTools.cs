@@ -16,7 +16,7 @@ namespace Dignite.Vault.Extract.Mcp.Documents;
 /// (#285). It uses the same data source as <see cref="DocumentTypeResources"/> and adds no separate
 /// maintenance burden. Clients that support MCP Resources, such as Claude Code CLI, should still use
 /// the standard Resource path. Result sets are hard-capped by
-/// <see cref="ExtractMcpConsts.MaxDocumentTypeResults"/> (llm-call-anti-patterns counterexample B
+/// <see cref="VaultExtractMcpConsts.MaxDocumentTypeResults"/> (llm-call-anti-patterns counterexample B
 /// point 3: tenant admins can create any number of types). Field definitions are loaded once in bulk
 /// and grouped in memory, avoiding per-type N+1 queries.
 /// </summary>
@@ -47,7 +47,7 @@ public sealed class DocumentTypeTools
         // parameters are provided.
         var visibleTypes = types
             .OrderBy(t => t.TypeCode, StringComparer.Ordinal)
-            .Take(ExtractMcpConsts.MaxDocumentTypeResults)
+            .Take(VaultExtractMcpConsts.MaxDocumentTypeResults)
             .ToList();
 
         // Eliminate N+1: leaving DocumentTypeId empty performs one bulk read of all active field

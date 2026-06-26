@@ -22,13 +22,13 @@ using Volo.Abp.EventBus.Distributed;
 
 namespace Dignite.Vault.Extract.Documents;
 
-public class DocumentAppService : ExtractAppService, IDocumentAppService
+public class DocumentAppService : VaultExtractAppService, IDocumentAppService
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly IDocumentTypeRepository _documentTypeRepository;
     private readonly IFieldDefinitionRepository _fieldDefinitionRepository;
     private readonly ICabinetRepository _cabinetRepository;
-    private readonly IBlobContainer<ExtractDocumentContainer> _blobContainer;
+    private readonly IBlobContainer<VaultExtractDocumentContainer> _blobContainer;
     private readonly DocumentPipelineRunManager _pipelineRunManager;
     private readonly DocumentPipelineJobScheduler _pipelineJobScheduler;
     private readonly IDistributedEventBus _distributedEventBus;
@@ -39,7 +39,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         IDocumentTypeRepository documentTypeRepository,
         IFieldDefinitionRepository fieldDefinitionRepository,
         ICabinetRepository cabinetRepository,
-        IBlobContainer<ExtractDocumentContainer> blobContainer,
+        IBlobContainer<VaultExtractDocumentContainer> blobContainer,
         DocumentPipelineRunManager pipelineRunManager,
         DocumentPipelineJobScheduler pipelineJobScheduler,
         IDistributedEventBus distributedEventBus,
@@ -61,14 +61,14 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         // Programmatic authorization assertion inside the method body. This is also the authorization guard for MCP exports
         // because DocumentResources delegates to this method (#222). MCP / reflection / tool-dispatch paths do not pass through HTTP [Authorize],
         // so this assertion must not be rewritten as a class-level or method-level [Authorize] attribute.
-        await CheckPolicyAsync(ExtractPermissions.Documents.Default);
+        await CheckPolicyAsync(VaultExtractPermissions.Documents.Default);
         var document = await _documentRepository.GetAsync(id, includeDetails: true);
         return await MapToDtoAsync(document);
     }
 
     public virtual async Task<PagedResultDto<DocumentListItemDto>> GetListAsync(GetDocumentListInput input)
     {
-        await CheckPolicyAsync(ExtractPermissions.Documents.Default);
+        await CheckPolicyAsync(VaultExtractPermissions.Documents.Default);
 
         // Resolve external type code -> internal DocumentTypeId (#207). If a type code is supplied but the layer has no such type:
         // with field filters -> loud fail because fields cannot be resolved; metadata-only -> empty page because no documents have that type.
@@ -80,7 +80,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
             {
                 if (input.FieldFilters is { Count: > 0 })
                 {
-                    throw new BusinessException(ExtractErrorCodes.ExtractedField.Unknown)
+                    throw new BusinessException(VaultExtractErrorCodes.ExtractedField.Unknown)
                         .WithData("FieldName", input.FieldFilters[0].Name ?? string.Empty)
                         .WithData("DocumentTypeCode", input.DocumentTypeCode!);
                 }
@@ -97,7 +97,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         // Trash-bin view: requires Restore permission, and the entire query pipeline must run inside DataFilter.Disable<ISoftDelete>.
         if (input.IsDeleted == true)
         {
-            await CheckPolicyAsync(ExtractPermissions.Documents.Restore);
+            await CheckPolicyAsync(VaultExtractPermissions.Documents.Restore);
             using (DataFilter.Disable<ISoftDelete>())
             {
                 return await ExecuteListQueryAsync(input, documentTypeId, onlyDeleted: true, fieldQueries);
@@ -122,7 +122,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
             var definition = await _fieldDefinitionRepository.FindByNameAsync(documentTypeId!.Value, filter.Name!);
             if (definition == null)
             {
-                throw new BusinessException(ExtractErrorCodes.ExtractedField.Unknown)
+                throw new BusinessException(VaultExtractErrorCodes.ExtractedField.Unknown)
                     .WithData("FieldName", filter.Name!)
                     .WithData("DocumentTypeCode", input.DocumentTypeCode!);
             }
@@ -176,7 +176,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         return new PagedResultDto<DocumentListItemDto>(totalCount, dtos);
     }
 
-    [Authorize(ExtractPermissions.Documents.Upload)]
+    [Authorize(VaultExtractPermissions.Documents.Upload)]
     public virtual async Task<DocumentDto> UploadAsync(UploadDocumentInput input)
     {
         // Pre-check: the current layer must have at least one DocumentType (CLAUDE.md "two-layer document type system", exact single-layer match).
@@ -186,7 +186,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         var hasType = await _documentTypeRepository.GetCountAsync() > 0;
         if (!hasType)
         {
-            throw new BusinessException(ExtractErrorCodes.DocumentType.NoneConfigured);
+            throw new BusinessException(VaultExtractErrorCodes.DocumentType.NoneConfigured);
         }
 
         // Cabinet ownership validation (#194): when cabinetId is specified, assert Cabinets permission first
@@ -196,12 +196,12 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         // Cabinets are orthogonal to pipelines; this only validates manual ownership during upload, and later pipelines do not touch it.
         if (input.CabinetId.HasValue)
         {
-            await CheckPolicyAsync(ExtractPermissions.Cabinets.Default);
+            await CheckPolicyAsync(VaultExtractPermissions.Cabinets.Default);
 
             var cabinet = await _cabinetRepository.FindAsync(input.CabinetId.Value);
             if (cabinet == null)
             {
-                throw new BusinessException(ExtractErrorCodes.Cabinet.InvalidId)
+                throw new BusinessException(VaultExtractErrorCodes.Cabinet.InvalidId)
                     .WithData("CabinetId", input.CabinetId.Value);
             }
         }
@@ -218,7 +218,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
             !DocumentConsts.AllowedUploadExtensions.Contains(extension) ||
             !DocumentConsts.AllowedUploadContentTypes.Contains(contentType))
         {
-            throw new BusinessException(ExtractErrorCodes.Document.UnsupportedFileType)
+            throw new BusinessException(VaultExtractErrorCodes.Document.UnsupportedFileType)
                 .WithData("FileName", fileName)
                 .WithData("ContentType", contentType);
         }
@@ -228,7 +228,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         // without buffering the full oversized body into memory.
         if (input.File.ContentLength is > 0 and var declared && declared > DocumentConsts.MaxUploadFileBytes)
         {
-            throw new BusinessException(ExtractErrorCodes.Document.FileTooLarge)
+            throw new BusinessException(VaultExtractErrorCodes.Document.FileTooLarge)
                 .WithData("FileName", fileName)
                 .WithData("MaxBytes", DocumentConsts.MaxUploadFileBytes);
         }
@@ -255,8 +255,8 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         if (existing != null)
         {
             var errorCode = existing.IsDeleted
-                ? ExtractErrorCodes.Document.InRecycleBin
-                : ExtractErrorCodes.Document.Duplicate;
+                ? VaultExtractErrorCodes.Document.InRecycleBin
+                : VaultExtractErrorCodes.Document.Duplicate;
 
             throw new BusinessException(errorCode)
                 .WithData("FileName", fileName)
@@ -296,7 +296,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
                 ContentType = contentType
             });
 
-        await _pipelineJobScheduler.QueueAsync(document, ExtractPipelines.Parse);
+        await _pipelineJobScheduler.QueueAsync(document, VaultExtractPipelines.Parse);
 
         return await MapToDtoAsync(document);
     }
@@ -316,7 +316,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
             total += read;
             if (total > maxBytes)
             {
-                throw new BusinessException(ExtractErrorCodes.Document.FileTooLarge)
+                throw new BusinessException(VaultExtractErrorCodes.Document.FileTooLarge)
                     .WithData("FileName", fileName)
                     .WithData("MaxBytes", maxBytes);
             }
@@ -327,13 +327,13 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
 
     public virtual async Task<IRemoteStreamContent> GetBlobAsync(Guid id)
     {
-        await CheckPolicyAsync(ExtractPermissions.Documents.Default);
+        await CheckPolicyAsync(VaultExtractPermissions.Documents.Default);
 
         // Only fetch the blob stream: scalar fields + owned FileOrigin are loaded with the entity, and no child collection is needed.
         var document = await _documentRepository.GetAsync(id, includeDetails: false);
 
         if (document.FileOrigin is null)
-            throw new BusinessException(ExtractErrorCodes.Document.NoSourceBlob);
+            throw new BusinessException(VaultExtractErrorCodes.Document.NoSourceBlob);
 
         var stream = await _blobContainer.GetAsync(document.FileOrigin.BlobName);
 
@@ -344,7 +344,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
             disposeStream: true);
     }
 
-    [Authorize(ExtractPermissions.Documents.Delete)]
+    [Authorize(VaultExtractPermissions.Documents.Delete)]
     public virtual async Task DeleteAsync(Guid id)
     {
         var document = await _documentRepository.GetAsync(id);
@@ -359,7 +359,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         // Document.CreateDerived), unlike the #349 container→type reclassify retraction.
         if (await _documentRepository.AnyByOriginAsync(id))
         {
-            throw new BusinessException(ExtractErrorCodes.Document.HasSubDocuments)
+            throw new BusinessException(VaultExtractErrorCodes.Document.HasSubDocuments)
                 .WithData("DocumentId", id);
         }
 
@@ -375,7 +375,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
             });
     }
 
-    [Authorize(ExtractPermissions.Documents.PermanentDelete)]
+    [Authorize(VaultExtractPermissions.Documents.PermanentDelete)]
     public virtual async Task PermanentDeleteAsync(Guid id)
     {
         Document document;
@@ -428,7 +428,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
             });
     }
 
-    [Authorize(ExtractPermissions.Documents.Restore)]
+    [Authorize(VaultExtractPermissions.Documents.Restore)]
     public virtual async Task RestoreAsync(Guid id)
     {
         using (DataFilter.Disable<ISoftDelete>())
@@ -461,12 +461,12 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
     /// Retry first creates a Pending Run, then enqueues a BackgroundJob carrying PipelineRunId.
     /// Chained replay semantics are implicit: retrying <c>text-extraction</c> triggers <c>classification</c> after success.
     /// </summary>
-    [Authorize(ExtractPermissions.Documents.Pipelines.Retry)]
+    [Authorize(VaultExtractPermissions.Documents.Pipelines.Retry)]
     public virtual async Task RetryPipelineAsync(Guid id, RetryPipelineInput input)
     {
-        if (!ExtractPipelines.RetryablePipelines.Contains(input.PipelineCode))
+        if (!VaultExtractPipelines.RetryablePipelines.Contains(input.PipelineCode))
         {
-            throw new BusinessException(ExtractErrorCodes.Pipeline.UnknownCode)
+            throw new BusinessException(VaultExtractErrorCodes.Pipeline.UnknownCode)
                 .WithData("PipelineCode", input.PipelineCode);
         }
 
@@ -478,7 +478,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
 
         if (document.IsDeleted)
         {
-            throw new BusinessException(ExtractErrorCodes.Document.InRecycleBin)
+            throw new BusinessException(VaultExtractErrorCodes.Document.InRecycleBin)
                 .WithData("FileName", document.FileOrigin?.BlobName);
         }
 
@@ -500,7 +500,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
     /// (operator-specified type, synchronous persistence) and <see cref="RetryPipelineAsync"/> (only Failed runs are retryable).
     /// </para>
     /// </summary>
-    [Authorize(ExtractPermissions.Documents.ConfirmClassification)]
+    [Authorize(VaultExtractPermissions.Documents.ConfirmClassification)]
     public virtual async Task RerecognizeAsync(Guid id)
     {
         // Need only scalar fields (IsDeleted / Markdown / FileOrigin); field values are not touched. Tenant isolation is enforced by the ambient IMultiTenant filter.
@@ -508,25 +508,25 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
 
         if (document.IsDeleted)
         {
-            throw new BusinessException(ExtractErrorCodes.Document.InRecycleBin)
+            throw new BusinessException(VaultExtractErrorCodes.Document.InRecycleBin)
                 .WithData("FileName", document.FileOrigin?.BlobName);
         }
 
         // Automatic classification input is Document.Markdown. If text extraction has not produced text yet, reclassification cannot run.
         if (string.IsNullOrEmpty(document.Markdown))
         {
-            throw new BusinessException(ExtractErrorCodes.Document.NotTextExtracted);
+            throw new BusinessException(VaultExtractErrorCodes.Document.NotTextExtracted);
         }
 
         // Concurrency guard: do not re-enqueue while classification is Pending/Running. New attempts do not collide with the unique index for Running, so this must be blocked explicitly.
-        await _pipelineRunManager.EnsureNotInProgressAsync(id, ExtractPipelines.Classification);
+        await _pipelineRunManager.EnsureNotInProgressAsync(id, VaultExtractPipelines.Classification);
 
         Logger.LogInformation(
             "RerecognizeAsync user={UserId} tenant={TenantId} doc={DocumentId}",
             CurrentUser.Id, CurrentTenant.Id, document.Id);
 
         // Re-enqueue automatic classification. QueueAsync creates a Pending run, derives LifecycleStatus -> Processing, and enqueues the background job.
-        await _pipelineJobScheduler.QueueAsync(document, ExtractPipelines.Classification);
+        await _pipelineJobScheduler.QueueAsync(document, VaultExtractPipelines.Classification);
     }
 
     /// <summary>
@@ -534,7 +534,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
     /// without reclassification or OCR. Reuses the same background job and shared extraction engine as bulk field re-extraction.
     /// #411: <c>field-extraction</c> is now a key pipeline, so re-extracting an already-Ready document bounces it Ready -&gt; Processing -&gt; Ready (re-firing DocumentReadyEto, absorbed downstream via EventTime), and a newly-detected duplicate parks it in the review queue instead of returning to Ready.
     /// </summary>
-    [Authorize(ExtractPermissions.Documents.ConfirmClassification)]
+    [Authorize(VaultExtractPermissions.Documents.ConfirmClassification)]
     public virtual async Task ReextractFieldsAsync(Guid id)
     {
         // Need only scalar fields (IsDeleted / DocumentTypeId / Markdown); field values are not touched. Tenant isolation is enforced by the ambient IMultiTenant filter.
@@ -542,32 +542,32 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
 
         if (document.IsDeleted)
         {
-            throw new BusinessException(ExtractErrorCodes.Document.InRecycleBin)
+            throw new BusinessException(VaultExtractErrorCodes.Document.InRecycleBin)
                 .WithData("FileName", document.FileOrigin?.BlobName);
         }
 
         // Field extraction hangs off DocumentType; unclassified documents have nothing to extract against.
         if (!document.DocumentTypeId.HasValue)
         {
-            throw new BusinessException(ExtractErrorCodes.Document.NotClassified);
+            throw new BusinessException(VaultExtractErrorCodes.Document.NotClassified);
         }
 
         // Field extraction input is Document.Markdown. If text extraction has not produced text yet, extraction cannot run.
         if (string.IsNullOrEmpty(document.Markdown))
         {
-            throw new BusinessException(ExtractErrorCodes.Document.NotTextExtracted);
+            throw new BusinessException(VaultExtractErrorCodes.Document.NotTextExtracted);
         }
 
         // Concurrency guard: do not re-enqueue while field-extraction is Pending/Running, avoiding double-click stacking.
         // New attempts do not collide with the unique index for Running, so this must be blocked explicitly.
-        await _pipelineRunManager.EnsureNotInProgressAsync(id, ExtractPipelines.FieldExtraction);
+        await _pipelineRunManager.EnsureNotInProgressAsync(id, VaultExtractPipelines.FieldExtraction);
 
         Logger.LogInformation(
             "ReextractFieldsAsync user={UserId} tenant={TenantId} doc={DocumentId}",
             CurrentUser.Id, CurrentTenant.Id, document.Id);
 
         // Create a Pending field-extraction run + enqueue the background job. Lifecycle-neutral, so LifecycleStatus is unchanged.
-        await _pipelineJobScheduler.QueueAsync(document, ExtractPipelines.FieldExtraction);
+        await _pipelineJobScheduler.QueueAsync(document, VaultExtractPipelines.FieldExtraction);
     }
 
     /// <summary>
@@ -575,7 +575,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
     /// keys must be field names defined under this document's layer and DocumentType. After completion, reuses FieldsExtractedEto
     /// to notify downstream consumers to synchronize.
     /// </summary>
-    [Authorize(ExtractPermissions.Documents.ConfirmClassification)]
+    [Authorize(VaultExtractPermissions.Documents.ConfirmClassification)]
     public virtual async Task<DocumentDto> UpdateExtractedFieldsAsync(Guid id, UpdateExtractedFieldsInput input)
     {
         // Tenant isolation is enforced by the ambient IMultiTenant filter; GetAsync already throws EntityNotFound for cross-tenant ids.
@@ -584,7 +584,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         // Field definitions hang off DocumentType; unclassified documents have no basis for validating field names.
         if (!document.DocumentTypeId.HasValue)
         {
-            throw new BusinessException(ExtractErrorCodes.Document.NotClassified);
+            throw new BusinessException(VaultExtractErrorCodes.Document.NotClassified);
         }
 
         // ETO still carries the DocumentTypeCode string, preserving the export contract. It is resolved from internal DocumentTypeId (#207).
@@ -606,14 +606,14 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         {
             if (!definitionsByName.TryGetValue(key, out var definition))
             {
-                throw new BusinessException(ExtractErrorCodes.ExtractedField.Unknown)
+                throw new BusinessException(VaultExtractErrorCodes.ExtractedField.Unknown)
                     .WithData("FieldName", key)
                     .WithData("DocumentTypeCode", documentTypeCode ?? string.Empty);
             }
 
             if (!ExtractedFieldValueValidator.IsValid(value, definition.DataType, definition.AllowMultiple))
             {
-                throw new BusinessException(ExtractErrorCodes.ExtractedField.InvalidValue)
+                throw new BusinessException(VaultExtractErrorCodes.ExtractedField.InvalidValue)
                     .WithData("FieldName", key)
                     .WithData("DocumentTypeCode", documentTypeCode ?? string.Empty)
                     .WithData("DataType", definition.DataType.ToString())
@@ -656,19 +656,19 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
         return await MapToDtoAsync(document);
     }
 
-    [Authorize(ExtractPermissions.Documents.ConfirmClassification)]
+    [Authorize(VaultExtractPermissions.Documents.ConfirmClassification)]
     public virtual async Task<DocumentDto> ConfirmClassificationAsync(Guid id, ConfirmClassificationInput input)
     {
         return await ApplyManualClassificationAsync(id, input.DocumentTypeId);
     }
 
-    [Authorize(ExtractPermissions.Documents.ConfirmClassification)]
+    [Authorize(VaultExtractPermissions.Documents.ConfirmClassification)]
     public virtual async Task<DocumentDto> ReclassifyAsync(Guid id, ReclassifyDocumentInput input)
     {
         return await ApplyManualClassificationAsync(id, input.DocumentTypeId);
     }
 
-    [Authorize(ExtractPermissions.Documents.ConfirmClassification)]
+    [Authorize(VaultExtractPermissions.Documents.ConfirmClassification)]
     public virtual async Task<DocumentDto> RejectReviewAsync(Guid id, RejectReviewInput input)
     {
         var document = await _documentRepository.GetAsync(id, includeDetails: true);
@@ -684,7 +684,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
     /// Reuses the review-resolution permission (same as Confirm / Reclassify / Reject). The opposite resolution —
     /// confirming the duplicate — is the existing <see cref="DeleteAsync"/>.
     /// </summary>
-    [Authorize(ExtractPermissions.Documents.ConfirmClassification)]
+    [Authorize(VaultExtractPermissions.Documents.ConfirmClassification)]
     public virtual async Task<DocumentDto> AllowDuplicateAsync(Guid id)
     {
         var document = await _documentRepository.GetAsync(id, includeDetails: true);
@@ -696,23 +696,23 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
 
     /// <summary>
     /// Reassigns the document's cabinet (#257). Symmetric with <see cref="UploadAsync"/> cabinet ownership validation:
-    /// assigning to a cabinet asserts <see cref="ExtractPermissions.Cabinets.Default"/> and validates that the cabinet exists in the current layer
+    /// assigning to a cabinet asserts <see cref="VaultExtractPermissions.Cabinets.Default"/> and validates that the cabinet exists in the current layer
     /// (tenant isolation is enforced by the ambient IMultiTenant filter, so cross-tenant FindAsync returns null). Removing from a cabinet (CabinetId == null)
-    /// only needs method-level <see cref="ExtractPermissions.Documents.Default"/>. Cabinets are orthogonal to pipelines, so this triggers no later Run and emits no export event.
+    /// only needs method-level <see cref="VaultExtractPermissions.Documents.Default"/>. Cabinets are orthogonal to pipelines, so this triggers no later Run and emits no export event.
     /// </summary>
-    [Authorize(ExtractPermissions.Documents.Default)]
+    [Authorize(VaultExtractPermissions.Documents.Default)]
     public virtual async Task<DocumentDto> UpdateCabinetAsync(Guid id, UpdateDocumentCabinetInput input)
     {
         var document = await _documentRepository.GetAsync(id, includeDetails: true);
 
         if (input.CabinetId.HasValue)
         {
-            await CheckPolicyAsync(ExtractPermissions.Cabinets.Default);
+            await CheckPolicyAsync(VaultExtractPermissions.Cabinets.Default);
 
             var cabinet = await _cabinetRepository.FindAsync(input.CabinetId.Value);
             if (cabinet == null)
             {
-                throw new BusinessException(ExtractErrorCodes.Cabinet.InvalidId)
+                throw new BusinessException(VaultExtractErrorCodes.Cabinet.InvalidId)
                     .WithData("CabinetId", input.CabinetId.Value);
             }
         }
@@ -741,7 +741,7 @@ public class DocumentAppService : ExtractAppService, IDocumentAppService
             throw new EntityNotFoundException(typeof(DocumentType), documentTypeId);
         }
 
-        var run = await _pipelineRunManager.QueueAsync(document, ExtractPipelines.Classification);
+        var run = await _pipelineRunManager.QueueAsync(document, VaultExtractPipelines.Classification);
         await _pipelineRunManager.BeginAsync(document, run);
 
         await _pipelineRunManager.CompleteManualClassificationAsync(document, run, typeDef);

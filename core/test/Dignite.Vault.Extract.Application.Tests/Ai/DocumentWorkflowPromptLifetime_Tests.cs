@@ -32,7 +32,7 @@ public class DocumentWorkflowPromptLifetime_Tests
 
         var workflow = new DocumentClassificationWorkflow(
             inner,
-            Options.Create(new ExtractBehaviorOptions()),
+            Options.Create(new VaultExtractBehaviorOptions()),
             promptProvider);
 
         var types = new List<DocumentType>
@@ -59,7 +59,7 @@ public class DocumentWorkflowPromptLifetime_Tests
 
         var workflow = new DocumentClassificationWorkflow(
             inner,
-            Options.Create(new ExtractBehaviorOptions()),
+            Options.Create(new VaultExtractBehaviorOptions()),
             promptProvider);
 
         var types = new List<DocumentType>

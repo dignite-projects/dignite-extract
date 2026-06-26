@@ -66,7 +66,7 @@ public class DocumentSegmentationJob
     private readonly ICurrentTenant _currentTenant;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IUnitOfWorkManager _unitOfWorkManager;
-    private readonly ExtractBehaviorOptions _behaviorOptions;
+    private readonly VaultExtractBehaviorOptions _behaviorOptions;
     private readonly ICancellationTokenProvider _cancellationTokenProvider;
 
     public DocumentSegmentationJob(
@@ -78,7 +78,7 @@ public class DocumentSegmentationJob
         ICurrentTenant currentTenant,
         IGuidGenerator guidGenerator,
         IUnitOfWorkManager unitOfWorkManager,
-        IOptions<ExtractBehaviorOptions> behaviorOptions,
+        IOptions<VaultExtractBehaviorOptions> behaviorOptions,
         ICancellationTokenProvider cancellationTokenProvider)
     {
         _documentRepository = documentRepository;

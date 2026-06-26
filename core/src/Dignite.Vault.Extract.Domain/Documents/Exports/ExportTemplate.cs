@@ -74,12 +74,12 @@ public class ExportTemplate : FullAuditedAggregateRoot<Guid>, IMultiTenant
 
         if (columns.Count == 0)
         {
-            throw new BusinessException(ExtractErrorCodes.Export.TemplateRequiresColumn);
+            throw new BusinessException(VaultExtractErrorCodes.Export.TemplateRequiresColumn);
         }
 
         if (columns.Count > ExportTemplateConsts.MaxColumnCount)
         {
-            throw new BusinessException(ExtractErrorCodes.Export.TemplateTooManyColumns)
+            throw new BusinessException(VaultExtractErrorCodes.Export.TemplateTooManyColumns)
                 .WithData("count", columns.Count)
                 .WithData("max", ExportTemplateConsts.MaxColumnCount);
         }
@@ -89,7 +89,7 @@ public class ExportTemplate : FullAuditedAggregateRoot<Guid>, IMultiTenant
             .FirstOrDefault(g => g.Count() > 1);
         if (duplicate != null)
         {
-            throw new BusinessException(ExtractErrorCodes.Export.TemplateDuplicateField)
+            throw new BusinessException(VaultExtractErrorCodes.Export.TemplateDuplicateField)
                 .WithData("fieldDefinitionId", duplicate.Key);
         }
 
@@ -102,7 +102,7 @@ public class ExportTemplate : FullAuditedAggregateRoot<Guid>, IMultiTenant
 
         if (name.Any(char.IsControl))
         {
-            throw new BusinessException(ExtractErrorCodes.Export.InvalidTemplateName)
+            throw new BusinessException(VaultExtractErrorCodes.Export.InvalidTemplateName)
                 .WithData("name", name);
         }
 

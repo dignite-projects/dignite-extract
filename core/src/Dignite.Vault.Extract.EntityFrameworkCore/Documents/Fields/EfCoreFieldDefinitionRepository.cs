@@ -11,9 +11,9 @@ using Volo.Abp.EntityFrameworkCore;
 namespace Dignite.Vault.Extract.Documents.Fields;
 
 public class EfCoreFieldDefinitionRepository
-    : EfCoreRepository<ExtractDbContext, FieldDefinition, Guid>, IFieldDefinitionRepository
+    : EfCoreRepository<VaultExtractDbContext, FieldDefinition, Guid>, IFieldDefinitionRepository
 {
-    public EfCoreFieldDefinitionRepository(IDbContextProvider<ExtractDbContext> dbContextProvider)
+    public EfCoreFieldDefinitionRepository(IDbContextProvider<VaultExtractDbContext> dbContextProvider)
         : base(dbContextProvider) { }
 
     public async Task<List<FieldDefinition>> GetListAsync(

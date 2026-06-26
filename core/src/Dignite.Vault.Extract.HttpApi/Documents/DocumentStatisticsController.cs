@@ -6,7 +6,7 @@ namespace Dignite.Vault.Extract.HttpApi.Documents;
 
 [Area("vault-extract")]
 [Route("api/vault-extract/document-statistics")]
-public class DocumentStatisticsController : ExtractController, IDocumentStatisticsAppService
+public class DocumentStatisticsController : VaultExtractController, IDocumentStatisticsAppService
 {
     private readonly IDocumentStatisticsAppService _documentStatisticsAppService;
 

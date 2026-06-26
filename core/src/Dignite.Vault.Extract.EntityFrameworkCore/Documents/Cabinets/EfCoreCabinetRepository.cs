@@ -9,9 +9,9 @@ using Volo.Abp.EntityFrameworkCore;
 namespace Dignite.Vault.Extract.Documents.Cabinets;
 
 public class EfCoreCabinetRepository
-    : EfCoreRepository<ExtractDbContext, Cabinet, Guid>, ICabinetRepository
+    : EfCoreRepository<VaultExtractDbContext, Cabinet, Guid>, ICabinetRepository
 {
-    public EfCoreCabinetRepository(IDbContextProvider<ExtractDbContext> dbContextProvider)
+    public EfCoreCabinetRepository(IDbContextProvider<VaultExtractDbContext> dbContextProvider)
         : base(dbContextProvider) { }
 
     public async Task<Cabinet?> FindByNameAsync(

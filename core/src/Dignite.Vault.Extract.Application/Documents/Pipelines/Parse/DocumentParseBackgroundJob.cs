@@ -34,18 +34,18 @@ public class DocumentParseBackgroundJob
     private readonly DocumentPipelineJobScheduler _pipelineJobScheduler;
     private readonly IBackgroundJobManager _backgroundJobManager;
     private readonly ITextExtractor _textExtractor;
-    private readonly IBlobContainer<ExtractDocumentContainer> _blobContainer;
+    private readonly IBlobContainer<VaultExtractDocumentContainer> _blobContainer;
     private readonly IDistributedEventBus _distributedEventBus;
     private readonly IClock _clock;
     /// <summary>
     /// Document-title generation is single-shot, tool-free, prompt-unique. Reuses the
-    /// host-registered <see cref="ExtractConsts.TitleGeneratorChatClientKey"/> client
+    /// host-registered <see cref="VaultExtractConsts.TitleGeneratorChatClientKey"/> client
     /// (no FunctionInvocation, no DistributedCache) so traces stay clean and hosts can
     /// optionally point title generation at a smaller / cheaper model.
     /// </summary>
     private readonly IChatClient _titleGeneratorChatClient;
     private readonly IPromptProvider _promptProvider;
-    private readonly ExtractBehaviorOptions _behaviorOptions;
+    private readonly VaultExtractBehaviorOptions _behaviorOptions;
     // ABP BackgroundJobExecuter pushes the job execution cancellation token into ambient state through
     // ICancellationTokenProvider.Use(...) before calling ExecuteAsync. By default the worker source is the host shutdown token,
     // allowing slow external work to be cancelled.
@@ -62,12 +62,12 @@ public class DocumentParseBackgroundJob
         DocumentPipelineJobScheduler pipelineJobScheduler,
         IBackgroundJobManager backgroundJobManager,
         ITextExtractor textExtractor,
-        IBlobContainer<ExtractDocumentContainer> blobContainer,
+        IBlobContainer<VaultExtractDocumentContainer> blobContainer,
         IDistributedEventBus distributedEventBus,
         IClock clock,
-        [FromKeyedServices(ExtractConsts.TitleGeneratorChatClientKey)] IChatClient titleGeneratorChatClient,
+        [FromKeyedServices(VaultExtractConsts.TitleGeneratorChatClientKey)] IChatClient titleGeneratorChatClient,
         IPromptProvider promptProvider,
-        IOptions<ExtractBehaviorOptions> behaviorOptions,
+        IOptions<VaultExtractBehaviorOptions> behaviorOptions,
         ICancellationTokenProvider cancellationTokenProvider,
         IRepository<DocumentSegment, Guid> documentSegmentRepository)
         : base(documentRepository, runRepository, pipelineRunManager, pipelineRunAccessor, unitOfWorkManager)
@@ -146,7 +146,7 @@ public class DocumentParseBackgroundJob
         }
         catch (Exception ex)
         {
-            await FailRunAsync(args.DocumentId, workItem.RunId, ex.Message, ExtractPipelines.Parse);
+            await FailRunAsync(args.DocumentId, workItem.RunId, ex.Message, VaultExtractPipelines.Parse);
             throw;
         }
     }
@@ -157,7 +157,7 @@ public class DocumentParseBackgroundJob
 
         var document = await DocumentRepository.GetAsync(args.DocumentId, includeDetails: false);
         var run = await PipelineRunAccessor.BeginOrStartAsync(
-            document, args.PipelineRunId, ExtractPipelines.Parse);
+            document, args.PipelineRunId, VaultExtractPipelines.Parse);
         await DocumentRepository.UpdateAsync(document, autoSave: true);
 
         // A derived sub-document (OriginDocumentId set) seeds its Markdown from the source constituent rather than
@@ -200,7 +200,7 @@ public class DocumentParseBackgroundJob
         using var uow = UnitOfWorkManager.Begin(requiresNew: true);
 
         var (document, run) = await LoadDocumentAndRunAsync(
-            documentId, runId, ExtractPipelines.Parse);
+            documentId, runId, VaultExtractPipelines.Parse);
 
         await PipelineRunManager.CompleteParseAsync(
             document, run, result.Markdown, title,
@@ -223,7 +223,7 @@ public class DocumentParseBackgroundJob
         // plus operator rerun / re-upload. Figure sub-document routing now rides classification (#371): the embedded
         // *[Image OCR]* markers make the classifier flag an embedded document and enqueue the unified pass — no
         // separate figure-routing enqueue here anymore.
-        await _pipelineJobScheduler.QueueAsync(document, ExtractPipelines.Classification);
+        await _pipelineJobScheduler.QueueAsync(document, VaultExtractPipelines.Classification);
 
         // #265: after text extraction succeeds and Markdown is ready, fan out the "AI fallback cabinet selection when empty" job.
         // It is an independent sibling orthogonal to the content pipeline, not a PipelineRun phase. Do <b>not</b> read document.CabinetId here:

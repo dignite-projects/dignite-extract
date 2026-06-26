@@ -56,28 +56,28 @@ public class DocumentPipelineJobScheduler : ITransientDependency
         var effectiveDelay = delay ?? default;
         return pipelineCode switch
         {
-            ExtractPipelines.Parse => _backgroundJobManager.EnqueueAsync(
+            VaultExtractPipelines.Parse => _backgroundJobManager.EnqueueAsync(
                 new DocumentParseJobArgs
                 {
                     DocumentId = documentId,
                     PipelineRunId = pipelineRunId
                 },
                 delay: effectiveDelay),
-            ExtractPipelines.Classification => _backgroundJobManager.EnqueueAsync(
+            VaultExtractPipelines.Classification => _backgroundJobManager.EnqueueAsync(
                 new DocumentClassificationJobArgs
                 {
                     DocumentId = documentId,
                     PipelineRunId = pipelineRunId
                 },
                 delay: effectiveDelay),
-            ExtractPipelines.FieldExtraction => _backgroundJobManager.EnqueueAsync(
+            VaultExtractPipelines.FieldExtraction => _backgroundJobManager.EnqueueAsync(
                 new DocumentFieldExtractionJobArgs
                 {
                     DocumentId = documentId,
                     PipelineRunId = pipelineRunId
                 },
                 delay: effectiveDelay),
-            _ => throw new BusinessException(ExtractErrorCodes.Pipeline.UnknownCode)
+            _ => throw new BusinessException(VaultExtractErrorCodes.Pipeline.UnknownCode)
                 .WithData("PipelineCode", pipelineCode)
         };
     }

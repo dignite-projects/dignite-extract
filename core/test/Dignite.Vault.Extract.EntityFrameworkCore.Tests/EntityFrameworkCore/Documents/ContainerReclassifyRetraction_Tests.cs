@@ -19,7 +19,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 
-[DependsOn(typeof(ExtractEntityFrameworkCoreTestModule))]
+[DependsOn(typeof(VaultExtractEntityFrameworkCoreTestModule))]
 public class ContainerReclassifyRetractionTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -27,7 +27,7 @@ public class ContainerReclassifyRetractionTestModule : AbpModule
         // DocumentAppService.ReclassifyAsync / the segmentation sink touch these collaborators; substitute the
         // out-of-process ones so the test exercises the real DB + the real ContainerMarkerClearedEventHandler.
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
-        context.Services.AddSingleton(Substitute.For<IBlobContainer<ExtractDocumentContainer>>());
+        context.Services.AddSingleton(Substitute.For<IBlobContainer<VaultExtractDocumentContainer>>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
     }
 }
@@ -50,7 +50,7 @@ public class ContainerReclassifyRetractionTestModule : AbpModule
 /// </para>
 /// </summary>
 public class ContainerReclassifyRetraction_Tests
-    : ExtractTestBase<ContainerReclassifyRetractionTestModule>
+    : VaultExtractTestBase<ContainerReclassifyRetractionTestModule>
 {
     private readonly IDocumentAppService _appService;
     private readonly IDocumentRepository _documentRepository;

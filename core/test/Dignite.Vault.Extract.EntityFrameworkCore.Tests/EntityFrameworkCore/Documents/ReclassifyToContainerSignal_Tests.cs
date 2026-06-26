@@ -15,7 +15,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 
-[DependsOn(typeof(ExtractEntityFrameworkCoreTestModule))]
+[DependsOn(typeof(VaultExtractEntityFrameworkCoreTestModule))]
 public class ReclassifyToContainerSignalTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -39,7 +39,7 @@ public class ReclassifyToContainerSignalTestModule : AbpModule
 /// </para>
 /// </summary>
 public class ReclassifyToContainerSignal_Tests
-    : ExtractTestBase<ReclassifyToContainerSignalTestModule>
+    : VaultExtractTestBase<ReclassifyToContainerSignalTestModule>
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly IRepository<DocumentType, Guid> _documentTypeRepository;

@@ -26,7 +26,7 @@ public class DocumentClassificationBackgroundJob
     private readonly DocumentClassificationWorkflow _workflow;
     private readonly IDistributedEventBus _distributedEventBus;
     private readonly IClock _clock;
-    private readonly ExtractBehaviorOptions _aiOptions;
+    private readonly VaultExtractBehaviorOptions _aiOptions;
     private readonly ICurrentTenant _currentTenant;
     private readonly IBackgroundJobManager _backgroundJobManager;
 
@@ -40,7 +40,7 @@ public class DocumentClassificationBackgroundJob
         DocumentClassificationWorkflow workflow,
         IDistributedEventBus distributedEventBus,
         IClock clock,
-        IOptions<ExtractBehaviorOptions> aiOptions,
+        IOptions<VaultExtractBehaviorOptions> aiOptions,
         ICurrentTenant currentTenant,
         IBackgroundJobManager backgroundJobManager)
         : base(documentRepository, runRepository, pipelineRunManager, pipelineRunAccessor, unitOfWorkManager)
@@ -69,7 +69,7 @@ public class DocumentClassificationBackgroundJob
         }
         catch (Exception ex)
         {
-            await FailRunAsync(workItem.DocumentId, workItem.RunId, ex.Message, ExtractPipelines.Classification);
+            await FailRunAsync(workItem.DocumentId, workItem.RunId, ex.Message, VaultExtractPipelines.Classification);
             throw;
         }
     }
@@ -94,7 +94,7 @@ public class DocumentClassificationBackgroundJob
         }
 
         var run = await PipelineRunAccessor.BeginOrStartAsync(
-            document, args.PipelineRunId, ExtractPipelines.Classification);
+            document, args.PipelineRunId, VaultExtractPipelines.Classification);
         await DocumentRepository.UpdateAsync(document, autoSave: true);
 
         await uow.CompleteAsync();
@@ -139,7 +139,7 @@ public class DocumentClassificationBackgroundJob
         // includeFieldValues:true because the low-confidence path clears type-bound fields (#267
         // invariant), and EF needs the collection present to delete child rows.
         var (document, run) = await LoadDocumentAndRunAsync(
-            workItem.DocumentId, workItem.RunId, ExtractPipelines.Classification, includeFieldValues: true);
+            workItem.DocumentId, workItem.RunId, VaultExtractPipelines.Classification, includeFieldValues: true);
 
         await ApplyClassificationResultAsync(document, run, outcome, hasFigures);
         await DocumentRepository.UpdateAsync(document, autoSave: true);

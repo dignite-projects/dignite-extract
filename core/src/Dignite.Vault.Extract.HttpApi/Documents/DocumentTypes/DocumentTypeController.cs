@@ -8,7 +8,7 @@ namespace Dignite.Vault.Extract.HttpApi.Documents.DocumentTypes;
 
 [Area("vault-extract")]
 [Route("api/vault-extract/document-types")]
-public class DocumentTypeController : ExtractController, IDocumentTypeAppService
+public class DocumentTypeController : VaultExtractController, IDocumentTypeAppService
 {
     private readonly IDocumentTypeAppService _documentTypeAppService;
 

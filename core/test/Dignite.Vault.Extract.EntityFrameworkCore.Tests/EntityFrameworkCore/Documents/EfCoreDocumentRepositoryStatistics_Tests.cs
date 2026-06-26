@@ -13,7 +13,7 @@ namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 /// Integration tests for <see cref="IDocumentRepository.GetStatisticsAsync"/> (#333): per-lifecycle counts,
 /// needs-review count, storage sum, recycle-bin exclusion, and current-layer (tenant) scoping.
 /// </summary>
-public class EfCoreDocumentRepositoryStatistics_Tests : ExtractEntityFrameworkCoreTestBase
+public class EfCoreDocumentRepositoryStatistics_Tests : VaultExtractEntityFrameworkCoreTestBase
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly IGuidGenerator _guidGenerator;

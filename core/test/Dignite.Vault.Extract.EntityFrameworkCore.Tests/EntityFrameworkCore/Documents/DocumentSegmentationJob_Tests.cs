@@ -28,12 +28,12 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 
-[DependsOn(typeof(ExtractEntityFrameworkCoreTestModule))]
+[DependsOn(typeof(VaultExtractEntityFrameworkCoreTestModule))]
 public class DocumentSegmentationJobTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        context.Services.AddSingleton(Substitute.For<IBlobContainer<ExtractDocumentContainer>>());
+        context.Services.AddSingleton(Substitute.For<IBlobContainer<VaultExtractDocumentContainer>>());
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
 
@@ -41,14 +41,14 @@ public class DocumentSegmentationJobTestModule : AbpModule
         // boundary set — no real LLM call (mirrors the figure routing test's classification-workflow seam).
         var workflow = Substitute.ForPartsOf<DocumentSegmentationWorkflow>(
             Substitute.For<IChatClient>(),
-            Options.Create(new ExtractBehaviorOptions()),
+            Options.Create(new VaultExtractBehaviorOptions()),
             new DefaultPromptProvider());
         context.Services.AddSingleton(workflow);
 
         // Lower the caps so the bound tests don't need 50 slices / 200k chars. All other tests in this class use
         // <= 2 distinct slices and < 130-char Markdown (the *[Image OCR p:N]* / *[End OCR]* figure markers add ~30 chars per figure),
         // so they are unaffected.
-        context.Services.Configure<ExtractBehaviorOptions>(o =>
+        context.Services.Configure<VaultExtractBehaviorOptions>(o =>
         {
             o.MaxSegmentsPerDocument = 4;
             o.MaxSegmentationMarkdownLength = 130;
@@ -56,7 +56,7 @@ public class DocumentSegmentationJobTestModule : AbpModule
     }
 }
 
-public class DocumentSegmentationJob_Tests : ExtractTestBase<DocumentSegmentationJobTestModule>
+public class DocumentSegmentationJob_Tests : VaultExtractTestBase<DocumentSegmentationJobTestModule>
 {
     private readonly DocumentSegmentationJob _job;
     private readonly IDocumentRepository _documentRepository;

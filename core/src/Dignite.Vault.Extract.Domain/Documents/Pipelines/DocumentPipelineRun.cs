@@ -34,7 +34,7 @@ public class DocumentPipelineRun : AggregateRoot<Guid>, IMultiTenant
     public virtual Guid DocumentId { get; private set; }
 
     /// <summary>
-    /// Pipeline identifier. Core constants are in <see cref="ExtractPipelines"/>.
+    /// Pipeline identifier. Core constants are in <see cref="VaultExtractPipelines"/>.
     /// Business modules may register custom values; the recommended prefix is "{moduleCode}.".
     /// </summary>
     public virtual string PipelineCode { get; private set; } = default!;

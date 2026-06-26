@@ -23,7 +23,7 @@ namespace Dignite.Vault.Extract.Documents.Pipelines.Segmentation;
 /// is-sub-document flag; <see cref="MarkdownSlicer"/> does the deterministic cutting, so the LLM never regenerates
 /// content and the split is verifiable. Mirrors <see cref="Classification.DocumentClassificationWorkflow"/>:
 /// tool-free, structured output, routed through the dedicated keyed
-/// <see cref="ExtractConsts.StructuredChatClientKey"/> client; no <c>AIContextProviders</c> (channel layer, not
+/// <see cref="VaultExtractConsts.StructuredChatClientKey"/> client; no <c>AIContextProviders</c> (channel layer, not
 /// RAG); the Markdown is wrapped with <see cref="PromptBoundary.WrapDocument"/>, the parent title / type are
 /// wrapped with <see cref="PromptBoundary.WrapField"/>, and the boundary rule is appended to the instructions.
 /// </para>
@@ -32,14 +32,14 @@ public class DocumentSegmentationWorkflow : ITransientDependency
 {
     private readonly IChatClient _chatClient;
     private readonly IPromptProvider _promptProvider;
-    private readonly ExtractBehaviorOptions _options;
+    private readonly VaultExtractBehaviorOptions _options;
 
     public ILogger<DocumentSegmentationWorkflow> Logger { get; set; }
         = NullLogger<DocumentSegmentationWorkflow>.Instance;
 
     public DocumentSegmentationWorkflow(
-        [FromKeyedServices(ExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
-        IOptions<ExtractBehaviorOptions> options,
+        [FromKeyedServices(VaultExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
+        IOptions<VaultExtractBehaviorOptions> options,
         IPromptProvider promptProvider)
     {
         _chatClient = chatClient;

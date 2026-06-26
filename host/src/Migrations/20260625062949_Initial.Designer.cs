@@ -12,7 +12,7 @@ using Volo.Abp.EntityFrameworkCore;
 
 namespace Dignite.Vault.Extract.Host.Migrations
 {
-    [DbContext(typeof(ExtractHostDbContext))]
+    [DbContext(typeof(VaultExtractHostDbContext))]
     [Migration("20260625062949_Initial")]
     partial class Initial
     {

@@ -26,12 +26,12 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 
-[DependsOn(typeof(ExtractEntityFrameworkCoreTestModule))]
+[DependsOn(typeof(VaultExtractEntityFrameworkCoreTestModule))]
 public class ContainerLifecycleRoundTripTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        context.Services.AddSingleton(Substitute.For<IBlobContainer<ExtractDocumentContainer>>());
+        context.Services.AddSingleton(Substitute.For<IBlobContainer<VaultExtractDocumentContainer>>());
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
 
@@ -40,7 +40,7 @@ public class ContainerLifecycleRoundTripTestModule : AbpModule
         // and the real ContainerMarker{Set,Cleared}EventHandler all run against the real SQLite DB.
         var workflow = Substitute.ForPartsOf<DocumentSegmentationWorkflow>(
             Substitute.For<IChatClient>(),
-            Options.Create(new ExtractBehaviorOptions()),
+            Options.Create(new VaultExtractBehaviorOptions()),
             new DefaultPromptProvider());
         context.Services.AddSingleton(workflow);
     }
@@ -60,7 +60,7 @@ public class ContainerLifecycleRoundTripTestModule : AbpModule
 /// </para>
 /// </summary>
 public class ContainerLifecycleRoundTrip_Tests
-    : ExtractTestBase<ContainerLifecycleRoundTripTestModule>
+    : VaultExtractTestBase<ContainerLifecycleRoundTripTestModule>
 {
     private readonly DocumentSegmentationJob _job;
     private readonly IDocumentAppService _appService;

@@ -50,7 +50,7 @@ public static class PipelineRunRepositoryFake
                     && r.AttemptNumber == run.AttemptNumber);
                 if (collides)
                 {
-                    throw new BusinessException(ExtractErrorCodes.Pipeline.RetryInProgress)
+                    throw new BusinessException(VaultExtractErrorCodes.Pipeline.RetryInProgress)
                         .WithData("PipelineCode", run.PipelineCode)
                         .WithData("DocumentId", run.DocumentId);
                 }

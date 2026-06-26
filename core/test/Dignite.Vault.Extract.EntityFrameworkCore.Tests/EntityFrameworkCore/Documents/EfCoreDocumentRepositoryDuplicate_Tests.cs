@@ -15,7 +15,7 @@ namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 /// fingerprint, excludes the document itself / different types / different fingerprints / soft-deleted documents, and
 /// honors the hard result cap.
 /// </summary>
-public class EfCoreDocumentRepositoryDuplicate_Tests : ExtractEntityFrameworkCoreTestBase
+public class EfCoreDocumentRepositoryDuplicate_Tests : VaultExtractEntityFrameworkCoreTestBase
 {
     private static readonly Guid TypeAId = Guid.Parse("aaaaaaaa-0000-0000-0000-0000000000a1");
     private static readonly Guid TypeBId = Guid.Parse("bbbbbbbb-0000-0000-0000-0000000000b2");

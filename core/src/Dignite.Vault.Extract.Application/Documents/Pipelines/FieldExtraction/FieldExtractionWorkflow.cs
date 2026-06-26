@@ -37,7 +37,7 @@ public class FieldExtractionWorkflow : ITransientDependency
     private readonly ILogger<FieldExtractionWorkflow> _logger;
 
     public FieldExtractionWorkflow(
-        [FromKeyedServices(ExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
+        [FromKeyedServices(VaultExtractConsts.StructuredChatClientKey)] IChatClient chatClient,
         ILogger<FieldExtractionWorkflow> logger)
     {
         _chatClient = chatClient;

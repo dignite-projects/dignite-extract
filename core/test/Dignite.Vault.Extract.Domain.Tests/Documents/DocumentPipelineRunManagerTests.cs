@@ -10,7 +10,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDomainTestModule>
+public class DocumentPipelineRunManagerTests : VaultExtractDomainTestBase<VaultExtractDomainTestModule>
 {
     private readonly DocumentPipelineRunManager _manager;
     private readonly IDocumentPipelineRunRepository _runRepo;
@@ -58,11 +58,11 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
     {
         var doc = CreateDocument();
 
-        var run = await _manager.QueueAsync(doc, ExtractPipelines.Parse);
+        var run = await _manager.QueueAsync(doc, VaultExtractPipelines.Parse);
 
         run.Status.ShouldBe(PipelineRunStatus.Pending);
         run.AttemptNumber.ShouldBe(1);
-        (await _runRepo.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Parse))
+        (await _runRepo.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Parse))
             .ShouldBe(run);
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Processing);
     }
@@ -74,20 +74,20 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Uploaded);
 
         // Parse
-        var textRun = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var textRun = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Processing);
 
         await _manager.CompleteAsync(doc, textRun);
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Processing); // Classification not done
 
         // Classification
-        var classRun = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var classRun = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationAsync(doc, classRun, CreateContractType(), 0.92);
         // #411: field-extraction is now a key pipeline, so Ready is withheld until it succeeds too.
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Processing);
 
         // Field extraction
-        var fieldRun = await _manager.StartAsync(doc, ExtractPipelines.FieldExtraction);
+        var fieldRun = await _manager.StartAsync(doc, VaultExtractPipelines.FieldExtraction);
         await _manager.CompleteAsync(doc, fieldRun);
 
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Ready);
@@ -104,12 +104,12 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         // fields.
         doc.SetReviewReason(DocumentReviewReasons.MissingRequiredFields, present: true);
 
-        var textRun = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var textRun = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _manager.CompleteAsync(doc, textRun);
-        var classRun = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var classRun = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationAsync(doc, classRun, CreateContractType(), 0.92);
         // #411: field-extraction must also succeed before Ready (it is a key pipeline now).
-        var fieldRun = await _manager.StartAsync(doc, ExtractPipelines.FieldExtraction);
+        var fieldRun = await _manager.StartAsync(doc, VaultExtractPipelines.FieldExtraction);
         await _manager.CompleteAsync(doc, fieldRun);
 
         // Critical pipelines succeeded, type is confirmed, and no blocking reason exists, so Ready. MRF
@@ -125,13 +125,13 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
     {
         var doc = CreateDocument();
 
-        var textRun = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var textRun = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _manager.CompleteAsync(doc, textRun);
-        var classRun = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var classRun = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationAsync(doc, classRun, CreateContractType(), 0.92);
 
         // Field extraction succeeds but detects a duplicate fingerprint -> sets the blocking reason.
-        var fieldRun = await _manager.StartAsync(doc, ExtractPipelines.FieldExtraction);
+        var fieldRun = await _manager.StartAsync(doc, VaultExtractPipelines.FieldExtraction);
         doc.SetReviewReason(DocumentReviewReasons.DuplicateSuspected, present: true);
         await _manager.CompleteAsync(doc, fieldRun);
 
@@ -153,10 +153,10 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
     {
         var doc = CreateDocument();
 
-        var textRun = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var textRun = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _manager.CompleteAsync(doc, textRun);
 
-        var classRun = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var classRun = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationAsContainerAsync(doc, classRun);
 
         doc.IsContainer.ShouldBeTrue();
@@ -167,7 +167,7 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.NotReviewed);
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Ready);
 
-        var latestRun = await _runRepo.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Classification);
+        var latestRun = await _runRepo.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Classification);
         latestRun!.Status.ShouldBe(PipelineRunStatus.Succeeded);
     }
 
@@ -183,7 +183,7 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         });
         doc.ExtractedFieldValues.ShouldNotBeEmpty();
 
-        var run = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var run = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationAsContainerAsync(doc, run);
 
         doc.IsContainer.ShouldBeTrue();
@@ -200,7 +200,7 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
     {
         var doc = CreateDocument();
 
-        var run = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var run = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _manager.FailAsync(doc, run, errorMessage: "OCR engine error");
 
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Failed);
@@ -216,14 +216,14 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         var doc = CreateDocument();
 
         // Attempt 1 — fail
-        var run1 = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var run1 = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
         run1.AttemptNumber.ShouldBe(1);
         await _manager.FailAsync(doc, run1, errorMessage: "timeout");
 
         doc.LifecycleStatus.ShouldBe(DocumentLifecycleStatus.Failed);
 
         // Attempt 2 — succeed (retry)
-        var run2 = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var run2 = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
         run2.AttemptNumber.ShouldBe(2);
 
         // While running, LifecycleStatus goes back to Processing (latest is Running)
@@ -236,7 +236,7 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
 
         // Verify latest run for Parse is attempt 2 via runRepo, reading through the aggregate
         // root after the #216 split.
-        var latestRun = await _runRepo.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Parse);
+        var latestRun = await _runRepo.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Parse);
         latestRun.ShouldNotBeNull();
         latestRun.AttemptNumber.ShouldBe(2);
         latestRun.Status.ShouldBe(PipelineRunStatus.Succeeded);
@@ -254,12 +254,12 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         var doc = CreateDocument();
         doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.NotReviewed);
 
-        var run = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var run = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationWithLowConfidenceAsync(doc, run, "AI confidence too low");
 
         doc.ReviewReasons.ShouldBe(DocumentReviewReasons.UnresolvedClassification);
 
-        var latestRun = await _runRepo.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Classification);
+        var latestRun = await _runRepo.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Classification);
         latestRun!.Status.ShouldBe(PipelineRunStatus.Succeeded);
     }
 
@@ -278,7 +278,7 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         });
         doc.ExtractedFieldValues.ShouldNotBeEmpty();
 
-        var run = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var run = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationWithLowConfidenceAsync(doc, run, "AI confidence too low");
 
         doc.DocumentTypeId.ShouldBeNull();
@@ -290,10 +290,10 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
     {
         var doc = CreateDocument();
 
-        var textRun = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var textRun = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _manager.CompleteAsync(doc, textRun);
 
-        var classRun = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var classRun = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationWithLowConfidenceAsync(doc, classRun, "AI confidence too low");
 
         doc.ReviewReasons.ShouldBe(DocumentReviewReasons.UnresolvedClassification);
@@ -313,12 +313,12 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         var doc = CreateDocument();
 
         // First simulate low confidence entering pending review.
-        var run1 = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var run1 = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationWithLowConfidenceAsync(doc, run1);
         doc.ReviewReasons.ShouldBe(DocumentReviewReasons.UnresolvedClassification);
 
         // Manual confirmation.
-        var run2 = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var run2 = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         var contractType = CreateContractType();
         await _manager.CompleteManualClassificationAsync(doc, run2, contractType);
 
@@ -326,7 +326,7 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         doc.ClassificationConfidence.ShouldBe(1.0);
         doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.Confirmed);
 
-        var latestRun = await _runRepo.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Classification);
+        var latestRun = await _runRepo.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Classification);
         latestRun!.Status.ShouldBe(PipelineRunStatus.Succeeded);
     }
 
@@ -341,14 +341,14 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
 
         // First low confidence: set UnresolvedClassification review reason (#284: classification reason
         // is no longer persisted).
-        var run1 = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var run1 = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationWithLowConfidenceAsync(doc, run1, "AI confidence too low");
         doc.ReviewReasons.ShouldBe(DocumentReviewReasons.UnresolvedClassification);
         doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.NotReviewed);
 
         // Automatic classification succeeds on retry; the high-confidence path must clear the
         // UnresolvedClassification review reason.
-        var run2 = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var run2 = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         var contractType = CreateContractType();
         await _manager.CompleteClassificationAsync(doc, run2, contractType, 0.95);
 
@@ -367,13 +367,13 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         // present only when ReviewDisposition=Rejected.
         var doc = CreateDocument();
 
-        var run1 = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var run1 = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationWithLowConfidenceAsync(doc, run1, "AI confidence too low");
         doc.RejectReview("scan unusable");
         doc.RejectionReason.ShouldBe("scan unusable");
         doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.Rejected);
 
-        var run2 = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var run2 = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationAsync(doc, run2, CreateContractType(), 0.95);
 
         doc.RejectionReason.ShouldBeNull();
@@ -390,7 +390,7 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         var doc = CreateDocument();
 
         // First: high-confidence classification succeeds.
-        var run1 = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var run1 = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         var contractType = CreateContractType();
         await _manager.CompleteClassificationAsync(doc, run1, contractType, 0.92);
 
@@ -399,7 +399,7 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         doc.ReviewDisposition.ShouldBe(DocumentReviewDisposition.NotReviewed);
 
         // Second: rerunning classification falls into LowConfidence.
-        var run2 = await _manager.StartAsync(doc, ExtractPipelines.Classification);
+        var run2 = await _manager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _manager.CompleteClassificationWithLowConfidenceAsync(doc, run2, "AI confidence too low");
 
         // Historical TypeId/Confidence must be cleared to avoid external readers seeing the contradictory
@@ -425,7 +425,7 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
     public async Task CompleteParse_Persists_Markdown_And_Title()
     {
         var doc = CreateDocument();
-        var run = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var run = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
 
         await _manager.CompleteParseAsync(
             doc, run, markdown: "# Hello\n\nbody", title: "Hello");
@@ -439,7 +439,7 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
     public async Task CompleteParse_Persists_Language_And_Metadata()
     {
         var doc = CreateDocument();
-        var run = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var run = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
 
         var metadata = new DocumentParseMetadata(
             "PaddleOCR",
@@ -461,7 +461,7 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
     public async Task CompleteParse_Allows_Null_Title_For_Backfill_Path()
     {
         var doc = CreateDocument();
-        var run = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var run = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
 
         await _manager.CompleteParseAsync(
             doc, run, markdown: "irrelevant", title: null);
@@ -475,11 +475,11 @@ public class DocumentPipelineRunManagerTests : ExtractDomainTestBase<ExtractDoma
         var doc = CreateDocument();
 
         // 1st extraction succeeds with a title
-        var run1 = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var run1 = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _manager.CompleteParseAsync(doc, run1, "# Original", "Original");
 
         // A second completion attempt must fail — Markdown invariant guards write-once.
-        var run2 = await _manager.StartAsync(doc, ExtractPipelines.Parse);
+        var run2 = await _manager.StartAsync(doc, VaultExtractPipelines.Parse);
         await Should.ThrowAsync<BusinessException>(async () =>
         {
             await _manager.CompleteParseAsync(doc, run2, "# Other", "Other");

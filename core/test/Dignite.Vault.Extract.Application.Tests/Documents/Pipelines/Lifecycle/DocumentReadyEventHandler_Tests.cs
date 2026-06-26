@@ -13,7 +13,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class DocumentReadyEventHandlerTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -29,7 +29,7 @@ public class DocumentReadyEventHandlerTestModule : AbpModule
 /// CLAUDE.md "exit event contract" when lifecycle transitions to Ready, and ignores other transitions.
 /// </summary>
 public class DocumentReadyEventHandler_Tests
-    : ExtractApplicationTestBase<DocumentReadyEventHandlerTestModule>
+    : VaultExtractApplicationTestBase<DocumentReadyEventHandlerTestModule>
 {
     private readonly DocumentReadyEventHandler _handler;
     private readonly IDocumentRepository _documentRepository;

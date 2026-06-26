@@ -17,14 +17,14 @@ public class DefaultTextExtractor : ITextExtractor, ITransientDependency
 {
     private readonly IOcrProvider _ocrProvider;
     private readonly IReadOnlyList<IMarkdownTextProvider> _markdownProviders;
-    private readonly ExtractOcrOptions _ocrOptions;
+    private readonly VaultExtractOcrOptions _ocrOptions;
 
     public ILogger<DefaultTextExtractor> Logger { get; set; } = NullLogger<DefaultTextExtractor>.Instance;
 
     public DefaultTextExtractor(
         IOcrProvider ocrProvider,
         IEnumerable<IMarkdownTextProvider> markdownProviders,
-        IOptions<ExtractOcrOptions> ocrOptions)
+        IOptions<VaultExtractOcrOptions> ocrOptions)
     {
         _ocrProvider = ocrProvider;
         _markdownProviders = markdownProviders.ToList();

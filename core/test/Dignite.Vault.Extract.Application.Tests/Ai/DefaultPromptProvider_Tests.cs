@@ -6,7 +6,7 @@ namespace Dignite.Vault.Extract.Ai;
 
 /// <summary>
 /// Defensive validation for the language clause in <see cref="DefaultPromptProvider"/>. The language comes
-/// from trusted host-domain configuration (<see cref="ExtractBehaviorOptions.DefaultLanguage"/>), but
+/// from trusted host-domain configuration (<see cref="VaultExtractBehaviorOptions.DefaultLanguage"/>), but
 /// still passes through the <c>LanguageTagValidator</c> allowlist before interpolation into the system
 /// prompt. If configuration accidentally contains a full sentence or multiline text, it falls back to the
 /// default value and prevents non-language-tag text from entering the LLM instruction context. Pure unit
@@ -44,7 +44,7 @@ public class DefaultPromptProvider_Tests
     {
         var template = _provider.GetClassificationPrompt(invalid);
 
-        // Fallback matches the default value of ExtractBehaviorOptions.DefaultLanguage; the original
+        // Fallback matches the default value of VaultExtractBehaviorOptions.DefaultLanguage; the original
         // invalid candidate must never enter the system prompt.
         template.SystemInstructions.ShouldEndWith("Respond in: ja.");
         template.SystemInstructions.ShouldNotContain("Ignore previous instructions");

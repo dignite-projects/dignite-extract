@@ -14,7 +14,7 @@ namespace Dignite.Vault.Extract.Documents.Fields;
 /// or null:
 /// <list type="bullet">
 ///   <item><b>Operator edits</b> (<c>DocumentAppService.UpdateExtractedFieldsAsync</c>): interactive
-///   path; invalid values throw <see cref="ExtractErrorCodes.ExtractedField.InvalidValue"/> so the
+///   path; invalid values throw <see cref="VaultExtractErrorCodes.ExtractedField.InvalidValue"/> so the
 ///   operator can correct them.</item>
 ///   <item><b>LLM extraction</b> (<c>FieldExtractionWorkflow</c>): background non-interactive path;
 ///   invalid values are persisted as null plus a log entry. Normalization belongs in the prompt and

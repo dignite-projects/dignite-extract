@@ -230,14 +230,14 @@ public class Document : FullAuditedAggregateRoot<Guid>, IMultiTenant
     internal void SetMarkdown(string markdown)
     {
         if (!string.IsNullOrEmpty(Markdown))
-            throw new BusinessException(ExtractErrorCodes.Document.MarkdownIsImmutable);
+            throw new BusinessException(VaultExtractErrorCodes.Document.MarkdownIsImmutable);
         Markdown = string.IsNullOrEmpty(markdown) ? null : markdown;
     }
 
     internal void SetTitle(string? title)
     {
         if (!string.IsNullOrEmpty(Title))
-            throw new BusinessException(ExtractErrorCodes.Document.TitleIsImmutable);
+            throw new BusinessException(VaultExtractErrorCodes.Document.TitleIsImmutable);
 
         if (string.IsNullOrWhiteSpace(title))
         {

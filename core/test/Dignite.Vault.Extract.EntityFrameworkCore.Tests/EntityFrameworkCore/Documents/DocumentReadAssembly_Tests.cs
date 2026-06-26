@@ -29,7 +29,7 @@ namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 /// <c>FieldDefinition</c>. Name-resolution wiring is covered by Application.Tests; this test only verifies the
 /// typed-column round-trip, so assertions use FieldDefinitionId keys.
 /// </summary>
-public class DocumentReadAssembly_Tests : ExtractEntityFrameworkCoreTestBase
+public class DocumentReadAssembly_Tests : VaultExtractEntityFrameworkCoreTestBase
 {
     private const string TypeCode = "host.invoice";
 

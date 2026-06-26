@@ -7,7 +7,7 @@ namespace Dignite.Vault.Extract.HttpApi.Slugging;
 
 [Area("vault-extract")]
 [Route("api/vault-extract/slug-suggestion")]
-public class SlugSuggestionController : ExtractController, ISlugSuggestionAppService
+public class SlugSuggestionController : VaultExtractController, ISlugSuggestionAppService
 {
     private readonly ISlugSuggestionAppService _slugSuggestionAppService;
 

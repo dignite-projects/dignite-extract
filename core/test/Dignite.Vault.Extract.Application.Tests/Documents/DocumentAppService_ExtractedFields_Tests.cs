@@ -20,7 +20,7 @@ namespace Dignite.Vault.Extract.Documents;
 /// components such as ObjectMapper.
 /// </summary>
 public class DocumentAppService_ExtractedFields_Tests
-    : ExtractApplicationTestBase<DocumentAppServiceReviewTestModule>
+    : VaultExtractApplicationTestBase<DocumentAppServiceReviewTestModule>
 {
     private readonly IDocumentAppService _appService;
     private readonly IDocumentRepository _documentRepository;
@@ -72,7 +72,7 @@ public class DocumentAppService_ExtractedFields_Tests
                 Fields = new Dictionary<string, JsonElement> { ["unknown"] = JsonString("x") }
             }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.ExtractedField.Unknown);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.ExtractedField.Unknown);
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public class DocumentAppService_ExtractedFields_Tests
                 }
             }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.ExtractedField.InvalidValue);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.ExtractedField.InvalidValue);
         ex.Data["FieldName"].ShouldBe("amount");
     }
 
@@ -144,7 +144,7 @@ public class DocumentAppService_ExtractedFields_Tests
                 }
             }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.ExtractedField.InvalidValue);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.ExtractedField.InvalidValue);
         ex.Data["FieldName"].ShouldBe("occurredAt");
     }
 
@@ -249,7 +249,7 @@ public class DocumentAppService_ExtractedFields_Tests
                 Fields = new Dictionary<string, JsonElement> { ["tags"] = JsonString("urgent") }
             }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.ExtractedField.InvalidValue);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.ExtractedField.InvalidValue);
         ex.Data["FieldName"].ShouldBe("tags");
     }
 
@@ -265,7 +265,7 @@ public class DocumentAppService_ExtractedFields_Tests
                 Fields = new Dictionary<string, JsonElement>()
             }));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Document.NotClassified);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Document.NotClassified);
     }
 
     private void StubGet(Document doc)

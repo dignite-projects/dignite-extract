@@ -15,7 +15,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 
-[DependsOn(typeof(ExtractEntityFrameworkCoreTestModule))]
+[DependsOn(typeof(VaultExtractEntityFrameworkCoreTestModule))]
 public class DocumentReferenceResolutionTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -23,7 +23,7 @@ public class DocumentReferenceResolutionTestModule : AbpModule
         // Use real EF repositories + real AppService DTO assembly. DocumentAppService constructor depends on
         // IBlobContainer; this test does not trigger upload / download, so the substitute only satisfies
         // construction and avoids resolution failure from an unconfigured blob provider.
-        context.Services.AddSingleton(Substitute.For<IBlobContainer<ExtractDocumentContainer>>());
+        context.Services.AddSingleton(Substitute.For<IBlobContainer<VaultExtractDocumentContainer>>());
     }
 }
 
@@ -34,7 +34,7 @@ public class DocumentReferenceResolutionTestModule : AbpModule
 /// (soft-deleted) fields can still be resolved by historical document read paths, and fields with extracted
 /// values cannot change DataType.
 /// </summary>
-public class DocumentReferenceResolution_Tests : ExtractTestBase<DocumentReferenceResolutionTestModule>
+public class DocumentReferenceResolution_Tests : VaultExtractTestBase<DocumentReferenceResolutionTestModule>
 {
     private readonly IDocumentAppService _documentAppService;
     private readonly IDocumentTypeAppService _documentTypeAppService;
@@ -158,7 +158,7 @@ public class DocumentReferenceResolution_Tests : ExtractTestBase<DocumentReferen
                     IsRequired = false
                 }));
 
-            ex.Code.ShouldBe(ExtractErrorCodes.FieldDefinition.DataTypeChangeNotAllowed);
+            ex.Code.ShouldBe(VaultExtractErrorCodes.FieldDefinition.DataTypeChangeNotAllowed);
         });
     }
 

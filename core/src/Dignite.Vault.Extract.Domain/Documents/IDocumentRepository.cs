@@ -101,8 +101,8 @@ public interface IDocumentRepository : IRepository<Document, Guid>
     /// It no longer depends on SQL Server <c>JSON_VALUE</c> / <c>TRY_CONVERT</c> / raw SQL, eliminating the injection surface.
     /// </para>
     /// Safety: dispatch equality / range by <see cref="DocumentFieldQuery.FieldDataType"/>; only = + range, never LIKE.
-    /// Passing ranges for Text/Boolean throws <see cref="ExtractErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange"/>;
-    /// values that cannot parse as the declared type throw <see cref="ExtractErrorCodes.ExtractedField.InvalidValue"/>.
+    /// Passing ranges for Text/Boolean throws <see cref="VaultExtractErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange"/>;
+    /// values that cannot parse as the declared type throw <see cref="VaultExtractErrorCodes.ExtractedField.InvalidValue"/>.
     /// Both are loud failures, never silent empty results.
     /// Authorization assertions, input validation (required / length / count / at least one value), and field resolution (external documentTypeCode / fieldName -> internal
     /// <see cref="Document.DocumentTypeId"/> / <see cref="DocumentFieldQuery.FieldDefinitionId"/> + <see cref="FieldDataType"/>）

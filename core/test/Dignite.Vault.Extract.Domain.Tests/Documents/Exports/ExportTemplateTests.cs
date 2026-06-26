@@ -49,7 +49,7 @@ public class ExportTemplateTests
     public void Should_Reject_Template_With_No_Columns()
     {
         Should.Throw<BusinessException>(() => CreateTemplate())
-            .Code.ShouldBe(ExtractErrorCodes.Export.TemplateRequiresColumn);
+            .Code.ShouldBe(VaultExtractErrorCodes.Export.TemplateRequiresColumn);
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class ExportTemplateTests
         Should.Throw<BusinessException>(() => CreateTemplate(
                 new ExportColumn(duplicateFieldId, 0),
                 new ExportColumn(duplicateFieldId, 1)))
-            .Code.ShouldBe(ExtractErrorCodes.Export.TemplateDuplicateField);
+            .Code.ShouldBe(VaultExtractErrorCodes.Export.TemplateDuplicateField);
     }
 
     [Theory]
@@ -70,7 +70,7 @@ public class ExportTemplateTests
         Should.Throw<BusinessException>(() => new ExportTemplate(
                 Guid.NewGuid(), tenantId: null, name, ExportFormat.Csv, TypeId,
                 new[] { new ExportColumn(Guid.NewGuid(), 0) }))
-            .Code.ShouldBe(ExtractErrorCodes.Export.InvalidTemplateName);
+            .Code.ShouldBe(VaultExtractErrorCodes.Export.InvalidTemplateName);
     }
 
     [Fact]

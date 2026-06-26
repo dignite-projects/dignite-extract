@@ -15,7 +15,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class DocumentAppServiceRerecognizeTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -24,7 +24,7 @@ public class DocumentAppServiceRerecognizeTestModule : AbpModule
         context.Services.AddSingleton(Substitute.For<IDocumentTypeRepository>());
         context.Services.AddSingleton(Substitute.For<IFieldDefinitionRepository>());
         context.Services.AddSingleton(Substitute.For<ICabinetRepository>());
-        context.Services.AddSingleton(Substitute.For<IBlobContainer<ExtractDocumentContainer>>());
+        context.Services.AddSingleton(Substitute.For<IBlobContainer<VaultExtractDocumentContainer>>());
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
         context.Services.AddSingleton(PipelineRunRepositoryFake.Create());
@@ -39,7 +39,7 @@ public class DocumentAppServiceRerecognizeTestModule : AbpModule
 /// Preconditions: document is not soft-deleted and Markdown has been produced (text extraction succeeded).
 /// </summary>
 public class DocumentAppService_Rerecognize_Tests
-    : ExtractApplicationTestBase<DocumentAppServiceRerecognizeTestModule>
+    : VaultExtractApplicationTestBase<DocumentAppServiceRerecognizeTestModule>
 {
     private readonly IDocumentAppService _appService;
     private readonly IDocumentRepository _documentRepository;
@@ -62,13 +62,13 @@ public class DocumentAppService_Rerecognize_Tests
         // Document is successfully classified (Ready), a state RetryPipelineAsync would reject
         // (NotRetryable). Rerecognize must allow it so AI can rejudge using the latest instructions.
         var doc = await CreateExtractedDocumentAsync();
-        var classified = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Classification);
+        var classified = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Classification);
         await _pipelineRunManager.CompleteAsync(doc, classified);
         StubGet(doc);
 
         await _appService.RerecognizeAsync(doc.Id);
 
-        var newRun = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Classification);
+        var newRun = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Classification);
         newRun.ShouldNotBeNull();
         newRun.Status.ShouldBe(PipelineRunStatus.Pending);
         newRun.AttemptNumber.ShouldBe(2);
@@ -86,13 +86,13 @@ public class DocumentAppService_Rerecognize_Tests
     {
         var doc = await CreateExtractedDocumentAsync();
         // StartAsync leaves the run in Running state.
-        await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Classification);
+        await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Classification);
         StubGet(doc);
 
         var ex = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.RerecognizeAsync(doc.Id));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Pipeline.RetryInProgress);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Pipeline.RetryInProgress);
         await _backgroundJobManager.DidNotReceive().EnqueueAsync(
             Arg.Any<DocumentClassificationJobArgs>(),
             Arg.Any<BackgroundJobPriority>(),
@@ -104,13 +104,13 @@ public class DocumentAppService_Rerecognize_Tests
     {
         var doc = await CreateExtractedDocumentAsync();
         // QueueAsync creates a Pending run without Begin, simulating queued and waiting execution.
-        await _pipelineRunManager.QueueAsync(doc, ExtractPipelines.Classification);
+        await _pipelineRunManager.QueueAsync(doc, VaultExtractPipelines.Classification);
         StubGet(doc);
 
         var ex = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.RerecognizeAsync(doc.Id));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Pipeline.RetryInProgress);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Pipeline.RetryInProgress);
         await _backgroundJobManager.DidNotReceive().EnqueueAsync(
             Arg.Any<DocumentClassificationJobArgs>(),
             Arg.Any<BackgroundJobPriority>(),
@@ -127,7 +127,7 @@ public class DocumentAppService_Rerecognize_Tests
         var ex = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.RerecognizeAsync(doc.Id));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Document.NotTextExtracted);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Document.NotTextExtracted);
         await _backgroundJobManager.DidNotReceive().EnqueueAsync(
             Arg.Any<DocumentClassificationJobArgs>(),
             Arg.Any<BackgroundJobPriority>(),
@@ -144,7 +144,7 @@ public class DocumentAppService_Rerecognize_Tests
         var ex = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.RerecognizeAsync(doc.Id));
 
-        ex.Code.ShouldBe(ExtractErrorCodes.Document.InRecycleBin);
+        ex.Code.ShouldBe(VaultExtractErrorCodes.Document.InRecycleBin);
         await _backgroundJobManager.DidNotReceive().EnqueueAsync(
             Arg.Any<DocumentClassificationJobArgs>(),
             Arg.Any<BackgroundJobPriority>(),
@@ -163,7 +163,7 @@ public class DocumentAppService_Rerecognize_Tests
     private async Task<Document> CreateExtractedDocumentAsync()
     {
         var doc = CreateDocument();
-        var run = await _pipelineRunManager.StartAsync(doc, ExtractPipelines.Parse);
+        var run = await _pipelineRunManager.StartAsync(doc, VaultExtractPipelines.Parse);
         await _pipelineRunManager.CompleteParseAsync(doc, run, "# Sample\n\nbody", "Sample");
         return doc;
     }

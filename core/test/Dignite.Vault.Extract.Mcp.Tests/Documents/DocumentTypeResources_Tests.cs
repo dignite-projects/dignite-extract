@@ -15,7 +15,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Mcp.Documents;
 
-[DependsOn(typeof(ExtractTestBaseModule))]
+[DependsOn(typeof(VaultExtractTestBaseModule))]
 public class DocumentTypeResourcesTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -36,9 +36,9 @@ public class DocumentTypeResourcesTestModule : AbpModule
 /// by a mock substitute, so those behaviors are covered by AppService tests and not repeated here.
 /// resources/list projection logic (<see cref="DocumentTypeResources.ListVisibleAsync"/>, delegated by
 /// the module handler) is also covered here: stable TypeCode sorting plus hard-limit truncation
-/// (<see cref="ExtractMcpConsts.MaxDocumentTypeResults"/>).
+/// (<see cref="VaultExtractMcpConsts.MaxDocumentTypeResults"/>).
 /// </summary>
-public class DocumentTypeResources_Tests : ExtractTestBase<DocumentTypeResourcesTestModule>
+public class DocumentTypeResources_Tests : VaultExtractTestBase<DocumentTypeResourcesTestModule>
 {
     private readonly IDocumentTypeAppService _documentTypeAppService;
     private readonly IFieldDefinitionAppService _fieldDefinitionAppService;
@@ -181,7 +181,7 @@ public class DocumentTypeResources_Tests : ExtractTestBase<DocumentTypeResources
         // create arbitrarily many types. resources/list protocol entries have no place to carry a
         // truncation signal, so truncate directly; full discovery goes through the list_document_types
         // tool.
-        var total = ExtractMcpConsts.MaxDocumentTypeResults + 3;
+        var total = VaultExtractMcpConsts.MaxDocumentTypeResults + 3;
         var types = Enumerable.Range(0, total)
             .Select(i => new DocumentTypeDto
             {
@@ -197,9 +197,9 @@ public class DocumentTypeResources_Tests : ExtractTestBase<DocumentTypeResources
 
         var result = await DocumentTypeResources.ListVisibleAsync(_documentTypeAppService);
 
-        result.Resources.Count.ShouldBe(ExtractMcpConsts.MaxDocumentTypeResults);
+        result.Resources.Count.ShouldBe(VaultExtractMcpConsts.MaxDocumentTypeResults);
         // Keep the lexicographically first TypeCode segment and discard the tail.
         result.Resources[0].Name.ShouldBe("type.0000");
-        result.Resources[^1].Name.ShouldBe($"type.{ExtractMcpConsts.MaxDocumentTypeResults - 1:D4}");
+        result.Resources[^1].Name.ShouldBe($"type.{VaultExtractMcpConsts.MaxDocumentTypeResults - 1:D4}");
     }
 }

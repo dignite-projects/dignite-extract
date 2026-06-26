@@ -50,7 +50,7 @@ public class DocumentTypeManager : DomainService
 
         if (existing != null)
         {
-            throw new BusinessException(ExtractErrorCodes.DocumentType.CodeAlreadyExists)
+            throw new BusinessException(VaultExtractErrorCodes.DocumentType.CodeAlreadyExists)
                 .WithData("TypeCode", typeCode);
         }
     }
@@ -71,7 +71,7 @@ public class DocumentTypeManager : DomainService
 
         if (conflict != null)
         {
-            throw new BusinessException(ExtractErrorCodes.DocumentType.RestoreConflict)
+            throw new BusinessException(VaultExtractErrorCodes.DocumentType.RestoreConflict)
                 .WithData("TypeCode", entity.TypeCode);
         }
     }

@@ -53,7 +53,7 @@ public interface IDocumentPipelineRunRepository : IRepository<DocumentPipelineRu
     /// Inserts a brand-new pipeline attempt and persists it immediately (autoSave).
     /// If it collides with the <c>(DocumentId, PipelineCode, AttemptNumber)</c> unique index, whose only realistic cause is concurrent retry
     /// of the same Failed pipeline (see <see cref="DocumentPipelineRunManager.QueueAsync"/>), throws
-    /// <c>BusinessException(ExtractErrorCodes.Pipeline.RetryInProgress)</c>. At that moment, the winner's new run is Pending,
+    /// <c>BusinessException(VaultExtractErrorCodes.Pipeline.RetryInProgress)</c>. At that moment, the winner's new run is Pending,
     /// precisely matching the "attempt already in progress" semantics.
     /// <para>
     /// <b>Cross-DB discipline (#239)</b>: unique-constraint collision detection is centralized in the persistence layer by catching

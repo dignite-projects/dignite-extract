@@ -8,7 +8,7 @@
         {
           "declaringAssemblyName": "Dignite.Vault.Extract.Domain",
           "namespace": "Dignite.Vault.Extract",
-          "name": "ExtractDomainModule"
+          "name": "VaultExtractDomainModule"
         },
         {
           "declaringAssemblyName": "Volo.Abp.EntityFrameworkCore",
@@ -61,7 +61,7 @@
         }
       ],
       "contentType": "abpModule",
-      "name": "ExtractEntityFrameworkCoreModule",
+      "name": "VaultExtractEntityFrameworkCoreModule",
       "summary": null
     },
     {
@@ -73,7 +73,7 @@
         {
           "returnType": "Void",
           "namespace": "Dignite.Vault.Extract.EntityFrameworkCore",
-          "name": "ConfigureExtract",
+          "name": "ConfigureVaultExtract",
           "summary": null,
           "isAsync": false,
           "isPublic": true,
@@ -156,14 +156,14 @@
           "fullName": "Volo.Abp.DependencyInjection.ITransientDependency"
         },
         {
-          "name": "IExtractDbContext",
+          "name": "IVaultExtractDbContext",
           "namespace": "Dignite.Vault.Extract.EntityFrameworkCore",
           "declaringAssemblyName": "Dignite.Vault.Extract.EntityFrameworkCore",
-          "fullName": "Dignite.Vault.Extract.EntityFrameworkCore.IExtractDbContext"
+          "fullName": "Dignite.Vault.Extract.EntityFrameworkCore.IVaultExtractDbContext"
         }
       ],
       "contentType": "efCoreDbContext",
-      "name": "ExtractDbContext",
+      "name": "VaultExtractDbContext",
       "summary": null
     }
   ]

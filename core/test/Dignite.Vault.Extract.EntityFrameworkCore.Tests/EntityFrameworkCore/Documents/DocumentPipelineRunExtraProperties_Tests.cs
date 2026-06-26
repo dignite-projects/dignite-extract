@@ -13,7 +13,7 @@ using Xunit;
 namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 
 public class DocumentPipelineRunExtraProperties_Tests
-    : ExtractEntityFrameworkCoreTestBase
+    : VaultExtractEntityFrameworkCoreTestBase
 {
     private readonly IRepository<Document, Guid> _documentRepository;
     private readonly IDocumentPipelineRunRepository _runRepository;
@@ -44,7 +44,7 @@ public class DocumentPipelineRunExtraProperties_Tests
         await WithUnitOfWorkAsync(async () =>
         {
             var document = await _documentRepository.GetAsync(documentId, includeDetails: false);
-            var run = await _pipelineRunManager.StartAsync(document, ExtractPipelines.Classification);
+            var run = await _pipelineRunManager.StartAsync(document, VaultExtractPipelines.Classification);
             runId = run.Id;
 
             run.SetProperty(

@@ -23,7 +23,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class DocumentClassificationJobTestModule : AbpModule
 {
     // Known Id lets tests assert doc.DocumentTypeId == ContractTypeId (#207: classification result is the internal Id).
@@ -58,11 +58,11 @@ public class DocumentClassificationJobTestModule : AbpModule
 
         var workflow = Substitute.ForPartsOf<DocumentClassificationWorkflow>(
             Substitute.For<IChatClient>(),
-            Options.Create(new ExtractBehaviorOptions()),
+            Options.Create(new VaultExtractBehaviorOptions()),
             new DefaultPromptProvider());
         context.Services.AddSingleton(workflow);
 
-        context.Services.Configure<ExtractBehaviorOptions>(_ => { });
+        context.Services.Configure<VaultExtractBehaviorOptions>(_ => { });
     }
 }
 
@@ -72,7 +72,7 @@ public class DocumentClassificationJobTestModule : AbpModule
 /// IChatClient and DocumentClassificationWorkflow are both replaced with NSubstitute, with no real LLM calls.
 /// </summary>
 public class DocumentClassificationBackgroundJob_Tests
-    : ExtractApplicationTestBase<DocumentClassificationJobTestModule>
+    : VaultExtractApplicationTestBase<DocumentClassificationJobTestModule>
 {
     private readonly DocumentClassificationBackgroundJob _job;
     private readonly IDocumentRepository _documentRepository;
@@ -111,7 +111,7 @@ public class DocumentClassificationBackgroundJob_Tests
 
         await _job.ExecuteAsync(new DocumentClassificationJobArgs { DocumentId = doc.Id });
 
-        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Classification);
+        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Classification);
         run.ShouldNotBeNull();
         run.Status.ShouldBe(PipelineRunStatus.Succeeded);
 
@@ -150,7 +150,7 @@ public class DocumentClassificationBackgroundJob_Tests
 
         await _job.ExecuteAsync(new DocumentClassificationJobArgs { DocumentId = doc.Id });
 
-        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Classification);
+        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Classification);
         run.ShouldNotBeNull();
         run.Status.ShouldBe(PipelineRunStatus.Succeeded);
 
@@ -385,7 +385,7 @@ public class DocumentClassificationBackgroundJob_Tests
 
         await _job.ExecuteAsync(new DocumentClassificationJobArgs { DocumentId = doc.Id });
 
-        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Classification);
+        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Classification);
         run.ShouldNotBeNull();
         run.Status.ShouldBe(PipelineRunStatus.Succeeded);
 
@@ -416,7 +416,7 @@ public class DocumentClassificationBackgroundJob_Tests
 
         await _job.ExecuteAsync(new DocumentClassificationJobArgs { DocumentId = doc.Id });
 
-        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Classification);
+        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Classification);
         run.ShouldNotBeNull();
         run.Status.ShouldBe(PipelineRunStatus.Succeeded);
         doc.DocumentTypeId.ShouldBeNull();
@@ -444,7 +444,7 @@ public class DocumentClassificationBackgroundJob_Tests
 
         await _job.ExecuteAsync(new DocumentClassificationJobArgs { DocumentId = doc.Id });
 
-        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Classification);
+        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Classification);
         run.ShouldNotBeNull();
         run.Status.ShouldBe(PipelineRunStatus.Succeeded);
 
@@ -472,7 +472,7 @@ public class DocumentClassificationBackgroundJob_Tests
         await Should.ThrowAsync<TimeoutException>(
             async () => await _job.ExecuteAsync(new DocumentClassificationJobArgs { DocumentId = doc.Id }));
 
-        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Classification);
+        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Classification);
         run.ShouldNotBeNull();
         run.Status.ShouldBe(PipelineRunStatus.Failed);
 
@@ -495,7 +495,7 @@ public class DocumentClassificationBackgroundJob_Tests
 
         await _job.ExecuteAsync(new DocumentClassificationJobArgs { DocumentId = doc.Id });
 
-        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, ExtractPipelines.Classification);
+        var run = await _runRepository.FindLatestByDocumentAndCodeAsync(doc.Id, VaultExtractPipelines.Classification);
         run.ShouldNotBeNull();
         run.Status.ShouldBe(PipelineRunStatus.Succeeded);
 

@@ -39,7 +39,7 @@ public class OpenIddictDataSeedContributor : OpenIddictDataSeedContributorBase, 
         // The Extract API is a SINGLE OpenIddict resource named "VaultExtract" — this is the token
         // audience for every client (Angular, Swagger, and MCP alike). MCP's RFC 8707 `resource`
         // parameter does NOT introduce a second audience: the resource gates are turned off in
-        // ExtractHostModule (the parameter is accepted-but-ignored), so an MCP-issued token's aud
+        // VaultExtractHostModule (the parameter is accepted-but-ignored), so an MCP-issued token's aud
         // stays "VaultExtract", matching the validation layer's AddAudiences("VaultExtract").
         var scopeDescriptor = new OpenIddictScopeDescriptor
         {

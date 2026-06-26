@@ -56,7 +56,7 @@
         }
       ],
       "contentType": "abpModule",
-      "name": "ExtractInstallerModule",
+      "name": "VaultExtractInstallerModule",
       "summary": null
     }
   ]

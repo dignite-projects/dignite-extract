@@ -8,12 +8,12 @@ public static class VisionLlmOcrConsts
     /// <summary>
     /// DI key for the vision-capable <c>IChatClient</c> the VisionLlm OCR provider resolves.
     /// <para>
-    /// Registered by the host wiring (<c>ExtractHostModule.ConfigureAI</c>) and consumed by
+    /// Registered by the host wiring (<c>VaultExtractHostModule.ConfigureAI</c>) and consumed by
     /// <see cref="VisionLlmOcrProvider"/> via <c>[FromKeyedServices(...)]</c> — the same keyed-client
-    /// pattern as <c>ExtractConsts.StructuredChatClientKey</c> / <c>TitleGeneratorChatClientKey</c>.
+    /// pattern as <c>VaultExtractConsts.StructuredChatClientKey</c> / <c>TitleGeneratorChatClientKey</c>.
     /// </para>
     /// <para>
-    /// The key lives here (not in <c>ExtractConsts</c>, which is in the Application layer) on purpose:
+    /// The key lives here (not in <c>VaultExtractConsts</c>, which is in the Application layer) on purpose:
     /// an OCR provider sits at the bottom of the dependency graph and must not reference the orchestration
     /// layer. Both the host registration and this provider reference this same constant, so the key string
     /// can never drift between the two sides.

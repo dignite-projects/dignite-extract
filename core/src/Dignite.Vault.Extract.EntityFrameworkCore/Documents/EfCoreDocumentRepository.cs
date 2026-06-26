@@ -18,10 +18,10 @@ using Volo.Abp.EntityFrameworkCore;
 namespace Dignite.Vault.Extract.Documents;
 
 public class EfCoreDocumentRepository
-    : EfCoreRepository<ExtractDbContext, Document, Guid>, IDocumentRepository
+    : EfCoreRepository<VaultExtractDbContext, Document, Guid>, IDocumentRepository
 {
     public EfCoreDocumentRepository(
-        IDbContextProvider<ExtractDbContext> dbContextProvider)
+        IDbContextProvider<VaultExtractDbContext> dbContextProvider)
         : base(dbContextProvider)
     {
     }
@@ -313,9 +313,9 @@ public class EfCoreDocumentRepository
     /// dispatching by <see cref="FieldDataType"/> to ordinary comparisons on the corresponding typed column:
     /// <list type="bullet">
     ///   <item><c>Text</c> / <c>Boolean</c>: equality only (red line: never LIKE); passing a range throws
-    ///   <see cref="ExtractErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange"/> as a correctable signal for AI clients.</item>
+    ///   <see cref="VaultExtractErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange"/> as a correctable signal for AI clients.</item>
     ///   <item><c>Number</c> / <c>Date</c> / <c>DateTime</c>: equality or inclusive range.
-    ///   Inputs that cannot parse as the declared type throw <see cref="ExtractErrorCodes.ExtractedField.InvalidValue"/> loudly, not silent empty.</item>
+    ///   Inputs that cannot parse as the declared type throw <see cref="VaultExtractErrorCodes.ExtractedField.InvalidValue"/> loudly, not silent empty.</item>
     /// </list>
     /// Equality is uniformly represented as a degenerate interval <c>[v, v]</c>, sharing the same predicate shape as ranges and removing equality/range branch duplication.
     /// </summary>
@@ -400,7 +400,7 @@ public class EfCoreDocumentRepository
 
     /// <summary>
     /// Parses a field query into typed inclusive <c>(min, max)</c> bounds: equality degenerates to <c>[v, v]</c>;
-    /// range uses min / max, each nullable. Any input parse failure throws <see cref="ExtractErrorCodes.ExtractedField.InvalidValue"/> loudly.
+    /// range uses min / max, each nullable. Any input parse failure throws <see cref="VaultExtractErrorCodes.ExtractedField.InvalidValue"/> loudly.
     /// </summary>
     private static (T? Min, T? Max) ParseRange<T>(
         DocumentFieldQuery fieldQuery, Func<string, T?> parse)
@@ -446,17 +446,17 @@ public class EfCoreDocumentRepository
             : null;
 
     private static BusinessException RangeNotSupported(string fieldName, FieldDataType dataType) =>
-        new BusinessException(ExtractErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange)
+        new BusinessException(VaultExtractErrorCodes.ExtractedField.FieldTypeDoesNotSupportRange)
             .WithData("FieldName", fieldName)
             .WithData("DataType", dataType.ToString());
 
     private static BusinessException NotQueryable(string fieldName, FieldDataType dataType) =>
-        new BusinessException(ExtractErrorCodes.ExtractedField.FieldTypeNotQueryable)
+        new BusinessException(VaultExtractErrorCodes.ExtractedField.FieldTypeNotQueryable)
             .WithData("FieldName", fieldName)
             .WithData("DataType", dataType.ToString());
 
     private static BusinessException InvalidValue(string fieldName, FieldDataType dataType) =>
-        new BusinessException(ExtractErrorCodes.ExtractedField.InvalidValue)
+        new BusinessException(VaultExtractErrorCodes.ExtractedField.InvalidValue)
             .WithData("FieldName", fieldName)
             .WithData("DataType", dataType.ToString());
 }

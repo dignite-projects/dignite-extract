@@ -14,7 +14,7 @@ namespace Dignite.Vault.Extract.Documents.Fields;
 // Authorization is declared per method (#223): reading field schema (active GetListAsync) is decoupled from schema management.
 // Therefore there is no class-level [Authorize]; each method explicitly declares its own permission gate,
 // using the same programmatic pattern as DocumentAppService.
-public class FieldDefinitionAppService : ExtractAppService, IFieldDefinitionAppService
+public class FieldDefinitionAppService : VaultExtractAppService, IFieldDefinitionAppService
 {
     private readonly IFieldDefinitionRepository _repository;
     private readonly IDocumentTypeRepository _documentTypeRepository;
@@ -42,7 +42,7 @@ public class FieldDefinitionAppService : ExtractAppService, IFieldDefinitionAppS
         if (input.OnlyDeleted)
         {
             // Trash view is consumed only by schema management screens, so keep the admin gate (#223).
-            await CheckPolicyAsync(ExtractPermissions.FieldDefinitions.Default);
+            await CheckPolicyAsync(VaultExtractPermissions.FieldDefinitions.Default);
 
             // Trash view: traverse soft-delete filter, take only IsDeleted, ordered by deletion time descending.
             using (DataFilter.Disable<ISoftDelete>())
@@ -64,8 +64,8 @@ public class FieldDefinitionAppService : ExtractAppService, IFieldDefinitionAppS
         // need to read their own management list. Either is enough: fail-closed OR assertion.
         // Batch queries (DocumentTypeId empty) and type-scoped queries use the same permission gate and do not widen visibility;
         // enumerating per type could already obtain the same set.
-        if (!await AuthorizationService.IsGrantedAsync(ExtractPermissions.Documents.Default) &&
-            !await AuthorizationService.IsGrantedAsync(ExtractPermissions.FieldDefinitions.Default))
+        if (!await AuthorizationService.IsGrantedAsync(VaultExtractPermissions.Documents.Default) &&
+            !await AuthorizationService.IsGrantedAsync(VaultExtractPermissions.FieldDefinitions.Default))
         {
             throw new AbpAuthorizationException();
         }
@@ -86,7 +86,7 @@ public class FieldDefinitionAppService : ExtractAppService, IFieldDefinitionAppS
         return ObjectMapper.Map<List<FieldDefinition>, List<FieldDefinitionDto>>(list);
     }
 
-    [Authorize(ExtractPermissions.FieldDefinitions.Create)]
+    [Authorize(VaultExtractPermissions.FieldDefinitions.Create)]
     public virtual async Task<FieldDefinitionDto> CreateAsync(CreateFieldDefinitionDto input)
     {
         // Parent type must exist in the current layer (#207 FieldDefinition.DocumentTypeId FK RESTRICT).
@@ -118,7 +118,7 @@ public class FieldDefinitionAppService : ExtractAppService, IFieldDefinitionAppS
         return ObjectMapper.Map<FieldDefinition, FieldDefinitionDto>(entity);
     }
 
-    [Authorize(ExtractPermissions.FieldDefinitions.Update)]
+    [Authorize(VaultExtractPermissions.FieldDefinitions.Update)]
     public virtual async Task<FieldDefinitionDto> UpdateAsync(Guid id, UpdateFieldDefinitionDto input)
     {
         var entity = await _repository.GetAsync(id);
@@ -148,12 +148,12 @@ public class FieldDefinitionAppService : ExtractAppService, IFieldDefinitionAppS
             var hasValues = await _documentRepository.AnyExtractedFieldValueAsync(entity.Id);
             if (dataTypeChanged && hasValues)
             {
-                throw new BusinessException(ExtractErrorCodes.FieldDefinition.DataTypeChangeNotAllowed)
+                throw new BusinessException(VaultExtractErrorCodes.FieldDefinition.DataTypeChangeNotAllowed)
                     .WithData("Name", entity.Name);
             }
             if (multiValueNarrowed && hasValues)
             {
-                throw new BusinessException(ExtractErrorCodes.FieldDefinition.MultiValueChangeNotAllowed)
+                throw new BusinessException(VaultExtractErrorCodes.FieldDefinition.MultiValueChangeNotAllowed)
                     .WithData("Name", entity.Name);
             }
         }
@@ -163,7 +163,7 @@ public class FieldDefinitionAppService : ExtractAppService, IFieldDefinitionAppS
         return ObjectMapper.Map<FieldDefinition, FieldDefinitionDto>(entity);
     }
 
-    [Authorize(ExtractPermissions.FieldDefinitions.Delete)]
+    [Authorize(VaultExtractPermissions.FieldDefinitions.Delete)]
     public virtual async Task DeleteAsync(Guid id)
     {
         var entity = await _repository.GetAsync(id);
@@ -174,7 +174,7 @@ public class FieldDefinitionAppService : ExtractAppService, IFieldDefinitionAppS
         await _repository.DeleteAsync(entity);
     }
 
-    [Authorize(ExtractPermissions.FieldDefinitions.Delete)]
+    [Authorize(VaultExtractPermissions.FieldDefinitions.Delete)]
     public virtual async Task<FieldDefinitionDto> RestoreAsync(Guid id)
     {
         using (DataFilter.Disable<ISoftDelete>())
@@ -199,7 +199,7 @@ public class FieldDefinitionAppService : ExtractAppService, IFieldDefinitionAppS
             // If the parent type is still deleted, use the cascading path in IDocumentTypeAppService.RestoreAsync instead.
             if (parentType == null || parentType.IsDeleted)
             {
-                throw new BusinessException(ExtractErrorCodes.FieldDefinition.ParentTypeMissing)
+                throw new BusinessException(VaultExtractErrorCodes.FieldDefinition.ParentTypeMissing)
                     .WithData("DocumentTypeCode", documentTypeCode ?? string.Empty)
                     .WithData("Name", entity.Name);
             }

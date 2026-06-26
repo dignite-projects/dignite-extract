@@ -9,9 +9,9 @@ using Volo.Abp.EntityFrameworkCore;
 namespace Dignite.Vault.Extract.Documents.Exports;
 
 public class EfCoreExportTemplateRepository
-    : EfCoreRepository<ExtractDbContext, ExportTemplate, Guid>, IExportTemplateRepository
+    : EfCoreRepository<VaultExtractDbContext, ExportTemplate, Guid>, IExportTemplateRepository
 {
-    public EfCoreExportTemplateRepository(IDbContextProvider<ExtractDbContext> dbContextProvider)
+    public EfCoreExportTemplateRepository(IDbContextProvider<VaultExtractDbContext> dbContextProvider)
         : base(dbContextProvider) { }
 
     public async Task<ExportTemplate?> FindByNameAsync(string name, CancellationToken cancellationToken = default)

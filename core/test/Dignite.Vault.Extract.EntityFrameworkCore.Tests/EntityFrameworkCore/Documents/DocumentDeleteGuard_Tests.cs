@@ -15,7 +15,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.EntityFrameworkCore.Documents;
 
-[DependsOn(typeof(ExtractEntityFrameworkCoreTestModule))]
+[DependsOn(typeof(VaultExtractEntityFrameworkCoreTestModule))]
 public class DocumentDeleteGuardTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -23,7 +23,7 @@ public class DocumentDeleteGuardTestModule : AbpModule
         // DeleteAsync publishes a DocumentDeletedEto and the wider app-service graph touches these out-of-process
         // collaborators; substitute them so the test exercises the real DB + the real AnyByOriginAsync guard query.
         context.Services.AddSingleton(Substitute.For<IBackgroundJobManager>());
-        context.Services.AddSingleton(Substitute.For<IBlobContainer<ExtractDocumentContainer>>());
+        context.Services.AddSingleton(Substitute.For<IBlobContainer<VaultExtractDocumentContainer>>());
         context.Services.AddSingleton(Substitute.For<IDistributedEventBus>());
     }
 }
@@ -36,7 +36,7 @@ public class DocumentDeleteGuardTestModule : AbpModule
 /// <c>ISoftDelete</c> filter interaction are actually exercised (the AppService unit tests only mock the repository).
 /// </summary>
 public class DocumentDeleteGuard_Tests
-    : ExtractTestBase<DocumentDeleteGuardTestModule>
+    : VaultExtractTestBase<DocumentDeleteGuardTestModule>
 {
     private readonly IDocumentAppService _appService;
     private readonly IDocumentRepository _documentRepository;
@@ -58,7 +58,7 @@ public class DocumentDeleteGuard_Tests
 
         var exception = await Should.ThrowAsync<BusinessException>(async () =>
             await _appService.DeleteAsync(sourceId));
-        exception.Code.ShouldBe(ExtractErrorCodes.Document.HasSubDocuments);
+        exception.Code.ShouldBe(VaultExtractErrorCodes.Document.HasSubDocuments);
 
         // Fail closed: the source is still live (not sent to the recycle bin).
         await WithUnitOfWorkAsync(async () =>

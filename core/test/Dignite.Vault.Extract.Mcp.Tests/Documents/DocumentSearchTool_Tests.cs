@@ -15,7 +15,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Mcp.Documents;
 
-[DependsOn(typeof(ExtractTestBaseModule))]
+[DependsOn(typeof(VaultExtractTestBaseModule))]
 public class DocumentSearchToolTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -34,7 +34,7 @@ public class DocumentSearchToolTestModule : AbpModule
 /// live in AppService, represented here by a mock substitute, so those behaviors are covered by
 /// AppService tests and not repeated here.
 /// </summary>
-public class DocumentSearchTool_Tests : ExtractTestBase<DocumentSearchToolTestModule>
+public class DocumentSearchTool_Tests : VaultExtractTestBase<DocumentSearchToolTestModule>
 {
     private readonly IDocumentAppService _documentAppService;
 

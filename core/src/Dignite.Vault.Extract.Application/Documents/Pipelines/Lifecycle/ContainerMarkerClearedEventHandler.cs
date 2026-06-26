@@ -87,7 +87,7 @@ public class ContainerMarkerClearedEventHandler
         var retractedCount = 0;
         if (spawnedSubDocumentIds.Count > 0)
         {
-            // Bounded fan-out: segment count is capped upstream by ExtractBehaviorOptions.MaxSegmentsPerDocument
+            // Bounded fan-out: segment count is capped upstream by VaultExtractBehaviorOptions.MaxSegmentsPerDocument
             // (default 50 — the segmentation job flags the container for review rather than spawn beyond that), so this
             // list is small and fixed: no Take(N)/pagination and no background job, the retraction runs synchronously
             // within the reclassify UoW (see the per-document delete note below).

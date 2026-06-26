@@ -63,14 +63,14 @@ public class PptxExtractor : IMarkdownTextProvider, ITransientDependency
 
     private readonly IOcrProvider _ocrProvider;
     private readonly OpenXmlExtractorOptions _options;
-    private readonly ExtractOcrOptions _ocrOptions;
+    private readonly VaultExtractOcrOptions _ocrOptions;
 
     public ILogger<PptxExtractor> Logger { get; set; } = NullLogger<PptxExtractor>.Instance;
 
     public PptxExtractor(
         IOcrProvider ocrProvider,
         IOptions<OpenXmlExtractorOptions> options,
-        IOptions<ExtractOcrOptions> ocrOptions)
+        IOptions<VaultExtractOcrOptions> ocrOptions)
     {
         _ocrProvider = ocrProvider;
         _options = options.Value;

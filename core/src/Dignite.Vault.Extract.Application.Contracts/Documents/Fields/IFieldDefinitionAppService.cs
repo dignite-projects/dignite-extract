@@ -33,8 +33,8 @@ public interface IFieldDefinitionAppService : IApplicationService
     /// <summary>
     /// Restores one soft-deleted field definition. Requires the parent <see cref="DocumentType"/>
     /// (same TenantId + TypeCode) to exist and be active. Throws
-    /// <see cref="ExtractErrorCodes.FieldDefinition.ParentTypeMissing"/> when the parent type is
-    /// missing or still deleted. Throws <see cref="ExtractErrorCodes.FieldDefinition.RestoreConflict"/>
+    /// <see cref="VaultExtractErrorCodes.FieldDefinition.ParentTypeMissing"/> when the parent type is
+    /// missing or still deleted. Throws <see cref="VaultExtractErrorCodes.FieldDefinition.RestoreConflict"/>
     /// when an active field with the same name already exists. Use the cascade path in
     /// <see cref="IDocumentTypeAppService.RestoreAsync"/> for bulk restore.
     /// </summary>

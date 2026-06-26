@@ -21,7 +21,7 @@ public class DocxExtractor_Tests
         int minImagePixels = 0,
         int maxImages = 50,
         long maxImageBytes = 16L * 1024 * 1024,
-        ExtractOcrOptions? ocrOptions = null)
+        VaultExtractOcrOptions? ocrOptions = null)
         => new(
             _ocr,
             Options.Create(new OpenXmlExtractorOptions
@@ -31,7 +31,7 @@ public class DocxExtractor_Tests
                 MaxImageBytesPerImage = maxImageBytes
             }),
             // Default to empty hints so unrelated tests don't get defaults injected unexpectedly.
-            Options.Create(ocrOptions ?? new ExtractOcrOptions { DefaultLanguageHints = new List<string>() }));
+            Options.Create(ocrOptions ?? new VaultExtractOcrOptions { DefaultLanguageHints = new List<string>() }));
 
     private static TextExtractionContext DocxContext()
         => new() { ContentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document", FileExtension = ".docx" };
@@ -425,7 +425,7 @@ public class DocxExtractor_Tests
             .Paragraph("Body text")
             .Image(Png(alt: null)));
 
-        var extractor = CreateExtractor(ocrOptions: new ExtractOcrOptions());
+        var extractor = CreateExtractor(ocrOptions: new VaultExtractOcrOptions());
         await extractor.ExtractAsync(new MemoryStream(docx), DocxContext());
 
         await _ocr.Received(1).RecognizeAsync(

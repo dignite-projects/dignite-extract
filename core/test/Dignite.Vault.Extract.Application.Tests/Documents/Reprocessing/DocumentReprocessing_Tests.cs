@@ -18,7 +18,7 @@ using Xunit;
 
 namespace Dignite.Vault.Extract.Documents;
 
-[DependsOn(typeof(ExtractApplicationTestModule))]
+[DependsOn(typeof(VaultExtractApplicationTestModule))]
 public class ReprocessingTestModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
@@ -32,7 +32,7 @@ public class ReprocessingTestModule : AbpModule
 
 /// <summary>Bulk reprocessing AppService (#289 steps 3 / 5): preview return, scope translation that protects manual confirmations / pending-review queues, and dispatcher enqueue.</summary>
 public class DocumentReprocessingAppService_Tests
-    : ExtractApplicationTestBase<ReprocessingTestModule>
+    : VaultExtractApplicationTestBase<ReprocessingTestModule>
 {
     private readonly IDocumentReprocessingAppService _appService;
     private readonly IDocumentRepository _documentRepository;
@@ -144,7 +144,7 @@ public class DocumentReprocessingAppService_Tests
 
 /// <summary>Field re-extraction dispatcher (#289 step 4): chained self-continuation. A full batch enqueues single-document jobs plus the next dispatcher with a cursor; a partial batch stops.</summary>
 public class DocumentFieldReextractionDispatcherJob_Tests
-    : ExtractApplicationTestBase<ReprocessingTestModule>
+    : VaultExtractApplicationTestBase<ReprocessingTestModule>
 {
     private readonly DocumentFieldReextractionDispatcherJob _job;
     private readonly IDocumentRepository _documentRepository;
