@@ -5,7 +5,6 @@ globs:
   - "**/Application/**/*.cs"
   - "**/*AppService*.cs"
   - "**/*Dto*.cs"
-alwaysApply: false
 ---
 
 # ABP Application Layer Patterns
@@ -83,7 +82,7 @@ public class BookAppService : ApplicationService, IBookAppService
 ## DTO Naming Conventions
 
 | Purpose | Convention | Example |
-|---------|------------|---------|
+|---------|------------|---------| 
 | Query input | `Get{Entity}Input` | `GetBookInput` |
 | List query input | `Get{Entity}ListInput` | `GetBookListInput` |
 | Create input | `Create{Entity}Dto` | `CreateBookDto` |
@@ -187,50 +186,163 @@ ABP automatically generates API controllers for application services:
 - HTTP methods determined by method name prefix (Get, Create, Update, Delete)
 - Use `[RemoteService(false)]` to disable auto API generation for specific methods
 
-## Object Mapping (Mapperly / AutoMapper)
-ABP supports **both Mapperly and AutoMapper** integrations. But the default mapping library is Mapperly. You need to first check the project's active mapping library.
-- Prefer the mapping provider already used in the solution (check existing mapping files / loaded modules).
-- In mixed solutions, explicitly setting the default provider may be required (see `docs/en/release-info/migration-guides/AutoMapper-To-Mapperly.md`).
+## Object Mapping with Mapperly (ABP Standard)
 
-### Mapperly (compile-time)
-Define mappers as partial classes:
+This project uses **Mapperly** via `Volo.Abp.Mapperly`. Reference: CmsKit module (`E:\github-code\abp\modules\cms-kit`).
+
+### ❌ Never Do
 
 ```csharp
+// Wrong: manual mapping method in AppService
+protected virtual BookDto MapToDto(Book book)
+{
+    return new BookDto { Id = book.Id, Name = book.Name, ... };
+}
+
+// Wrong: enum → string in DTO
+public string Status { get; set; }  // DTO field that represents an enum
+
+// Wrong: using [Mapper] without RequiredMappingStrategy
 [Mapper]
-public partial class BookMapper
-{
-    public partial BookDto MapToDto(Book book);
-    public partial List<BookDto> MapToDtoList(List<Book> books);
-}
+public partial class BookMapper { ... }
 ```
 
-Register in module:
+### ✅ Correct Pattern
+
+#### 1. DTOs use enum types directly — never string conversions
+
 ```csharp
-public override void ConfigureServices(ServiceConfigurationContext context)
+// ✅ Correct
+public class BookDto : EntityDto<Guid>
 {
-    context.Services.AddSingleton<BookMapper>();
+    public BookStatus Status { get; set; }   // enum, not string
+    public BookType Type { get; set; }       // enum, not string
 }
 ```
 
-Usage in application service:
+JSON serialization handles enum → string automatically. Clients get type-safe values.
+
+#### 2. One mapper class per source→destination pair, inheriting `MapperBase<T, TDto>`
+
 ```csharp
-public class BookAppService : ApplicationService
+// ✅ Correct — follows CmsKit pattern
+[Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
+public partial class BookToBookDtoMapper : MapperBase<Book, BookDto>
 {
-    private readonly BookMapper _bookMapper;
-    
-    public BookAppService(BookMapper bookMapper)
+    public override partial BookDto Map(Book source);
+    public override partial void Map(Book source, BookDto destination);
+}
+```
+
+`RequiredMappingStrategy.Target` causes a **compile error** if any target DTO property has no mapping source — catches mistakes early.
+
+#### 3. Nested objects: Mapperly handles them automatically — no private partial needed
+
+When nested object property names and types correspond, Mapperly inlines the nested mapping at compile time. No `private partial` methods required:
+
+```csharp
+[Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
+public partial class OrderToOrderDtoMapper : MapperBase<Order, OrderDto>
+{
+    public override partial OrderDto Map(Order source);
+    public override partial void Map(Order source, OrderDto destination);
+    // Address → AddressDto and OrderLine → OrderLineDto are inlined automatically
+}
+```
+
+Only add `private partial` methods when you need to **override default behavior** (mismatched property names, custom conversion logic, etc.).
+
+#### 4. Computed / manually-filled fields: use `[MapperIgnoreTarget]` + fill in AppService
+
+```csharp
+[Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
+public partial class BlogPostToBlogPostListDtoMapper : MapperBase<BlogPost, BlogPostListDto>
+{
+    [MapperIgnoreTarget(nameof(BlogPostListDto.AuthorName))]  // needs DB lookup
+    public override partial BlogPostListDto Map(BlogPost source);
+
+    [MapperIgnoreTarget(nameof(BlogPostListDto.AuthorName))]
+    public override partial void Map(BlogPost source, BlogPostListDto destination);
+}
+
+// AppService fills it manually:
+var dto = ObjectMapper.Map<BlogPost, BlogPostListDto>(blogPost);
+dto.AuthorName = author.Name;
+```
+
+#### 5. Extensible entities: add `[MapExtraProperties]`
+
+Only when **both** source and destination implement `IHasExtraProperties`
+(source: `AggregateRoot` or `ExtensibleObject`; destination: `ExtensibleEntityDto` or `ExtensibleObject`):
+
+```csharp
+[Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
+[MapExtraProperties]
+public partial class BookToBookDtoMapper : MapperBase<Book, BookDto>
+{
+    public override partial BookDto Map(Book source);
+    public override partial void Map(Book source, BookDto destination);
+}
+```
+
+#### 6. Module registration
+
+```csharp
+// *.Application.csproj — add Volo.Abp.Mapperly package
+
+// ApplicationModule.cs
+[DependsOn(typeof(AbpMapperlyModule))]
+public class BookStoreApplicationModule : AbpModule
+{
+    public override void ConfigureServices(ServiceConfigurationContext context)
     {
-        _bookMapper = bookMapper;
-    }
-    
-    public BookDto GetBook(Book book)
-    {
-        return _bookMapper.MapToDto(book);
+        context.Services.AddMapperlyObjectMapper<BookStoreApplicationModule>();
     }
 }
 ```
 
-> **Note**: Mapperly generates mapping code at compile-time, providing better performance than runtime mappers.
+#### 7. Base AppService sets ObjectMapperContext
 
-### AutoMapper (runtime)
-If the solution uses AutoMapper, mappings are typically defined in `Profile` classes and registered via ABP's AutoMapper integration.
+```csharp
+public abstract class BookStoreAppService : ApplicationService
+{
+    protected BookStoreAppService()
+    {
+        LocalizationResource = typeof(BookStoreResource);
+        ObjectMapperContext = typeof(BookStoreApplicationModule);  // ← required
+    }
+}
+```
+
+#### 8. Usage in AppService — always via `ObjectMapper.Map<>()`
+
+```csharp
+public class BookAppService : BookStoreAppService, IBookAppService
+{
+    public async Task<BookDto> GetAsync(Guid id)
+    {
+        var book = await _bookRepository.GetAsync(id);
+        return ObjectMapper.Map<Book, BookDto>(book);  // ✅
+    }
+
+    public async Task<PagedResultDto<BookDto>> GetListAsync(...)
+    {
+        var books = await _bookRepository.GetPagedListAsync(...);
+        return new PagedResultDto<BookDto>(
+            totalCount,
+            ObjectMapper.Map<List<Book>, List<BookDto>>(books));  // ✅ collection
+    }
+}
+```
+
+### Summary checklist
+
+- [ ] DTO enum fields use the actual enum type, not `string`
+- [ ] Each mapper inherits `MapperBase<TSource, TDest>`
+- [ ] `[Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]` on every mapper
+- [ ] Nested object mappings are handled automatically by Mapperly (no `private partial` needed unless overriding default behavior)
+- [ ] Computed/lookup fields use `[MapperIgnoreTarget]` and are filled manually in AppService
+- [ ] `[MapExtraProperties]` only when both sides implement `IHasExtraProperties`
+- [ ] Module has `AddMapperlyObjectMapper<TModule>()` in `ConfigureServices`
+- [ ] Base AppService sets `ObjectMapperContext = typeof(TApplicationModule)`
+- [ ] AppService uses `ObjectMapper.Map<T, TDto>()`, never manual `MapToDto()` methods

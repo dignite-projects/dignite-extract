@@ -1,5 +1,5 @@
 ---
-description: "ABP Module solution template specific patterns"
+description: "ABP Module solution template specific patterns - extensibility, virtual methods, options, localization"
 alwaysApply: true
 ---
 

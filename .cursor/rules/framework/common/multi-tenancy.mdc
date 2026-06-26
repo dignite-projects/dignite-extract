@@ -4,7 +4,6 @@ globs:
   - "**/*Tenant*.cs"
   - "**/*MultiTenant*.cs"
   - "**/Entities/**/*.cs"
-alwaysApply: false
 ---
 
 # ABP Multi-Tenancy

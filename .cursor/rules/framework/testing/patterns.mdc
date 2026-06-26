@@ -5,7 +5,6 @@ globs:
   - "tests/**/*.cs"
   - "**/*Tests*/**/*.cs"
   - "**/*Test*.cs"
-alwaysApply: false
 ---
 
 # ABP Testing Patterns

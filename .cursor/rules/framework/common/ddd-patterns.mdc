@@ -4,7 +4,6 @@ globs:
   - "**/*.Domain/**/*.cs"
   - "**/Domain/**/*.cs"
   - "**/Entities/**/*.cs"
-alwaysApply: false
 ---
 
 # ABP DDD Patterns

@@ -6,7 +6,6 @@ globs:
   - "**/*Cache*.cs"
   - "**/*Event*.cs"
   - "**/*Job*.cs"
-alwaysApply: false
 ---
 
 # ABP Infrastructure Services

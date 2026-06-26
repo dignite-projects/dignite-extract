@@ -24,3 +24,6 @@ tunnel-config.json
 # Temporary signing keys
 tempkey.rsa
 tempkey.jwk
+
+# Claude Code agent worktrees (temporary isolated working directories)
+.claude/worktrees/

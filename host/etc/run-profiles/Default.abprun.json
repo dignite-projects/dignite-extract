@@ -1,4 +1,4 @@
-﻿﻿{
+{
   "applications": {
     "Dignite.Vault.Extract.Host.Angular": {
       "type": "cli",

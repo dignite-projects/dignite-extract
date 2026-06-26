@@ -4,7 +4,6 @@ globs:
   - "**/angular/**/*.ts"
   - "**/angular/**/*.html"
   - "**/*.component.ts"
-alwaysApply: false
 ---
 
 # ABP Angular UI
@@ -28,10 +27,22 @@ src/app/
 
 ## Generate Service Proxies
 ```bash
-abp generate-proxy -t ng
+cd angular
+npm run generate-proxy
 ```
 
-This generates typed service classes in `src/app/proxy/`.
+This repository is an Nx workspace and does not have `angular.json`.
+Do not run `abp generate-proxy -t ng` directly here; it expects a plain Angular CLI workspace.
+
+The npm script wraps ABP's official nx generator `nx g @abp/nx.generators:generate-proxy`
+(`@abp/nx.generators` is ABP's nx-specific wrapper; it internally calls the
+`@abp/ng.schematics:proxy-add` schematic) and generates typed service classes under
+`packages/vault-extract/src/lib/proxy/`. The host API must be running at `https://localhost:44348`.
+
+The `proxy/` folder is fully owned by the generator and is overwritten on every run —
+never edit it by hand. Hand-written, regeneration-safe code lives OUTSIDE `proxy/`:
+the FormData upload wrapper in `lib/services/`, the flat re-export adapter in
+`public-api.ts`, and the enum contract spec.
 
 ## List Component Pattern
 ```typescript

@@ -4,7 +4,6 @@ globs:
   - "**/*.EntityFrameworkCore/**/*.cs"
   - "**/EntityFrameworkCore/**/*.cs"
   - "**/*DbContext*.cs"
-alwaysApply: false
 ---
 
 # ABP Entity Framework Core
