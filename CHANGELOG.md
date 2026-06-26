@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-preview.3] - 2026-06-26
+
 ### Added
 
+- **Static API-key fallback authentication for the `/mcp` egress** — a path-scoped fallback that runs alongside OpenIddict Bearer and the #278 OAuth discovery flow, for clients that cannot run the dynamic OAuth flow but can send a static header (OpenAI Codex, ABP AI Management). Constant-time key match maps to a least-privilege service-account principal, `RequireHttps` is enforced, and it fails open on a miss so Bearer + discovery are untouched. Disabled by default (empty `Mcp:ApiKey:Keys`) (#430, closes #428).
 - **MCP discovery wiring is now a reusable one-call extension** — the #278 OAuth Protected Resource Metadata discovery flow (RFC 9728) moved from the host into the `Dignite.Vault.Extract.Mcp` egress module and is exported as `IServiceCollection.AddExtractMcpDiscovery(...)`, so any host deploying the MCP egress enables discovery with a single call instead of re-authoring the authorization result handler (#422).
+
+### Changed
+
+- Bumped Angular to 21.2 and patched dev-dependency CVEs (#425).
 
 ## [0.2.0-preview.2] - 2026-06-25
 
@@ -53,5 +60,6 @@ Preview of the 0.2.0 line. This release rebrands the project to **Dignite Vault 
 - Legacy Angular document-upload route.
 - Dead fields from the segmentation subsystem (#390).
 
-[Unreleased]: https://github.com/dignite-projects/vault-extract/compare/v0.2.0-preview.2...HEAD
+[Unreleased]: https://github.com/dignite-projects/vault-extract/compare/v0.2.0-preview.3...HEAD
+[0.2.0-preview.3]: https://github.com/dignite-projects/vault-extract/compare/v0.2.0-preview.2...v0.2.0-preview.3
 [0.2.0-preview.2]: https://github.com/dignite-projects/vault-extract/compare/v0.1.0...v0.2.0-preview.2
