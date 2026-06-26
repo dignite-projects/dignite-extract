@@ -11,18 +11,36 @@ paths:
 > **Docs**: https://abp.io/docs/latest/framework/ui/angular/overview
 
 ## Project Structure
+
+This is an Nx workspace (`angular/`). There is **no `angular.json`**; each project has its own `project.json`.
+
 ```
-src/app/
-├── proxy/              # Auto-generated service proxies
-├── shared/             # Shared components, pipes, directives
-├── book/               # Feature module
-│   ├── book.module.ts
-│   ├── book-routing.module.ts
-│   ├── book-list/
-│   │   ├── book-list.component.ts
-│   │   ├── book-list.component.html
-│   │   └── book-list.component.scss
-│   └── book-detail/
+angular/
+├── apps/
+│   └── host/                        # The only runnable app (nx serve host / npm start)
+│       └── src/app/
+│           ├── app.config.ts        # bootstrapApplication providers
+│           ├── app.routes.ts        # APP_ROUTES (lazy loadChildren to lib route arrays)
+│           └── home/
+└── packages/
+    └── vault-extract/               # Nx library; imported as @dignite/vault-extract
+        ├── src/lib/
+        │   ├── proxy/               # ⚠️  GENERATED — never edit by hand
+        │   │   └── http-api/documents/  # typed service classes + models
+        │   ├── services/            # hand-written, regeneration-safe wrappers
+        │   └── shared/tokens/
+        │       └── extract-permissions.ts   # EXTRACT_PERMISSIONS constant
+        ├── documents/               # sub-entry-point (@dignite/vault-extract/documents)
+        │   └── src/lib/
+        │       ├── documents.routes.ts       # exports DOCUMENTS_ROUTES
+        │       ├── cabinets/
+        │       ├── document-types/
+        │       ├── documents/
+        │       ├── exports/
+        │       ├── fields/
+        │       ├── reprocessing/    # dedicated standalone modal components
+        │       └── shared/
+        └── config/                  # sub-entry-point (@dignite/vault-extract/config)
 ```
 
 ## Generate Service Proxies
@@ -44,192 +62,327 @@ never edit it by hand. Hand-written, regeneration-safe code lives OUTSIDE `proxy
 the FormData upload wrapper in `lib/services/`, the flat re-export adapter in
 `public-api.ts`, and the enum contract spec.
 
-## List Component Pattern
-```typescript
-@Component({
-  selector: 'app-book-list',
-  templateUrl: './book-list.component.html'
-})
-export class BookListComponent implements OnInit {
-  books = { items: [], totalCount: 0 } as PagedResultDto<BookDto>;
+## Standalone Component Anatomy
 
-  constructor(
-    public readonly list: ListService,
-    private bookService: BookService,
-    private confirmation: ConfirmationService
-  ) {}
+**Every component is standalone** — zero `NgModule`, zero `*.module.ts` in this repo.
+
+```typescript
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject, signal, computed } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { CommonModule } from '@angular/common';
+import { LocalizationPipe, ListService, PermissionService } from '@abp/ng.core';
+import { ToasterService } from '@abp/ng.theme.shared';
+import { SomeService, EXTRACT_PERMISSIONS } from '@dignite/vault-extract';
+
+@Component({
+  selector: 'lib-some-list',
+  templateUrl: './some-list.component.html',
+  standalone: true,
+  imports: [CommonModule, LocalizationPipe],
+  providers: [ListService],          // scoped providers declared here, not in a module
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class SomeListComponent implements OnInit {
+  // DI via inject() — never constructor injection for services
+  private readonly service = inject(SomeService);
+  private readonly toaster = inject(ToasterService);
+  private readonly permissionService = inject(PermissionService);
+  private readonly destroyRef = inject(DestroyRef);
+
+  readonly list = inject(ListService);
+
+  // Permissions stored as plain boolean fields (evaluated once at construction)
+  readonly canCreate = this.permissionService.getGrantedPolicy(EXTRACT_PERMISSIONS.Cabinets.Create);
+  readonly canUpdate = this.permissionService.getGrantedPolicy(EXTRACT_PERMISSIONS.Cabinets.Update);
+  readonly canDelete = this.permissionService.getGrantedPolicy(EXTRACT_PERMISSIONS.Cabinets.Delete);
+
+  // State as signals
+  items = signal<ItemDto[]>([]);
+  isLoading = signal(true);
+  readonly showActions = computed(() => this.canUpdate || this.canDelete);
 
   ngOnInit(): void {
-    this.hookToQuery();
+    this.load();
   }
 
-  private hookToQuery(): void {
-    this.list.hookToQuery(query => 
-      this.bookService.getList(query)
-    ).subscribe(response => {
-      this.books = response;
-    });
-  }
-
-  create(): void {
-    // Open create modal
-  }
-
-  delete(book: BookDto): void {
-    this.confirmation
-      .warn('::AreYouSureToDelete', '::AreYouSure')
-      .subscribe(status => {
-        if (status === Confirmation.Status.confirm) {
-          this.bookService.delete(book.id).subscribe(() => this.list.get());
-        }
+  private load(): void {
+    this.isLoading.set(true);
+    this.service.getList()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: list => { this.items.set(list); this.isLoading.set(false); },
+        error: () => this.isLoading.set(false),
       });
   }
 }
 ```
 
-## Localization
-```typescript
-// In component
-constructor(private localizationService: LocalizationService) {}
+## Route Definition
 
-getText(): string {
-  return this.localizationService.instant('::Books');
+Routes use `loadComponent` for individual components and `loadChildren` for route arrays.
+Guards are functional: `[authGuard, permissionGuard]` from `@abp/ng.core`.
+
+```typescript
+// packages/vault-extract/documents/src/lib/documents.routes.ts
+import { Routes } from '@angular/router';
+import { authGuard, permissionGuard } from '@abp/ng.core';
+import { EXTRACT_PERMISSIONS } from '@dignite/vault-extract';
+
+export const DOCUMENTS_ROUTES: Routes = [
+  {
+    path: 'list',
+    canActivate: [authGuard, permissionGuard],
+    data: { requiredPolicy: EXTRACT_PERMISSIONS.Documents.Default },
+    loadComponent: () =>
+      import('./documents/document-list/document-list.component').then(c => c.DocumentListComponent),
+  },
+  {
+    path: 'types',
+    canActivate: [authGuard, permissionGuard],
+    data: { requiredPolicy: EXTRACT_PERMISSIONS.DocumentTypes.Default },
+    loadComponent: () =>
+      import('./document-types/document-type-list/document-type-list.component').then(c => c.DocumentTypeListComponent),
+  },
+];
+```
+
+The host app wires route arrays via `loadChildren`:
+
+```typescript
+// apps/host/src/app/app.routes.ts
+export const APP_ROUTES: Routes = [
+  {
+    path: 'documents',
+    loadChildren: () => import('@dignite/vault-extract/documents').then(m => m.DOCUMENTS_ROUTES),
+  },
+];
+```
+
+## Permissions
+
+### Runtime check (stored boolean field + `@if`)
+
+Import `EXTRACT_PERMISSIONS` from `@dignite/vault-extract`. Call
+`permissionService.getGrantedPolicy(...)` at class field level (not in methods) and
+bind it in the template with `@if`.
+
+```typescript
+// In component class
+readonly canCreate = this.permissionService.getGrantedPolicy(EXTRACT_PERMISSIONS.Cabinets.Create);
+```
+
+```html
+<!-- In template — use @if, not *abpPermission, as the primary idiom -->
+@if (canCreate) {
+  <button class="btn btn-primary" (click)="openCreate()">
+    {{ '::Cabinet:New' | abpLocalization }}
+  </button>
+}
+```
+
+`*abpPermission="'VaultExtract.Cabinets.Create'"` is the directive alternative; it is
+valid but **`getGrantedPolicy` + `@if` is the pattern used throughout this codebase**.
+Never use raw string literals like `'VaultExtract.Cabinets.Create'` inline in templates
+or components — always go through the typed `EXTRACT_PERMISSIONS` constant.
+
+### Route guard
+
+```typescript
+{
+  canActivate: [authGuard, permissionGuard],
+  data: { requiredPolicy: EXTRACT_PERMISSIONS.DocumentTypes.Default },
+  loadComponent: () => import('./...').then(c => c.SomeComponent),
+}
+```
+
+Both guards are functional guards from `@abp/ng.core`; do **not** use the old class-based
+`PermissionGuard` (deprecated).
+
+## Modal Patterns
+
+There are two patterns in this codebase. Pick based on complexity.
+
+### Pattern A — Signal-driven inline modal (create/edit forms)
+
+Used by `CabinetListComponent` and `DocumentTypeListComponent`. The list component owns
+the form and modal state. A discriminated-union signal drives open/close. No separate
+modal service is involved.
+
+```typescript
+// In the list component class
+editing = signal<CabinetDto | 'create' | null>(null);
+isSubmitting = signal(false);
+
+readonly form = inject(FormBuilder).nonNullable.group({
+  name: ['', [Validators.required, Validators.maxLength(128)]],
+});
+
+openCreate(): void {
+  this.form.reset({ name: '' });
+  this.editing.set('create');
+}
+
+openEdit(item: CabinetDto): void {
+  this.form.reset({ name: item.name });
+  this.editing.set(item);
+}
+
+closeModal(): void {
+  this.editing.set(null);
+}
+
+// Backdrop close guard: close only when both mousedown AND click land on the
+// backdrop itself (not on text dragged out of an input field).
+private backdropMouseDownOnSelf = false;
+onBackdropMouseDown(e: MouseEvent): void { this.backdropMouseDownOnSelf = e.target === e.currentTarget; }
+onBackdropClick(e: MouseEvent): void {
+  if (this.backdropMouseDownOnSelf && e.target === e.currentTarget) this.closeModal();
+  this.backdropMouseDownOnSelf = false;
 }
 ```
 
 ```html
-<!-- In template -->
-<h1>{{ '::Books' | abpLocalization }}</h1>
+<!-- Modal rendered inline in the list template -->
+@if (editing()) {
+  <div class="modal-backdrop" (mousedown)="onBackdropMouseDown($event)" (click)="onBackdropClick($event)">
+    <div class="modal-dialog">
+      <form [formGroup]="form" (ngSubmit)="submit()">
+        ...
+        <button type="submit" [disabled]="isSubmitting()">
+          {{ '::Save' | abpLocalization }}
+        </button>
+      </form>
+    </div>
+  </div>
+}
+```
 
-<!-- With parameters -->
+### Pattern B — Dedicated standalone modal component (complex workflows)
+
+Used by `ReclassificationModalComponent` and `FieldReextractionModalComponent`. When
+a modal has enough logic to warrant its own class (preview calls, scoped loading state,
+multi-step form), extract it as a dedicated standalone component. The parent holds a
+nullable signal for the open target and imports the component.
+
+```typescript
+// The dedicated modal component
+@Component({
+  selector: 'lib-field-reextraction-modal',
+  templateUrl: './field-reextraction-modal.component.html',
+  standalone: true,
+  imports: [CommonModule, LocalizationPipe],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class FieldReextractionModalComponent implements OnInit {
+  private readonly service = inject(DocumentReprocessingService);
+  private readonly destroyRef = inject(DestroyRef);
+
+  @Input({ required: true }) documentTypeId!: string;
+  @Output() closed = new EventEmitter<void>();
+
+  readonly isSubmitting = signal(false);
+  // ... preview signals, loadPreview(), confirm(), close()
+}
+```
+
+```typescript
+// In the parent list component
+// 1. Import the dedicated component
+imports: [FieldReextractionModalComponent],
+
+// 2. Signal for open target (null = closed)
+reextractTarget = signal<DocumentTypeDto | null>(null);
+
+openReextractFields(type: DocumentTypeDto): void {
+  this.reextractTarget.set(type);
+}
+```
+
+```html
+<!-- In the parent list template -->
+@if (reextractTarget(); as t) {
+  <lib-field-reextraction-modal
+    [documentTypeId]="t.id!"
+    [documentTypeDisplayName]="t.displayName ?? ''"
+    (closed)="reextractTarget.set(null)"
+  />
+}
+```
+
+ABP `ModalService` is available as an alternative but is **not** the established pattern
+in this codebase. Do not introduce it unless a genuine need arises (e.g., opening a modal
+from a non-template context).
+
+## ListService with Signals
+
+`ListService` is provided in the component's `providers: []` array and obtained via
+`inject()`. Subscribe to `query$` and `hookToQuery` with `takeUntilDestroyed`.
+
+```typescript
+providers: [ListService],
+// ...
+readonly list = inject(ListService);
+
+ngOnInit(): void {
+  this.list.requestStatus$
+    .pipe(takeUntilDestroyed(this.destroyRef))
+    .subscribe(status => this.isLoading.set(status === 'loading'));
+
+  this.list
+    .hookToQuery(query => this.service.getList({ ...query }))
+    .pipe(takeUntilDestroyed(this.destroyRef))
+    .subscribe(result => this.items.set(result.items ?? []));
+}
+```
+
+## Localization
+
+Import `LocalizationPipe` from `@abp/ng.core` in the component's `imports` array.
+
+```html
+<h1>{{ '::Cabinet:Title' | abpLocalization }}</h1>
 <p>{{ '::WelcomeMessage' | abpLocalization: userName }}</p>
 ```
 
-## Authorization
+For programmatic access inject `LocalizationService`:
 
-### Permission Directive
-```html
-<button *abpPermission="'BookStore.Books.Create'">Create</button>
-```
-
-### Permission Guard
 ```typescript
-const routes: Routes = [
-  {
-    path: '',
-    component: BookListComponent,
-    canActivate: [PermissionGuard],
-    data: {
-      requiredPolicy: 'BookStore.Books'
-    }
-  }
-];
-```
-
-### Programmatic Check
-```typescript
-constructor(private permissionService: PermissionService) {}
-
-canCreate(): boolean {
-  return this.permissionService.getGrantedPolicy('BookStore.Books.Create');
-}
-```
-
-## Forms with Validation
-```typescript
-@Component({...})
-export class BookFormComponent {
-  form: FormGroup;
-
-  constructor(private fb: FormBuilder) {
-    this.buildForm();
-  }
-
-  buildForm(): void {
-    this.form = this.fb.group({
-      name: ['', [Validators.required, Validators.maxLength(128)]],
-      price: [0, [Validators.required, Validators.min(0)]]
-    });
-  }
-
-  save(): void {
-    if (this.form.invalid) return;
-    
-    this.bookService.create(this.form.value).subscribe(() => {
-      // Handle success
-    });
-  }
-}
-```
-
-```html
-<form [formGroup]="form" (ngSubmit)="save()">
-  <div class="form-group">
-    <label for="name">{{ '::Name' | abpLocalization }}</label>
-    <input type="text" id="name" formControlName="name" class="form-control" />
-  </div>
-  
-  <button type="submit" class="btn btn-primary" [disabled]="form.invalid">
-    {{ '::Save' | abpLocalization }}
-  </button>
-</form>
-```
-
-## Configuration API
-```typescript
-constructor(private configService: ConfigStateService) {}
-
-getCurrentUser(): CurrentUserDto {
-  return this.configService.getOne('currentUser');
-}
-
-getSettings(): void {
-  const setting = this.configService.getSetting('MyApp.MaxItemCount');
-}
-```
-
-## Modal Service
-```typescript
-constructor(private modalService: ModalService) {}
-
-openCreateModal(): void {
-  const modalRef = this.modalService.open(BookFormComponent, {
-    size: 'lg'
-  });
-
-  modalRef.result.then(result => {
-    if (result) {
-      this.list.get();
-    }
-  });
-}
+private readonly localization = inject(LocalizationService);
+getText(): string { return this.localization.instant('::Cabinet:Title'); }
 ```
 
 ## Toast Notifications
+
 ```typescript
-constructor(private toaster: ToasterService) {}
+private readonly toaster = inject(ToasterService);
 
-showSuccess(): void {
-  this.toaster.success('::BookCreatedSuccessfully', '::Success');
-}
-
-showError(error: string): void {
-  this.toaster.error(error, '::Error');
-}
+onSuccess(): void { this.toaster.success('::Cabinet:CreatedSuccessfully', '::Success'); }
+onError(): void   { this.toaster.error('::Cabinet:DeleteFailed', '::Error'); }
 ```
 
-## Lazy Loading Modules
-```typescript
-// app-routing.module.ts
-const routes: Routes = [
-  {
-    path: 'books',
-    loadChildren: () => import('./book/book.module').then(m => m.BookModule)
-  }
-];
+## Template Control Flow
+
+Use Angular 17+ block syntax — NOT `*ngIf` / `*ngFor`:
+
+```html
+@if (canCreate) {
+  <button>Create</button>
+}
+
+@for (item of items(); track item.id) {
+  <tr>...</tr>
+}
+
+@if (isLoading()) {
+  <div class="spinner-border"></div>
+} @else {
+  <!-- content -->
+}
 ```
 
 ## Theme & Styling
-- Use Bootstrap classes
-- ABP provides theme variables via CSS custom properties
+
+- Bootstrap utility classes for layout/spacing
+- ABP LeptonX theme variables via CSS custom properties
 - Component-specific styles in `.component.scss`
+- Icons: Font Awesome (`fas fa-*`)

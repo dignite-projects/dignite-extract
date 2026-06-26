@@ -65,7 +65,7 @@ Validate `<ProjectReference>` entries in `*.csproj` files against this table:
 
 - **Aggregate roots**: private setters, protected parameterless constructor, and ID supplied through the constructor. Do not generate `Guid` inside the constructor; use `IGuidGenerator` outside.
 - **Child entities must be accessed only through aggregate roots**: repositories such as `IRepository<DocumentPipelineRun, ...>` or `IRepository<DocumentChunk, ...>` for child entities are hard violations, unless a documented exception applies. See "Repositories for Aggregate Roots Only" in `ef-core.md`.
-- **Domain events**: use `AddLocalEvent` for same-transaction side effects, and `AddDistributedEvent` for cross-module / cross-service ETOs. Do not mix them up.
+- **Domain events**: use local events (`ILocalEventHandler` / local event bus) for same-transaction in-process side effects, and `IDistributedEventBus.PublishAsync` (inside a UoW, transactional-outbox-backed) for cross-service ETOs. This repo publishes ETOs via `IDistributedEventBus.PublishAsync`, **not** `AddDistributedEvent` — see `integration-events-reviewer` for the outbox / UoW rule. Do not mix the two.
 - **Domain services**: use `*Manager` naming and do not directly depend on authenticated user context.
 
 ### 2.4 Common ABP Anti-Patterns (`abp-core.md`)
