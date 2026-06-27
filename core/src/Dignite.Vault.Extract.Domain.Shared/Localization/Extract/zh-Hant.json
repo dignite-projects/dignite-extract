@@ -11,11 +11,13 @@
     "Refresh": "重新整理",
     "Cancel": "取消",
     "Search": "搜尋",
+
     "Menu:Home": "首頁",
     "Menu:Documents": "文件庫",
     "Menu:DocumentOverview": "總覽",
     "Menu:DocumentList": "文件清單",
     "Menu:DocumentRecycleBin": "回收筒",
+
     "Document:Documents": "文件",
     "Document:Home:Subtitle": "將檔案上傳到文件庫，並進入擷取 Markdown、通用中繼資料與類型綁定欄位的處理流程。",
     "Document:Home:UploadTitle": "上傳文件",
@@ -156,11 +158,13 @@
     "Document:Reprocess:Reclassification:Warning": "會覆寫自動分類結果；信心度不足的文件將退回待審核佇列並清空已擷取欄位；成功的會一併重新擷取欄位。影響範圍大，且可能產生 LLM 費用。",
     "Document:Reprocess:Reclassification:Start": "開始重新分類",
     "Document:Reprocess:Reclassification:Queued": "已開始批次重新分類，將在背景處理。",
+
     "Document:Status:Uploaded": "已上傳",
     "Document:Status:Processing": "處理中",
     "Document:Status:Ready": "就緒",
     "Document:Status:Failed": "失敗",
     "Document:Status:Unknown": "未知",
+
     "Document:Pipelines": "管線執行",
     "Document:Pipeline:text-extraction": "文字擷取",
     "Document:Pipeline:classification": "分類",
@@ -176,6 +180,9 @@
     "Document:Pipeline:Retrying": "正在重試...",
     "Document:Pipeline:RetryQueued": "重試已加入佇列，狀態將很快重新整理。",
     "Document:Pipeline:RetryFailed": "重試管線失敗。",
+
+
+
     "Document:ConfirmClassification": "確認分類",
     "Document:SelectDocumentType": "選擇文件類型",
     "Document:Confirm": "確認",
@@ -199,9 +206,11 @@
     "Document:FieldsUpdated": "欄位已更新。",
     "Document:UpdateFailed": "更新欄位失敗。",
     "Document:NoFieldValues": "尚無欄位值。請點選「編輯」填寫。",
+
     "Edit": "編輯",
     "Save": "儲存",
     "Menu:DocumentTypes": "文件類型",
+
     "DocumentType:Title": "文件類型",
     "DocumentType:New": "新增類型",
     "DocumentType:Edit": "編輯類型",
@@ -226,6 +235,7 @@
     "DocumentType:DeletedSuccessfully": "文件類型已刪除。",
     "DocumentType:DeleteFailed": "刪除文件類型失敗。",
     "DocumentType:RestoredSuccessfully": "文件類型已還原。",
+
     "Menu:Cabinets": "文件櫃",
     "Cabinet:Title": "文件櫃",
     "Cabinet:New": "新增文件櫃",
@@ -245,6 +255,7 @@
     "Document:CabinetUpdated": "文件櫃已更新。",
     "Document:Filter:AllCabinets": "全部文件櫃",
     "Document:SelectCabinet": "文件櫃（選填）",
+
     "FieldDefinition:Title": "類型綁定欄位",
     "FieldDefinition:New": "新增欄位",
     "FieldDefinition:Edit": "編輯欄位",
@@ -283,7 +294,9 @@
     "FieldDefinition:DeletedSuccessfully": "欄位已刪除。",
     "FieldDefinition:DeleteFailed": "刪除欄位失敗。",
     "FieldDefinition:RestoredSuccessfully": "欄位已還原。",
+
     "Failed": "失敗",
+
     "Permission:Extract": "Vault Extract",
     "Permission:Documents": "文件",
     "Permission:Documents.Upload": "上傳文件",
@@ -309,6 +322,7 @@
     "Permission:FieldDefinitions.Create": "建立欄位定義",
     "Permission:FieldDefinitions.Update": "編輯欄位定義",
     "Permission:FieldDefinitions.Delete": "刪除欄位定義",
+
     "Extract:InvalidDocumentTypeCodeFormat": "文件類型代碼 '{typeCode}' 不符合格式 '{pattern}'：僅允許字母 / 數字 / 底線 / 連字號區段，可選用 '.' 分隔多段；不允許開頭、結尾或連續 '.'。",
     "Extract:DocumentTypeCodeAlreadyExists": "文件類型代碼 '{TypeCode}' 已被佔用（包括已軟刪除的記錄）。請使用其他代碼，或先還原已存在的同名類型。",
     "Extract:DocumentTypeInUse": "文件類型 '{TypeCode}' 仍被一份或多份文件參照，請先重新分類這些文件再刪除此類型。",
