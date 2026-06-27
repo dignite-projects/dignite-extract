@@ -228,6 +228,15 @@ export class DocumentDetailComponent implements OnInit {
       !== DocumentReviewReasons.None),
   );
 
+  // #412: required fields are missing AND the operator may act — drives the "Complete fields" CTA. The reason
+  // is non-blocking and clears itself once the values are filled in the fields card below, so the banner
+  // offers a jump-and-edit shortcut rather than a confirm/approve button.
+  needsFieldCompletion = computed(() =>
+    this.canEditFields &&
+    (((this.document()?.reviewReasons ?? DocumentReviewReasons.None) & DocumentReviewReasons.MissingRequiredFields)
+      !== DocumentReviewReasons.None),
+  );
+
   // #284: pure availability axis. After the two axes became orthogonal, the review banner and processing
   // banner are judged independently; the template's @if needsReview takes precedence over isProcessing.
   isProcessing = computed(() => {
@@ -837,6 +846,34 @@ export class DocumentDetailComponent implements OnInit {
       default:
         return '::Document:NeedsReview';
     }
+  }
+
+  // #412: per-reason remediation hint shown in the banner, so the operator knows what each reason expects
+  // without inferring it from the (reason-neutral) headline. Each reason has exactly one remedy: assign a
+  // type, fill the fields below, re-classify, or release/delete the duplicate.
+  reviewReasonHint(reason: DocumentReviewReasons | undefined): string {
+    switch (reason) {
+      case DocumentReviewReasons.UnresolvedClassification:
+        return '::Document:Review:Hint:UnresolvedClassification';
+      case DocumentReviewReasons.MissingRequiredFields:
+        return '::Document:Review:Hint:MissingRequiredFields';
+      case DocumentReviewReasons.SegmentationIncomplete:
+        return '::Document:Review:Hint:SegmentationIncomplete';
+      case DocumentReviewReasons.DuplicateSuspected:
+        return '::Document:Review:Hint:DuplicateSuspected';
+      default:
+        return '::Document:NeedsReview';
+    }
+  }
+
+  // #412: "Complete fields" CTA — jump to the extracted-fields card and open the edit form so the missing
+  // required values can be filled. Filling them clears MissingRequiredFields server-side on the next save.
+  completeFields(): void {
+    if (this.canEditFields && this.fieldDefinitions().length > 0 && !this.isEditingFields()) {
+      this.startEditFields();
+    }
+    document.getElementById('extracted-fields-card')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   getRunStatusBadgeClass(status: PipelineRunStatus | undefined): string {
