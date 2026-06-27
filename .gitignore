@@ -445,7 +445,7 @@ codex-tmp/
 coverage/
 
 # ASP.NET Core configuration files with sensitive information
-appsettings.Development.json
+appsettings.secrets.json
 appsettings.Production.json
 appsettings.Staging.json
 
