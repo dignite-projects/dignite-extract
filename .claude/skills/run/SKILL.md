@@ -5,36 +5,40 @@ description: Start the Vault Extract dev environment — SQL Server reachability
 
 # Run: Start and Verify the Vault Extract Dev Stack
 
-## Connection targets (read from real appsettings files)
+## Connection targets (resolved from config at runtime — never hardcode the remote target here)
 
-| Environment | `ConnectionStrings:Default` |
+| Environment | `ConnectionStrings:Default` source |
 |---|---|
-| Base (`appsettings.json`) | `Server=(LocalDb)\MSSQLLocalDB;Database=Extract;Trusted_Connection=True;TrustServerCertificate=true` |
-| Development (`appsettings.Development.json`) | `Server=REDACTED-DB-HOST;User ID=REDACTED;...;Database=REDACTED;Trusted_Connection=False;TrustServerCertificate=true` |
+| Base (`appsettings.json`, tracked) | `Server=(LocalDb)\MSSQLLocalDB;Database=Extract;Trusted_Connection=True;TrustServerCertificate=true` |
+| Development override | Provided by `appsettings.secrets.json` (**gitignored, per-developer**) — points at a remote SQL Server. The literal host / user / database are intentionally **not** stored in this skill or any tracked file. |
 
-`launchSettings.json` sets `ASPNETCORE_ENVIRONMENT=Development`, so the **Development override is always active** during `dotnet run`. The active target is the remote SQL Server at `REDACTED-DB-HOST:1433`.
+`launchSettings.json` sets `ASPNETCORE_ENVIRONMENT=Development`, so the **Development override is always active** during `dotnet run`. The effective `ConnectionStrings:Default` therefore comes from `appsettings.secrets.json` when that file is present.
 
-The base appsettings LocalDB target (`(LocalDb)\MSSQLLocalDB`) is only used when the `Development` override is absent (e.g. custom `--environment` flag or a CI environment that does not load the Development file).
+The base appsettings LocalDB target (`(LocalDb)\MSSQLLocalDB`) is used only when the secrets override is absent (e.g. a fresh checkout without `appsettings.secrets.json`, a custom `--environment` flag, or CI).
 
 ---
 
 ## Step 1 — Verify SQL Server reachability
 
-**Development environment (normal case): remote SQL Server**
+Resolve the active SQL `host:port` **from the gitignored secrets file at runtime** — no literal target is committed to this skill:
 
 ```powershell
-Test-NetConnection REDACTED-DB-HOST -Port 1433
+$secrets = "host/src/appsettings.secrets.json"
+if (Test-Path $secrets) {
+    # Development override present → remote SQL Server
+    $cs = (Get-Content $secrets -Raw | ConvertFrom-Json).ConnectionStrings.Default
+    if ($cs -match 'Server=([^;,]+)(?:,(\d+))?') {
+        $sqlHost = $Matches[1]
+        $sqlPort = if ($Matches[2]) { $Matches[2] } else { 1433 }
+        Test-NetConnection $sqlHost -Port $sqlPort   # expect TcpTestSucceeded : True
+    }
+} else {
+    # No override → base LocalDB target (named pipe, no TCP port to check)
+    sqllocaldb info MSSQLLocalDB
+}
 ```
 
-Expect `TcpTestSucceeded : True`. If this fails, check VPN/network access before proceeding — the host will fail to start with a DB connection error.
-
-**Base fallback: LocalDB**
-
-If running without the Development override (unusual), the target is `(LocalDb)\MSSQLLocalDB`. LocalDB uses a local named pipe; there is no TCP port to check. Verify the instance exists with:
-
-```powershell
-sqllocaldb info MSSQLLocalDB
-```
+For the remote case, expect `TcpTestSucceeded : True`. If it fails, check VPN/network access before proceeding — the host will fail to start with a DB connection error.
 
 ---
 
@@ -142,7 +146,7 @@ nx g @abp/nx.generators:generate-proxy --module=vault-extract --apiName=Default 
 
 | Step | Command | Expected result |
 |---|---|---|
-| DB reachability (Dev) | `Test-NetConnection REDACTED-DB-HOST -Port 1433` | `TcpTestSucceeded : True` |
+| DB reachability (Dev) | Resolve host:port from `appsettings.secrets.json`, then `Test-NetConnection` | `TcpTestSucceeded : True` |
 | Start host | `dotnet run --project host/src` | Binds `https://localhost:44348` |
 | Health check | `GET https://localhost:44348/health-status` | HTTP 200 |
 | Swagger | `https://localhost:44348/swagger` | Swagger UI loads |
