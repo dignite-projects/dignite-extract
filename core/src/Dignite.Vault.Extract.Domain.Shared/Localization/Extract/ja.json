@@ -181,6 +181,8 @@
     "Document:Pipeline:RetryQueued": "再試行をキューに追加しました。状態はまもなく更新されます。",
     "Document:Pipeline:RetryFailed": "パイプラインの再試行に失敗しました。",
 
+
+
     "Document:ConfirmClassification": "分類を確認",
     "Document:SelectDocumentType": "ドキュメントタイプを選択",
     "Document:Confirm": "確認",
