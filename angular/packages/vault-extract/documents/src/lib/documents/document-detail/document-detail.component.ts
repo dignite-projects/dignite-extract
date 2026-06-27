@@ -9,9 +9,9 @@ import {
   computed,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { forkJoin, of, switchMap, tap } from 'rxjs';
+import { forkJoin, of, switchMap, tap, timer, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
-import { CommonModule, Location } from '@angular/common';
+import { CommonModule, DOCUMENT, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { marked } from 'marked';
 import { LocalizationPipe, LocalizationService, PermissionService } from '@abp/ng.core';
@@ -63,6 +63,13 @@ const KNOWN_PIPELINE_CODES = [
   'field-extraction',
 ] as const;
 
+// #440 interim live status: while a document is still in-flight, silently re-fetch it + its pipeline runs so
+// the detail page reflects server-side progress without a manual Refresh. Bounded and self-terminating — to
+// be replaced by server push (SSE / SignalR), see issue #440. Start fast, then back the interval off toward
+// the cap so a long-running pipeline does not keep polling at full rate.
+const POLL_BASE_INTERVAL_MS = 2000;
+const POLL_MAX_INTERVAL_MS = 10000;
+
 @Component({
   selector: 'lib-document-detail',
   templateUrl: './document-detail.component.html',
@@ -85,6 +92,8 @@ export class DocumentDetailComponent implements OnInit {
   private readonly permissionService = inject(PermissionService);
   private readonly localization = inject(LocalizationService);
   private readonly destroyRef = inject(DestroyRef);
+  // #440: DOM document handle for the Page Visibility check that pauses background polling on a hidden tab.
+  private readonly domDocument = inject(DOCUMENT);
   // Original-file blob load / sanitize / revoke lifecycle (#277), shared with the file-preview page.
   protected readonly fileBlob = inject(DocumentFileBlobService);
 
@@ -364,6 +373,9 @@ export class DocumentDetailComponent implements OnInit {
   // If the blob has not loaded when Download File is clicked, set this flag and trigger one download
   // after the blob is ready. See downloadFile plus the constructor effect.
   private pendingDownload = false;
+  // #440: subscription to the pending poll tick (null when not polling) + the current backoff interval.
+  private pollTimer: Subscription | null = null;
+  private pollIntervalMs = POLL_BASE_INTERVAL_MS;
 
   constructor() {
     // Pending download completion: when the blob arrives, trigger one download; when blob loading fails,
@@ -381,6 +393,22 @@ export class DocumentDetailComponent implements OnInit {
         this.pendingDownload = false;
         this.toaster.error('::Document:DownloadFailed', '::Error');
       }
+    });
+
+    // #440: pause the background poll while the tab is hidden (no point re-fetching an unseen page) and
+    // resume with an immediate refresh when it returns to the foreground. Always tear the timer down on
+    // destroy so navigating away stops polling.
+    const onVisibilityChange = () => {
+      if (this.domDocument.hidden) {
+        this.clearPollTimer();
+      } else if (this.shouldPoll() && !this.pollTimer) {
+        this.pollReload();
+      }
+    };
+    this.domDocument.addEventListener('visibilitychange', onVisibilityChange);
+    this.destroyRef.onDestroy(() => {
+      this.domDocument.removeEventListener('visibilitychange', onVisibilityChange);
+      this.clearPollTimer();
     });
   }
 
@@ -409,6 +437,20 @@ export class DocumentDetailComponent implements OnInit {
 
   private loadDocument(): void {
     this.isLoading.set(true);
+    // Any explicit (re)load — navigation, manual Refresh, post-action reload — restarts the poll backoff
+    // from the base interval.
+    this.pollIntervalMs = POLL_BASE_INTERVAL_MS;
+    this.fetchDocument(false);
+  }
+
+  // #440: a background poll tick. Silently re-fetches — never toggles isLoading, so the full-page spinner
+  // and the Refresh-button spin stay quiet — and skips the one-time metadata (parent / cabinets) that does
+  // not change mid-pipeline, refreshing field definitions only when classification has just resolved a type.
+  private pollReload(): void {
+    this.fetchDocument(true);
+  }
+
+  private fetchDocument(quiet: boolean): void {
     // doc and runs are independent after #216, so load them once in parallel; fieldDefinitions still
     // depend on doc.documentTypeCode and remain sequential.
     forkJoin({
@@ -418,9 +460,12 @@ export class DocumentDetailComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: ({ doc, runs }) => {
+          const previousTypeCode = this.document()?.documentTypeCode ?? null;
           this.document.set(doc);
           this.pipelineRuns.set(runs);
-          this.isLoading.set(false);
+          if (!quiet) {
+            this.isLoading.set(false);
+          }
           // Original-file blob lazy loading (#274): do not fetch while loading the document by default;
           // download only when the Original File tab is selected. See selectTab.
           // If the user is already on that tab, call ensureFilePreview once after reload
@@ -434,26 +479,79 @@ export class DocumentDetailComponent implements OnInit {
           // Documents.Default since #223, so load whenever a type exists and no longer gate on edit
           // permission. #395: visible types are always loaded (even when unclassified) so the
           // confirm-classification picker has its options.
-          this.fieldDefinitions.set([]);
-          this.loadDocumentTypesAndFields(doc.documentTypeCode);
+          // #440: on a quiet poll, reload them only when the type actually changed (classification just
+          // resolved) — otherwise the fields card would flash empty on every tick.
+          if (!quiet || (doc.documentTypeCode ?? null) !== previousTypeCode) {
+            this.fieldDefinitions.set([]);
+            this.loadDocumentTypesAndFields(doc.documentTypeCode);
+          }
           // #306/#354: a sub-document carries its source (container) id. Fetch the parent's lightweight
           // metadata so the provenance banner can show its title; reset first so a previous document's
           // parent never lingers when navigating between documents in the same component instance.
-          this.parentDocument.set(null);
-          this.parentLookupFailed.set(false);
-          if (doc.originDocumentId) {
-            this.loadParentDocument(doc.originDocumentId);
+          // #440: skipped on a quiet poll — provenance is immutable for a loaded document, so re-fetching
+          // it would only make the banner flicker.
+          if (!quiet) {
+            this.parentDocument.set(null);
+            this.parentLookupFailed.set(false);
+            if (doc.originDocumentId) {
+              this.loadParentDocument(doc.originDocumentId);
+            }
           }
           // Cabinet name mapping: fetch only when Cabinets.Default is granted and not already loaded. If
           // there is no permission, the cabinet row is hidden.
           if (this.canViewCabinets && this.cabinets().length === 0) {
             this.loadCabinets();
           }
+          // #440: (re)schedule or stop the poll based on the freshly loaded state.
+          this.syncPolling();
         },
         error: () => {
-          this.isLoading.set(false);
+          if (!quiet) {
+            this.isLoading.set(false);
+          }
+          // #440: stop polling on a failed tick rather than hammering a failing endpoint. Manual Refresh
+          // stays available, and any successful (re)load restarts it.
+          this.stopPolling();
         },
       });
+  }
+
+  // #440: a document warrants polling only while it is genuinely still advancing on the server — a known
+  // pipeline run is Pending/Running, or it is pre-terminal (Uploaded/Processing) and NOT parked waiting on
+  // the operator. The needs-review guard matters because a blocking review reason (e.g. low-confidence
+  // UnresolvedClassification) leaves lifecycle at Processing indefinitely — DeriveLifecycleAsync only
+  // reaches Ready once no blocking reason remains — so without the guard such a document would poll forever.
+  // When a run is actually in progress (e.g. the operator re-classified a needs-review document) we still
+  // poll, because pipelineInProgress() takes precedence.
+  private shouldPoll(): boolean {
+    return this.pipelineInProgress() || (this.isProcessing() && !this.needsReview());
+  }
+
+  // #440: called after every load. Cancels any pending tick, then — if still in-flight and the tab is
+  // visible — schedules the next silent re-fetch, backing the interval off toward the cap.
+  private syncPolling(): void {
+    this.clearPollTimer();
+    if (!this.shouldPoll()) {
+      this.pollIntervalMs = POLL_BASE_INTERVAL_MS;
+      return;
+    }
+    if (this.domDocument.hidden) {
+      return; // resumed by the visibilitychange handler in the constructor
+    }
+    this.pollTimer = timer(this.pollIntervalMs).subscribe(() => {
+      this.pollIntervalMs = Math.min(this.pollIntervalMs * 2, POLL_MAX_INTERVAL_MS);
+      this.pollReload();
+    });
+  }
+
+  private clearPollTimer(): void {
+    this.pollTimer?.unsubscribe();
+    this.pollTimer = null;
+  }
+
+  private stopPolling(): void {
+    this.clearPollTimer();
+    this.pollIntervalMs = POLL_BASE_INTERVAL_MS;
   }
 
   // doc.documentTypeCode is the current code projection in the Document output contract (#207). The
