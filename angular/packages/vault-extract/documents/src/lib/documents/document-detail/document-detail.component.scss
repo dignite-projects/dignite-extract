@@ -7,10 +7,10 @@
   font-size: 0.8rem;
   white-space: pre-wrap;
   word-break: break-word;
-  background-color: #f8f9fa;
+  background-color: var(--bs-tertiary-bg, #f8f9fa);
   padding: 0.75rem;
   border-radius: 0.25rem;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--bs-border-color, #dee2e6);
 }
 
 // Markdown preview (#274): typography for HTML rendered by marked. Content has passed Angular DomSanitizer.
@@ -42,14 +42,14 @@
   }
 
   code {
-    background-color: #f8f9fa;
+    background-color: var(--bs-tertiary-bg, #f8f9fa);
     padding: 0.1rem 0.3rem;
     border-radius: 0.2rem;
     font-size: 0.85em;
   }
 
   pre {
-    background-color: #f8f9fa;
+    background-color: var(--bs-tertiary-bg, #f8f9fa);
     padding: 0.75rem;
     border-radius: 0.25rem;
     overflow-x: auto;
@@ -68,12 +68,12 @@
     font-size: 0.85rem;
 
     th, td {
-      border: 1px solid #dee2e6;
+      border: 1px solid var(--bs-border-color, #dee2e6);
       padding: 0.4rem 0.6rem;
       text-align: left;
     }
     th {
-      background-color: #f8f9fa;
+      background-color: var(--bs-tertiary-bg, #f8f9fa);
       font-weight: 600;
     }
   }
@@ -84,10 +84,10 @@
   }
 
   blockquote {
-    border-left: 3px solid #dee2e6;
+    border-left: 3px solid var(--bs-border-color, #dee2e6);
     padding-left: 0.75rem;
     margin-bottom: 0.75rem;
-    color: #6c757d;
+    color: var(--bs-secondary-color, #6c757d);
   }
 
   a {

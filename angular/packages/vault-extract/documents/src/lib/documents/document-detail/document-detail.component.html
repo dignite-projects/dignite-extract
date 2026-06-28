@@ -183,7 +183,7 @@
       <!-- LEFT: Tab area: Markdown preview / source / original file (#274) -->
       <div class="col-lg-6">
         <div class="card shadow-sm h-100 d-flex flex-column">
-          <div class="card-header p-0 pt-2 bg-white">
+          <div class="card-header p-0 pt-2">
             <ul class="nav nav-tabs card-header-tabs mx-2 mb-0">
               <li class="nav-item">
                 <button class="nav-link" [class.active]="activeTab() === 'preview'"
@@ -329,7 +329,7 @@
                       </div>
                     } @else {
                       @if (cabinetName(); as name) {
-                        <span class="badge bg-light text-dark border">
+                        <span class="badge bg-body-tertiary border">
                           <i class="fas fa-folder text-warning me-1"></i>{{ name }}
                         </span>
                       } @else {
@@ -499,7 +499,7 @@
                       {{ row.statusLabel | abpLocalization }}
                     </span>
                     @if (row.run && (row.run.attemptNumber ?? 0) > 1) {
-                      <span class="badge bg-light text-muted border">
+                      <span class="badge bg-body-tertiary text-muted border">
                         {{ '::Document:Pipeline:Attempt' | abpLocalization }}
                         #{{ row.run.attemptNumber }}
                       </span>
