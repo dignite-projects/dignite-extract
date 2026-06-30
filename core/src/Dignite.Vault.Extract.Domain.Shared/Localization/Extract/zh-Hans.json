@@ -274,7 +274,7 @@
     "FieldDefinition:DraftReviewNotice": "AI 已根据提示词起草下列字段，请核对并按需修改后再保存。",
     "FieldDefinition:DraftUnavailable": "无法根据提示词起草，请手动填写各字段。",
     "FieldDefinition:DataType": "数据类型",
-    "FieldDataType:Text": "文本",
+    "FieldDataType:Text": "短文本",
     "FieldDataType:Number": "数字",
     "FieldDataType:Boolean": "是/否",
     "FieldDataType:Date": "日期",

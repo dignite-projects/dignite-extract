@@ -274,7 +274,7 @@
     "FieldDefinition:DraftReviewNotice": "AI 已依提示詞草擬下列欄位，請核對並視需要修改後再儲存。",
     "FieldDefinition:DraftUnavailable": "無法依提示詞草擬，請手動填寫各欄位。",
     "FieldDefinition:DataType": "資料類型",
-    "FieldDataType:Text": "文字",
+    "FieldDataType:Text": "短文字",
     "FieldDataType:Number": "數字",
     "FieldDataType:Boolean": "是/否",
     "FieldDataType:Date": "日期",

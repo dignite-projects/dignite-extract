@@ -274,7 +274,7 @@
     "FieldDefinition:DraftReviewNotice": "AI がプロンプトから以下のフィールドを下書きしました。保存する前に確認・調整してください。",
     "FieldDefinition:DraftUnavailable": "プロンプトから下書きできませんでした。フィールドを手動で入力してください。",
     "FieldDefinition:DataType": "データ型",
-    "FieldDataType:Text": "テキスト",
+    "FieldDataType:Text": "短文テキスト",
     "FieldDataType:Number": "数値",
     "FieldDataType:Boolean": "はい/いいえ",
     "FieldDataType:Date": "日付",

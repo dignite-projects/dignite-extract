@@ -274,7 +274,7 @@
     "FieldDefinition:DraftReviewNotice": "AI drafted the fields below from your prompt — please review and adjust before saving.",
     "FieldDefinition:DraftUnavailable": "Couldn't draft from the prompt. Please fill in the fields manually.",
     "FieldDefinition:DataType": "Data Type",
-    "FieldDataType:Text": "Text",
+    "FieldDataType:Text": "Short Text",
     "FieldDataType:Number": "Number",
     "FieldDataType:Boolean": "Yes/No",
     "FieldDataType:Date": "Date",
