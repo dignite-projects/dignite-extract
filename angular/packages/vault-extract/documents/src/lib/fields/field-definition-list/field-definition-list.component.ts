@@ -214,6 +214,19 @@ export class FieldDefinitionListComponent implements OnInit {
       }),
       EntityProp.create<FieldDefinitionDto>({
         type: ePropType.String,
+        name: 'isUniqueKey',
+        displayName: '::FieldDefinition:IsUniqueKey',
+        sortable: true,
+        columnWidth: 150,
+        valueResolver: data => {
+          const localization = data.getInjected(LocalizationService);
+          return of(data.record.isUniqueKey
+            ? `<span class="badge bg-primary">${escapeHtmlChars(localization.instant('::FieldDefinition:IsUniqueKey'))}</span>`
+            : '<span class="text-muted">-</span>');
+        },
+      }),
+      EntityProp.create<FieldDefinitionDto>({
+        type: ePropType.String,
         name: 'prompt',
         displayName: '::FieldDefinition:Prompt',
         sortable: true,
