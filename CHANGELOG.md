@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-01
+
+First stable release of the 0.2.0 line. Headlined by the rebrand to **Dignite Vault Extract**, the container / sub-document model, and a major expansion of structure-aware text extraction (PDF / DOCX / PPTX). The granular per-preview history is retained in the `0.2.0-preview.*` sections below.
+
+> **Upgrading from 0.1.0 is breaking**: NuGet package IDs and namespaces moved to the `Dignite.Vault.Extract.*` prefix, the Angular library is now `@dignite/vault-extract`, and the C# module / type prefix is `VaultExtract`. See the Changed entries below. As a `0.y.z` release the exit contracts may still change — see [CONTRIBUTING → Versioning and releases](CONTRIBUTING.md#versioning-and-releases).
+
+### Added
+
+- **Container & sub-document model** — a document can be recognised as a *container* and segmented into derived sub-documents, with full provenance across the MCP and Angular egress and `OriginDocumentId` on the events (#346, #347, #351, #354, #360, #363, #371, #375).
+- **Structure-aware text extraction** — embedded raster/image extraction from digital PDF, DOCX, and PPTX via `IOcrProvider` / OpenXML; column-aware PDF reading order; digital-layer and lattice (ruled) table reconstruction into Markdown tables; PDF font size/weight → Markdown headings; running header/footer stripping (#301, #311, #308, #323, #307, #314, #310, #326, #329, #340, #403, #383, #450).
+- **Static API-key fallback authentication for the `/mcp` egress**, alongside OpenIddict Bearer and the OAuth discovery flow, for clients that cannot run the dynamic OAuth flow (#430, closes #428). MCP discovery is now a one-call `AddExtractMcpDiscovery(...)` extension (#422).
+- **Duplicate re-upload detection** via field fingerprint, gating `DocumentReadyEto` (#411).
+- Angular: live pipeline status on document detail via interim polling (#442); render LongText extracted-field values as Markdown (#418); document AI overview statistics with cabinet / document-type overview cards and an upload-first home page (#333, #341, #335, #342, #332, #339).
+
+### Changed
+
+- **BREAKING — package identifiers renamed to the `Dignite.Vault.Extract.*` prefix**, and the Angular library is published as `@dignite/vault-extract` (#370, #382).
+- **BREAKING — C# type and module prefix unified from `Extract` to `VaultExtract`** (`VaultExtractDomainModule`, `VaultExtractDbContext`, `VaultExtractErrorCodes`, …), matching the `Dignite.Vault.Extract` namespace and ABP convention. Namespaces, the `Extract` extraction *verb*, and every serialized contract (error codes `Extract:*`, DB table prefix, config sections, blob container, localization resources) are unchanged (#438).
+- Rebranded the UI to the DIGNITE badge; reduced to four supported languages and aligned the localization files to a common layout.
+- OCR recognition language is now provider-specific; removed the dead central `VaultExtractOcrOptions` layer (#441).
+- Enforce document-type layer-scoped uniqueness in the application layer (#304).
+
+### Fixed
+
+- PDF reading-order and table reconstruction hardening: band-aware ordering, robustness to narrow gutters / sparse / empty columns, and key-value tables under titles / stamps (#407, #446 and related).
+- Unwrap stray Markdown code fences from VisionLlm OCR so tables render (#448).
+- Escape source-text Markdown metacharacters in generated output (#320, #337).
+- Angular: dark-theme-aware document detail, home context panel, and upload drop-zone; reason-aware review banner with a complete-fields action; localize `ExportFormat` / `FieldDataType` list labels; persist list filters / paging in the URL.
+
+### Removed
+
+- Legacy Angular document-upload route and dead segmentation fields (#390).
+- Dead central OCR options layer (#441) and the `pack-all.ps1` packaging script.
+
 ## [0.2.0-preview.4] - 2026-06-26
 
 ### Changed
@@ -67,4 +101,5 @@ Preview of the 0.2.0 line. This release rebrands the project to **Dignite Vault 
 - Legacy Angular document-upload route.
 - Dead fields from the segmentation subsystem (#390).
 
-[Unreleased]: https://github.com/dignite-projects/vault-extract/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dignite-projects/vault-extract/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dignite-projects/vault-extract/compare/v0.1.0...v0.2.0
