@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using DocumentFormat.OpenXml;
 using W = DocumentFormat.OpenXml.Wordprocessing;
 
 namespace Dignite.Vault.Extract.Parse.OpenXml;
@@ -19,11 +20,14 @@ namespace Dignite.Vault.Extract.Parse.OpenXml;
 /// </summary>
 internal static class WordTableRenderer
 {
-    public static string? Render(W.Table table)
+    /// <param name="noteReferences">Optional sink for footnote/endnote references found in cells (#315): a
+    /// reference is collected (so its body is defined at the document end) and its marker appended to the cell
+    /// text. When null, references are ignored (the pre-#315 behavior).</param>
+    public static string? Render(W.Table table, ICollection<NoteReference>? noteReferences = null)
     {
         var rows = table
             .Elements<W.TableRow>()
-            .Select(row => row.Elements<W.TableCell>().Select(CellText).ToList())
+            .Select(row => row.Elements<W.TableCell>().Select(cell => CellText(cell, noteReferences)).ToList())
             .Where(cells => cells.Count > 0)
             .ToList();
         if (rows.Count == 0)
@@ -46,7 +50,7 @@ internal static class WordTableRenderer
         return MarkdownText.RenderTable(rows);
     }
 
-    private static string CellText(W.TableCell cell)
+    private static string CellText(W.TableCell cell, ICollection<NoteReference>? noteReferences)
     {
         // Join the cell's paragraphs' text with a space — a Markdown table cell can't contain a newline — and
         // escape inline metacharacters + table breakers once (#329, matching the PDF table path so a literal
@@ -54,12 +58,19 @@ internal static class WordTableRenderer
         // Descendants (not Elements) so paragraphs wrapped in a content control (w:sdt) or custom-XML inside
         // the cell are still picked up; but skip paragraphs that belong to a NESTED table (a nested w:tbl's
         // text is an accepted blind spot and must not bleed into this cell's own text).
+        var noteMarkers = noteReferences is null ? null : new StringBuilder();
         var paragraphs = cell
             .Descendants<W.Paragraph>()
             .Where(p => !IsInNestedTable(p, cell))
-            .Select(ParagraphPlainText)
+            .Select(p => ParagraphPlainText(p, noteReferences, noteMarkers))
             .Where(text => text.Length > 0);
-        return MarkdownText.EscapeInlineCell(string.Join(" ", paragraphs));
+        var text = MarkdownText.EscapeInlineCell(string.Join(" ", paragraphs));
+
+        // Note markers ([^fn2]) are generated structure, so append them PAST the cell escaping, at the cell's
+        // end — a Markdown table cell can't host a multi-line note, so the marker links to the definition
+        // appended at the document end (#315). Position within the cell is not preserved (acceptable for a
+        // cell), but the reference is captured rather than silently dropped.
+        return noteMarkers is { Length: > 0 } ? text + noteMarkers : text;
     }
 
     /// <summary>
@@ -84,27 +95,50 @@ internal static class WordTableRenderer
         return false;
     }
 
-    private static string ParagraphPlainText(W.Paragraph paragraph)
+    private static string ParagraphPlainText(
+        W.Paragraph paragraph, ICollection<NoteReference>? noteReferences, StringBuilder? noteMarkers)
     {
         // Cell text is rendered as plain inline text (no bold/italic markup inside a table cell this step):
         // read w:t (delText excluded => accepted view of tracked changes, matching DocxExtractor.ParagraphText),
-        // and turn tabs / line breaks into a space since a cell can't span lines.
+        // and turn tabs / line breaks into a space since a cell can't span lines. A footnote/endnote reference
+        // is collected (its marker accumulated for the cell, its body defined at document end) rather than
+        // silently dropped (#315).
         var sb = new StringBuilder();
-        foreach (var element in paragraph.Descendants<DocumentFormat.OpenXml.OpenXmlElement>())
+        foreach (var element in paragraph.Descendants<OpenXmlElement>())
         {
-            switch (element.LocalName)
+            switch (element)
             {
-                case "t":
-                    sb.Append(element.InnerText);
+                case W.FootnoteReference fn when noteReferences is not null && fn.Id?.Value is { } fnId:
+                    CollectNote(new NoteReference(NoteKind.Footnote, fnId), noteReferences, noteMarkers);
                     break;
-                case "tab":
-                case "br":
-                case "cr":
-                    sb.Append(' ');
+
+                case W.EndnoteReference en when noteReferences is not null && en.Id?.Value is { } enId:
+                    CollectNote(new NoteReference(NoteKind.Endnote, enId), noteReferences, noteMarkers);
+                    break;
+
+                default:
+                    switch (element.LocalName)
+                    {
+                        case "t":
+                            sb.Append(element.InnerText);
+                            break;
+                        case "tab":
+                        case "br":
+                        case "cr":
+                            sb.Append(' ');
+                            break;
+                    }
+
                     break;
             }
         }
 
         return sb.ToString().Trim();
+    }
+
+    private static void CollectNote(NoteReference note, ICollection<NoteReference> sink, StringBuilder? markers)
+    {
+        markers?.Append(note.Marker);
+        sink.Add(note);
     }
 }

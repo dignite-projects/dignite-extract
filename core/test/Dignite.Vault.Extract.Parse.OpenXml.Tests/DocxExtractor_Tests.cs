@@ -872,6 +872,37 @@ public class DocxExtractor_Tests
     }
 
     [Fact]
+    public async Task Captures_a_footnote_anchored_in_a_heading()
+    {
+        // #315: a footnote reference inside a HeadingN. The plain-text heading path used to drop both the
+        // marker and the note body silently, bypassing #268. Now the heading carries the marker and the body
+        // is defined at the document end.
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .HeadingFootnote("Chapter One", 2, "Heading note body.", level: 1));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("# Chapter One[^fn2]");
+        result.Markdown.ShouldContain("[^fn2]: Heading note body.");
+        result.IsComplete.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Captures_a_footnote_anchored_in_a_table_cell()
+    {
+        // #315: a footnote reference inside a table cell. The cell path used to drop both the marker and the
+        // body silently, bypassing #268. Now the marker is appended to the cell text and the body is defined.
+        var docx = DocxFixtures.Build(new DocxFixtures.DocSpec()
+            .FootnoteInTableCell("Cell value", 2, "Cell note body."));
+
+        var result = await CreateExtractor().ExtractAsync(new MemoryStream(docx), DocxContext());
+
+        result.Markdown.ShouldContain("Cell value[^fn2]");
+        result.Markdown.ShouldContain("[^fn2]: Cell note body.");
+        result.IsComplete.ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task A_document_without_notes_emits_no_note_markers()
     {
         var docx = DocxFixtures.Build(new DocxFixtures.DocSpec().Paragraph("Plain body, no notes."));
