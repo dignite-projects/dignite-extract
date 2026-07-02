@@ -1,0 +1,13 @@
+// Empty number/date/text inputs collapse under Bootstrap's `w-auto`, so give the composer's field picker
+// and value inputs sensible minimum widths while still allowing them to grow with content.
+.field-value-filter {
+  &__field {
+    width: auto;
+    min-width: 12rem;
+  }
+
+  &__value {
+    width: auto;
+    min-width: 9rem;
+  }
+}
