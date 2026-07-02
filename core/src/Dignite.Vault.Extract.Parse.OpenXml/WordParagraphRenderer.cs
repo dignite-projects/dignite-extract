@@ -29,9 +29,10 @@ internal static class WordParagraphRenderer
     public static string Render(
         W.Paragraph paragraph,
         MainDocumentPart mainPart,
-        ICollection<NoteReference>? noteReferences = null)
+        ICollection<NoteReference>? noteReferences = null,
+        IReadOnlyDictionary<string, string?>? hyperlinkUris = null)
     {
-        var builder = new InlineBuilder(mainPart, noteReferences);
+        var builder = new InlineBuilder(mainPart, noteReferences, hyperlinkUris);
         builder.Walk(paragraph);
         return builder.ToMarkdown();
     }
@@ -44,15 +45,20 @@ internal static class WordParagraphRenderer
     {
         private readonly MainDocumentPart _mainPart;
         private readonly ICollection<NoteReference>? _noteReferences;
+        private readonly IReadOnlyDictionary<string, string?>? _hyperlinkUris;
         private readonly StringBuilder _sb = new();
         private string? _pendingText;
         private bool _pendingBold;
         private bool _pendingItalic;
 
-        public InlineBuilder(MainDocumentPart mainPart, ICollection<NoteReference>? noteReferences)
+        public InlineBuilder(
+            MainDocumentPart mainPart,
+            ICollection<NoteReference>? noteReferences,
+            IReadOnlyDictionary<string, string?>? hyperlinkUris)
         {
             _mainPart = mainPart;
             _noteReferences = noteReferences;
+            _hyperlinkUris = hyperlinkUris;
         }
 
         public void Walk(DocumentFormat.OpenXml.OpenXmlElement container)
@@ -197,6 +203,13 @@ internal static class WordParagraphRenderer
             {
                 // An internal anchor (w:anchor, no r:id) has no resolvable URL — render the text only.
                 return null;
+            }
+
+            // Per-document id -> uri cache (#318) avoids an O(relationships) scan per hyperlink; a null cache
+            // (e.g. the note-body render path) falls back to the direct lookup.
+            if (_hyperlinkUris is not null)
+            {
+                return _hyperlinkUris.TryGetValue(id, out var uri) ? uri : null;
             }
 
             var relationship = _mainPart.HyperlinkRelationships.FirstOrDefault(r => r.Id == id);

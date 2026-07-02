@@ -162,6 +162,10 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
                 LanguageHints = ResolveLanguageHints(context)
             };
 
+            // Build the per-document hyperlink id -> uri cache once (#318) so a link resolves in O(1) rather
+            // than scanning HyperlinkRelationships per hyperlink during the body render.
+            state.HyperlinkUris = mainPart is null ? null : BuildHyperlinkUris(mainPart);
+
             var blocks = new List<string>();
 
             if (body is not null)
@@ -315,11 +319,11 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
         else
         {
             // Body paragraphs render with inline formatting (bold/italic) and hyperlinks.
-            var markdown = WordParagraphRenderer.Render(paragraph, mainPart, state.NoteReferences);
+            var markdown = WordParagraphRenderer.Render(paragraph, mainPart, state.NoteReferences, state.HyperlinkUris);
             if (!string.IsNullOrWhiteSpace(markdown))
             {
                 // A list item (w:numPr) gets a Markdown bullet / ordered marker, indented by nesting level.
-                var list = WordListNumbering.Resolve(paragraph, mainPart.NumberingDefinitionsPart);
+                var list = WordListNumbering.Resolve(paragraph, mainPart.NumberingDefinitionsPart, state.NumberingFormatCache);
                 if (list is { } listInfo)
                 {
                     // Clamp the nesting level: a malformed / attacker w:ilvl would otherwise allocate a huge
@@ -378,31 +382,55 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
         DocxExtractionState state,
         CancellationToken cancellationToken)
     {
-        // Images: one transcription per picture instance. A pic:pic appears exactly once in the tree, so a
-        // grouped drawing's images and a text-box image are each handled once with no double-OCR guard needed.
-        foreach (var picture in container.Descendants<Pic.Picture>())
+        // One subtree traversal (#318): collect the pictures, chart drawings, and legacy VML images in a
+        // single Descendants() pass, then emit in the established order (pictures, then charts, then VML) so
+        // the Markdown output is byte-for-byte unchanged. A pic:pic is transcribed regardless of a text-box
+        // ancestor (#322 — the text-box image is real content), while a chart / VML inside a text box stays
+        // skipped (an accepted blind spot). Known VML limitation: not decorative-size-filtered (its size lives
+        // in a style attribute, not wp:extent), so a tiny VML icon may be transcribed; VML in modern DOCX is
+        // rare, so this is accepted.
+        var pictures = new List<Pic.Picture>();
+        var chartDrawings = new List<W.Drawing>();
+        var vmlImages = new List<DocumentFormat.OpenXml.OpenXmlElement>();
+
+        foreach (var element in container.Descendants())
+        {
+            switch (element)
+            {
+                case Pic.Picture picture:
+                    pictures.Add(picture);
+                    break;
+
+                case W.Drawing drawing when !HasTextBoxAncestor(drawing):
+                    chartDrawings.Add(drawing);
+                    break;
+
+                default:
+                    if (element.LocalName == "imagedata" && !HasTextBoxAncestor(element))
+                    {
+                        vmlImages.Add(element);
+                    }
+
+                    break;
+            }
+        }
+
+        // Images: one transcription per picture instance, with metadata from the picture's own inline/anchor.
+        foreach (var picture in pictures)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await HandlePictureAsync(picture, mainPart, blocks, state, cancellationToken);
         }
 
-        // Charts: a w:drawing referencing a c:chart renders its backing data as a table (no pic:pic).
-        // HandleChart self-filters non-chart drawings, so image / SmartArt / diagram / OLE drawings fall
-        // through untouched. A chart nested in a text box stays skipped (an accepted blind spot, unchanged).
-        foreach (var drawing in container.Descendants<W.Drawing>().Where(d => !HasTextBoxAncestor(d)))
+        // Charts: a w:drawing referencing a c:chart renders as a table; HandleChart self-filters non-charts.
+        foreach (var drawing in chartDrawings)
         {
             cancellationToken.ThrowIfCancellationRequested();
             HandleChart(drawing, mainPart, blocks, state);
         }
 
-        // Legacy VML raster images (w:pict/v:imagedata) are not pic:pic, so the picture walk above misses
-        // them. They reference PNG/JPEG bytes via an r:id (or o:relid) relationship — transcribe them too
-        // rather than silently dropping the figure. (A vector-only VML shape has no imagedata relationship.)
-        // Known limitation: VML images are NOT decorative-size-filtered (a VML shape's size lives in its style
-        // attribute, not wp:extent), so a tiny VML icon may be transcribed where its DrawingML equivalent
-        // would be skipped by IsDecorative. VML in modern DOCX is rare, so this is accepted (see #318-area).
-        foreach (var imageData in container.Descendants()
-                     .Where(e => e.LocalName == "imagedata" && !HasTextBoxAncestor(e)))
+        // Legacy VML raster images (v:imagedata), not pic:pic — transcribe via their r:id relationship.
+        foreach (var imageData in vmlImages)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relationshipId = VmlImageRelationshipId(imageData);
@@ -808,6 +836,21 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
         => NearestDrawingWrapper(picture)?.GetFirstChild<DW.DocProperties>();
 
     /// <summary>
+    /// Builds the per-document hyperlink relationship-id → URI map once (#318). Relationship ids are unique,
+    /// so a plain dictionary suffices; a relationship with no target maps to <c>null</c> (an internal anchor).
+    /// </summary>
+    private static IReadOnlyDictionary<string, string?> BuildHyperlinkUris(MainDocumentPart mainPart)
+    {
+        var map = new Dictionary<string, string?>();
+        foreach (var relationship in mainPart.HyperlinkRelationships)
+        {
+            map[relationship.Id] = relationship.Uri?.ToString();
+        }
+
+        return map;
+    }
+
+    /// <summary>
     /// Resolves the OCR language hints for embedded-image transcription: the per-document hints from the
     /// context, or empty. There is no central host default (#441 removed it); a provider that needs a
     /// language default reads its own config (e.g. PaddleOcr:Languages). Kept <c>protected virtual</c> so a
@@ -839,5 +882,11 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
 
         /// <summary>References whose note body could not be resolved — dangling id / missing notes part (#268).</summary>
         public int FailedNotes;
+
+        /// <summary>Per-document hyperlink relationship-id → URI cache, built once (#318); null until built.</summary>
+        public IReadOnlyDictionary<string, string?>? HyperlinkUris;
+
+        /// <summary>Per-document <c>(numId, level) → numbering-format</c> memo, populated lazily (#318).</summary>
+        public Dictionary<(int NumId, int Level), W.NumberFormatValues?> NumberingFormatCache { get; } = new();
     }
 }

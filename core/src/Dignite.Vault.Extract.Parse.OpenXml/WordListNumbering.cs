@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using DocumentFormat.OpenXml.Packaging;
 using W = DocumentFormat.OpenXml.Wordprocessing;
@@ -22,7 +23,12 @@ internal static class WordListNumbering
     public readonly record struct ListInfo(int Level, bool Ordered);
 
     /// <returns>The list placement, or <c>null</c> when the paragraph is not a list item.</returns>
-    public static ListInfo? Resolve(W.Paragraph paragraph, NumberingDefinitionsPart? numberingPart)
+    /// <param name="formatCache">Optional per-document <c>(numId, level) → format</c> memo (#318): when
+    /// supplied, the numbering part is scanned once per distinct key rather than once per list item.</param>
+    public static ListInfo? Resolve(
+        W.Paragraph paragraph,
+        NumberingDefinitionsPart? numberingPart,
+        IDictionary<(int NumId, int Level), W.NumberFormatValues?>? formatCache = null)
     {
         var numberingProperties = paragraph.ParagraphProperties?.NumberingProperties;
         var numId = numberingProperties?.NumberingId?.Val?.Value;
@@ -34,7 +40,7 @@ internal static class WordListNumbering
         }
 
         var level = numberingProperties!.NumberingLevelReference?.Val?.Value ?? 0;
-        var format = ResolveFormat(numId.Value, level, numberingPart);
+        var format = ResolveFormat(numId.Value, level, numberingPart, formatCache);
 
         // An explicit "none" format means numbering is turned off for this level — treat as a normal paragraph.
         if (format == W.NumberFormatValues.None)
@@ -48,7 +54,29 @@ internal static class WordListNumbering
         return new ListInfo(level, ordered);
     }
 
-    private static W.NumberFormatValues? ResolveFormat(int numId, int level, NumberingDefinitionsPart? numberingPart)
+    private static W.NumberFormatValues? ResolveFormat(
+        int numId,
+        int level,
+        NumberingDefinitionsPart? numberingPart,
+        IDictionary<(int NumId, int Level), W.NumberFormatValues?>? formatCache)
+    {
+        // Cache the (numId, level) -> format resolution once per document (#318) — otherwise every list item
+        // re-scans the numbering part's instances + abstract definitions.
+        if (formatCache is not null && formatCache.TryGetValue((numId, level), out var cached))
+        {
+            return cached;
+        }
+
+        var format = ComputeFormat(numId, level, numberingPart);
+        if (formatCache is not null)
+        {
+            formatCache[(numId, level)] = format;
+        }
+
+        return format;
+    }
+
+    private static W.NumberFormatValues? ComputeFormat(int numId, int level, NumberingDefinitionsPart? numberingPart)
     {
         var numbering = numberingPart?.Numbering;
         if (numbering is null)
