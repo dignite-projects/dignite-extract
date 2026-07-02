@@ -1,6 +1,8 @@
-# Export Templates
+# Data Download
 
-Export templates are Dignite Vault Extract's **file-based egress** — the "last mile" to downstream systems that have no API and can only ingest files (Yayoi, freee, mid-market Yonyou, and similar accounting packages that import CSV). They sit alongside the programmatic egresses (REST / MCP / EventBus, with Webhook planned) but serve a different audience: a human who downloads a file and imports it into another system.
+> **Naming (#414):** surfaced in the operator UI as **Data Download** (数据下载). "Export template" stays the internal/code name — the REST route `/api/vault-extract/export-templates`, the `Documents.Templates.*` / `Documents.Export` permission keys, and the `ExportTemplate` entity are unchanged; only the operator-facing wording changed. A "download configuration" is just a saved column projection, run via a download action.
+
+Data Download is Dignite Vault Extract's **file-based egress** — the "last mile" to downstream systems that have no API and can only ingest files (Yayoi, freee, mid-market Yonyou, and similar accounting packages that import CSV). It sits alongside the programmatic egresses (REST / MCP / EventBus, with Webhook planned) but serves a different audience: a human who downloads a file and imports it into another system. **Industry-format conversion (弥生 仕訳 layout, account-code mapping, tax split) is NOT done here — it lives downstream** in a consumer-side skill or business system. This surface only serializes the channel's own structured data (field projection → rename → ordering) as CSV / XLSX.
 
 A template is **per-tenant configuration** following the same two-layer model as `DocumentType` and `FieldDefinition`. Dignite Vault Extract ships **no built-in templates** — there is no industry vertical schema baked in. The export engine only does **field projection → rename → ordering → serialization**, with **zero business transformation** (no tax calculation, no account-code mapping, no currency conversion). Business formats are something tenants *compose* out of a template; Dignite Vault Extract enables them rather than doing them.
 

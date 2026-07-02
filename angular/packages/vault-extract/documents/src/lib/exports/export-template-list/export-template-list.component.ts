@@ -48,6 +48,7 @@ import {
 
 // Mirrors ExportTemplateConsts (Domain.Shared).
 const MAX_NAME_LENGTH = 128;
+const MAX_COLUMN_COUNT = 100;
 
 const EXPORT_TEMPLATE_SORTS: SortAccessors<ExportTemplateDto> = {
   name: template => template.name,
@@ -275,22 +276,55 @@ export class ExportTemplateListComponent implements OnInit {
   // Switching the document type invalidates already-picked field columns (they belong to the prior type).
   onDocumentTypeChange(): void {
     const documentTypeId = this.form.controls.documentTypeId.value;
-    this.columns.controls.forEach(ctrl => ctrl.get('fieldDefinitionId')?.setValue(''));
-    this.loadFieldDefinitions(documentTypeId);
+    if (this.editing() === 'create') {
+      // #414: a new download config defaults to ALL of the type's fields (operator removes rather than
+      // adds), so replace the columns with the full field set once the definitions load.
+      this.loadFieldDefinitions(documentTypeId, true);
+    } else {
+      // Edit mode: the type's fields changed, so previously-picked columns are stale — clear their field
+      // selection but keep the rows; do not auto-replace an existing saved config.
+      this.columns.controls.forEach(ctrl => ctrl.get('fieldDefinitionId')?.setValue(''));
+      this.loadFieldDefinitions(documentTypeId, false);
+    }
   }
 
-  private loadFieldDefinitions(documentTypeId: string | undefined): void {
+  private loadFieldDefinitions(documentTypeId: string | undefined, prefillAllColumns = false): void {
     if (!documentTypeId) {
       this.fieldDefinitions.set([]);
+      if (prefillAllColumns) {
+        this.columns.clear();
+        this.addColumn();
+      }
       return;
     }
     this.fieldDefinitionService
       .getList({ documentTypeId })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: defs => this.fieldDefinitions.set(defs),
+        next: defs => {
+          this.fieldDefinitions.set(defs);
+          if (prefillAllColumns) {
+            this.prefillAllColumns(defs);
+          }
+        },
         error: () => this.fieldDefinitions.set([]),
       });
+  }
+
+  // #414: seed a new download config with every field of the chosen type (ordered by displayOrder), so
+  // "all fields" is the default and the operator removes the unwanted ones. Respects the column cap and
+  // surfaces a notice rather than silently truncating; an empty type keeps one blank row.
+  private prefillAllColumns(defs: FieldDefinitionDto[]): void {
+    const ordered = [...defs].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+    this.columns.clear();
+    if (ordered.length === 0) {
+      this.addColumn();
+      return;
+    }
+    ordered.slice(0, MAX_COLUMN_COUNT).forEach(d => this.addColumn(d.id));
+    if (ordered.length > MAX_COLUMN_COUNT) {
+      this.toaster.info('::ExportTemplate:ColumnCapNotice', '::Info');
+    }
   }
 
   closeModal(): void {
