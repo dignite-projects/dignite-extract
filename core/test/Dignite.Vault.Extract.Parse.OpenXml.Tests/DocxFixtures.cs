@@ -116,7 +116,9 @@ internal static class DocxFixtures
     /// created either (the missing-part case). The notes part, when created, also carries the auto-inserted
     /// separator / continuationSeparator notes so the extractor's separator exclusion is exercised.
     /// </summary>
-    public sealed record NoteSpec(string ParagraphText, int Id, bool IsEndnote, string? NoteText) : BlockSpec;
+    public sealed record NoteSpec(
+        string ParagraphText, int Id, bool IsEndnote, string? NoteText,
+        int? HeadingLevel = null, bool InTableCell = false) : BlockSpec;
 
     /// <summary>A paragraph carrying a single grouped drawing (wpg:wgp) with several pictures (#322).</summary>
     public sealed record GroupedImagesSpec(IReadOnlyList<ImageSpec> Images) : BlockSpec;
@@ -271,6 +273,20 @@ internal static class DocxFixtures
         public DocSpec Endnote(string paragraphText, int id, string noteText)
         {
             Blocks.Add(new NoteSpec(paragraphText, id, IsEndnote: true, noteText));
+            return this;
+        }
+
+        /// <summary>A HeadingN paragraph carrying a footnote reference (#315): a note anchored in a heading.</summary>
+        public DocSpec HeadingFootnote(string headingText, int id, string noteText, int level = 1)
+        {
+            Blocks.Add(new NoteSpec(headingText, id, IsEndnote: false, noteText, HeadingLevel: level));
+            return this;
+        }
+
+        /// <summary>A single-cell table whose cell paragraph carries a footnote reference (#315): a note anchored in a table cell.</summary>
+        public DocSpec FootnoteInTableCell(string cellText, int id, string noteText)
+        {
+            Blocks.Add(new NoteSpec(cellText, id, IsEndnote: false, noteText, InTableCell: true));
             return this;
         }
 
@@ -472,8 +488,15 @@ internal static class DocxFixtures
         var reference = note.IsEndnote
             ? $"<w:endnoteReference w:id=\"{note.Id}\"/>"
             : $"<w:footnoteReference w:id=\"{note.Id}\"/>";
+        var pPr = note.HeadingLevel is { } level
+            ? $"<w:pPr><w:pStyle w:val=\"Heading{level}\"/></w:pPr>"
+            : string.Empty;
         // Text run, then a separate run carrying only the reference (as Word authors it).
-        return $"<w:p><w:r><w:t xml:space=\"preserve\">{Escape(note.ParagraphText)}</w:t></w:r><w:r>{reference}</w:r></w:p>";
+        var paragraph = $"<w:p>{pPr}<w:r><w:t xml:space=\"preserve\">{Escape(note.ParagraphText)}</w:t></w:r><w:r>{reference}</w:r></w:p>";
+        // A cell-scoped reference lives inside a single-cell table so it is reached via the table path (#315).
+        return note.InTableCell
+            ? $"<w:tbl><w:tblPr/><w:tr><w:tc>{paragraph}</w:tc></w:tr></w:tbl>"
+            : paragraph;
     }
 
     // A note body: one <w:p> per paragraph, splitting NoteText on a blank line so a multi-paragraph note body

@@ -246,8 +246,9 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
                 {
                     // Native table -> Markdown table (pure structured extraction, no OCR). A null/empty render
                     // (layout-only or empty grid) is simply not added; a parse fault is caught by the caller's
-                    // per-block try/catch and tripped as FailedContainers.
-                    var renderedTable = WordTableRenderer.Render(table);
+                    // per-block try/catch and tripped as FailedContainers. The note collector is threaded in so
+                    // a footnote/endnote reference inside a cell is captured, not silently dropped (#315).
+                    var renderedTable = WordTableRenderer.Render(table, state.NoteReferences);
                     if (!string.IsNullOrWhiteSpace(renderedTable))
                     {
                         blocks.Add(renderedTable!);
@@ -305,15 +306,21 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
         {
             // Headings render as plain collapsed text (no inline emphasis markup inside an ATX heading).
             var text = ParagraphText(paragraph);
-            if (!string.IsNullOrWhiteSpace(text))
+            // A footnote/endnote reference inside a heading is real content. The plain-text heading path does
+            // not go through WordParagraphRenderer (which collects markers for body paragraphs), so collect
+            // the references here and append their markers — otherwise the marker and the note body were
+            // silently dropped and the loss bypassed the #268 signal (#315).
+            var noteMarkers = CollectNoteMarkers(paragraph, state.NoteReferences);
+            if (!string.IsNullOrWhiteSpace(text) || noteMarkers.Length > 0)
             {
                 // Collapse internal line breaks so a multi-line heading renders as one clean ATX heading.
                 var oneLine = string.Join(
                     " ",
                     text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
                 // Escape the heading text so a literal "#"/"[...]"/"*" in it does not extend the ATX run or
-                // inject a link/emphasis (the "# " prefix we add is generated structure, kept intact).
-                blocks.Add(new string('#', level) + " " + MarkdownText.EscapeBlockText(oneLine));
+                // inject a link/emphasis (the "# " prefix we add is generated structure, kept intact). Note
+                // markers are generated structure too, so they are appended past the escape.
+                blocks.Add(new string('#', level) + " " + MarkdownText.EscapeBlockText(oneLine) + noteMarkers);
             }
         }
         else
@@ -814,6 +821,40 @@ public class DocxExtractor : IMarkdownTextProvider, ITransientDependency
         }
 
         return sb.ToString().Trim();
+    }
+
+    /// <summary>
+    /// Appends a Markdown marker (<c>[^fn{id}]</c> / <c>[^en{id}]</c>) for each footnote/endnote reference in
+    /// the paragraph, in reading order, and records the reference on <paramref name="sink"/> so its body is
+    /// resolved and defined at the document end (#315). Used by the plain-text heading path, which — unlike
+    /// the body path via <see cref="WordParagraphRenderer"/> — would otherwise drop the reference silently.
+    /// Text-box references are excluded (a text box is emitted as its own block).
+    /// </summary>
+    private static string CollectNoteMarkers(W.Paragraph paragraph, ICollection<NoteReference> sink)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var element in paragraph.Descendants<DocumentFormat.OpenXml.OpenXmlElement>())
+        {
+            if (HasTextBoxAncestor(element))
+            {
+                continue;
+            }
+
+            var reference = element switch
+            {
+                W.FootnoteReference fn when fn.Id?.Value is { } fnId => new NoteReference(NoteKind.Footnote, fnId),
+                W.EndnoteReference en when en.Id?.Value is { } enId => new NoteReference(NoteKind.Endnote, enId),
+                _ => (NoteReference?)null
+            };
+
+            if (reference is { } note)
+            {
+                sb.Append(note.Marker);
+                sink.Add(note);
+            }
+        }
+
+        return sb.ToString();
     }
 
     private static bool HasTextBoxAncestor(DocumentFormat.OpenXml.OpenXmlElement element)
