@@ -33,6 +33,7 @@ import { of } from 'rxjs';
 import {
   CabinetDto,
   CabinetService,
+  DocumentFieldFilter,
   DocumentLifecycleStatus,
   DocumentListItemDto,
   DocumentReviewReasons,
@@ -47,6 +48,7 @@ import {
 } from '@dignite/vault-extract';
 import { ClientPagedResult, configureEntityTable, EXTRACT_TABLES } from '../../shared/extensible-table';
 import { formatExtractedFieldValue } from '../../shared/format-field-value';
+import { FieldValueFilterComponent } from '../../shared/field-value-filter/field-value-filter.component';
 
 interface TableActivateEvent {
   type?: string;
@@ -63,6 +65,7 @@ interface TableActivateEvent {
     LocalizationPipe,
     ExtensibleTableComponent,
     NgbDropdownModule,
+    FieldValueFilterComponent,
   ],
   providers: [
     ListService,
@@ -132,6 +135,11 @@ export class DocumentListComponent implements OnInit {
   // definitions (not the union of extractedFields keys) so headers stay stable and
   // friendly even for fields no document in the page happened to fill.
   extractedFieldColumns = signal<FieldDefinitionDto[]>([]);
+  // #415: extracted-field-value filters composed by lib-field-value-filter. AND-combined with the metadata
+  // filters and sent as GetDocumentListInput.fieldFilters. Only ever non-empty while a single document type
+  // is selected (the backend requires documentTypeCode when fieldFilters are present); cleared on type
+  // change so one type's field filters can never be applied to another type or to a no-type view.
+  fieldValueFilters = signal<DocumentFieldFilter[]>([]);
   selectedTypeId = signal('');
   isConfirming = signal(false);
 
@@ -246,10 +254,22 @@ export class DocumentListComponent implements OnInit {
 
   onTypeFilterChange(value: string): void {
     this.typeFilter.set(value);
+    // #415: the previous type's field filters cannot apply to another type (or to a no-type view). Drop
+    // them so they are neither sent on the refresh below nor left dangling; the composer resets its own
+    // rows when its fieldDefinitions input changes.
+    this.fieldValueFilters.set([]);
     this.updateExtractedFieldColumns([]);
     if (value) {
       this.loadExtractedFieldColumns(value);
     }
+    this.refreshListFromFirstPage();
+  }
+
+  // #415: the field-value composer emits its composed, server-shaped filters on Apply (and [] on Clear).
+  // Store them and re-query from page 1 so pagination/count stay consistent; buildFilter folds them into
+  // GetDocumentListInput.fieldFilters, AND-combined with the metadata filters.
+  onFieldFiltersChange(filters: DocumentFieldFilter[]): void {
+    this.fieldValueFilters.set(filters);
     this.refreshListFromFirstPage();
   }
 
@@ -376,6 +396,7 @@ export class DocumentListComponent implements OnInit {
   }
 
   private buildFilter(): Partial<GetDocumentListInput> {
+    const fieldFilters = this.fieldValueFilters();
     return {
       documentTypeCode: this.typeFilter() || undefined,
       cabinetId: this.cabinetFilter() || undefined,
@@ -383,6 +404,9 @@ export class DocumentListComponent implements OnInit {
       lifecycleStatus: this.lifecycleFilter(),
       // #395: same RequiresAttention predicate the old review queue ran.
       hasReviewReasons: this.reviewFilter() || undefined,
+      // #415: type-scoped extracted-field-value filters, AND-combined server-side with the above. Omitted
+      // when empty so an unfiltered query keeps its previous shape; only ever populated with a type selected.
+      fieldFilters: fieldFilters.length ? fieldFilters : undefined,
     };
   }
 

@@ -1,0 +1,116 @@
+<div class="field-value-filter border rounded p-2 mb-3 bg-body-tertiary">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <span class="fw-semibold small">
+      <i class="fas fa-filter me-1"></i>
+      {{ '::Document:Filter:Fields' | abpLocalization }}
+    </span>
+    <button
+      type="button"
+      class="btn btn-sm btn-outline-primary"
+      (click)="addRow()"
+      [disabled]="!canAddRow() || !hasFilterableFields()"
+    >
+      <i class="fas fa-plus me-1"></i>
+      {{ '::Document:Filter:AddField' | abpLocalization }}
+    </button>
+  </div>
+
+  @if (!hasFilterableFields()) {
+    <p class="text-muted small mb-0">{{ '::Document:Filter:NoFilterableFields' | abpLocalization }}</p>
+  } @else {
+    @for (row of rows(); track row.key) {
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <!-- Field picker (LongText excluded upstream — the server loud-fails a LongText filter) -->
+        <select
+          class="form-select form-select-sm field-value-filter__field"
+          [ngModel]="row.fieldName"
+          (ngModelChange)="onFieldChange(row.key, $event)"
+        >
+          <option value="">{{ '::Document:Filter:SelectField' | abpLocalization }}</option>
+          @for (f of filterableFields(); track f.id) {
+            <option [value]="f.name">{{ f.displayName || f.name }}</option>
+          }
+        </select>
+
+        @if (row.fieldName) {
+          <!-- Operator: only Number/Date/DateTime offer equality-vs-range; Text/Boolean are equality-only -->
+          @if (supportsRange(row.dataType)) {
+            <select
+              class="form-select form-select-sm w-auto"
+              [ngModel]="row.mode"
+              (ngModelChange)="onModeChange(row.key, $event)"
+            >
+              <option value="eq">{{ '::Document:Filter:Operator:Equals' | abpLocalization }}</option>
+              <option value="range">{{ '::Document:Filter:Operator:Range' | abpLocalization }}</option>
+            </select>
+          }
+
+          @if (row.dataType === FieldDataType.Boolean) {
+            <select
+              class="form-select form-select-sm w-auto"
+              [ngModel]="row.value"
+              (ngModelChange)="patchRow(row.key, { value: coerce($event) })"
+            >
+              <option value="">{{ '::Document:Filter:SelectValue' | abpLocalization }}</option>
+              <option value="true">{{ '::Document:Filter:BooleanTrue' | abpLocalization }}</option>
+              <option value="false">{{ '::Document:Filter:BooleanFalse' | abpLocalization }}</option>
+            </select>
+          } @else if (row.mode === 'range' && supportsRange(row.dataType)) {
+            <input
+              class="form-control form-control-sm field-value-filter__value"
+              [type]="inputType(row.dataType)"
+              [attr.maxlength]="maxValueLength"
+              [ngModel]="row.min"
+              (ngModelChange)="patchRow(row.key, { min: coerce($event) })"
+              [attr.placeholder]="'::Document:Filter:MinPlaceholder' | abpLocalization"
+            />
+            <span class="text-muted">–</span>
+            <input
+              class="form-control form-control-sm field-value-filter__value"
+              [type]="inputType(row.dataType)"
+              [attr.maxlength]="maxValueLength"
+              [ngModel]="row.max"
+              (ngModelChange)="patchRow(row.key, { max: coerce($event) })"
+              [attr.placeholder]="'::Document:Filter:MaxPlaceholder' | abpLocalization"
+            />
+          } @else {
+            <input
+              class="form-control form-control-sm field-value-filter__value"
+              [type]="inputType(row.dataType)"
+              [attr.maxlength]="maxValueLength"
+              [ngModel]="row.value"
+              (ngModelChange)="patchRow(row.key, { value: coerce($event) })"
+              [attr.placeholder]="'::Document:Filter:ValuePlaceholder' | abpLocalization"
+            />
+          }
+        }
+
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-danger"
+          (click)="removeRow(row.key)"
+          [attr.aria-label]="'::Document:Filter:Remove' | abpLocalization"
+          title="{{ '::Document:Filter:Remove' | abpLocalization }}"
+        >
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    }
+
+    @if (!rows().length) {
+      <p class="text-muted small mb-0">{{ '::Document:Filter:AddFieldHint' | abpLocalization }}</p>
+    }
+
+    <div class="d-flex gap-2 mt-2">
+      <button type="button" class="btn btn-sm btn-primary" (click)="apply()">
+        <i class="fas fa-search me-1"></i>
+        {{ '::Document:Filter:Apply' | abpLocalization }}
+      </button>
+      @if (rows().length) {
+        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="clear()">
+          {{ '::Document:Filter:Clear' | abpLocalization }}
+        </button>
+      }
+    </div>
+  }
+</div>
