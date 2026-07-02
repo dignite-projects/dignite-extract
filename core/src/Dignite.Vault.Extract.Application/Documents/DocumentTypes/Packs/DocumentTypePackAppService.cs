@@ -79,12 +79,12 @@ public class DocumentTypePackAppService : VaultExtractAppService, IDocumentTypeP
         return packs;
     }
 
-    // Import both creates and updates types + fields, so it requires the full config-management permission
-    // set (all four must be granted). This is not an LLM-influenced path, so [Authorize] fires normally.
+    // Import always may create types + fields, so both Create permissions gate entry. The Update permissions
+    // are asserted lazily, only on the branches that actually update an existing type / field (ImportPackAsync
+    // / ImportFieldsAsync), so a CreateOnly import — or a first-time import of all-new types/fields — never
+    // demands Update. This is not an LLM-influenced path, so [Authorize] fires normally.
     [Authorize(VaultExtractPermissions.DocumentTypes.Create)]
-    [Authorize(VaultExtractPermissions.DocumentTypes.Update)]
     [Authorize(VaultExtractPermissions.FieldDefinitions.Create)]
-    [Authorize(VaultExtractPermissions.FieldDefinitions.Update)]
     public virtual async Task<DocumentTypePackImportResultDto> ImportAsync(ImportDocumentTypePacksInput input)
     {
         // Validate every pack version up front, before touching the store, so an unsupported version can
@@ -149,6 +149,9 @@ public class DocumentTypePackAppService : VaultExtractAppService, IDocumentTypeP
         }
         else if (mode == PackImportMode.CreateOrUpdate)
         {
+            // Updating an existing type needs the Update permission — asserted here rather than as a blanket
+            // method attribute, so a CreateOnly / all-new import never requires it.
+            await CheckPolicyAsync(VaultExtractPermissions.DocumentTypes.Update);
             type.Update(pack.TypeCode, pack.DisplayName, pack.Description, pack.ConfidenceThreshold, pack.Priority);
             StampProvenance(type, pack.Version);
             await _documentTypeRepository.UpdateAsync(type, autoSave: true);
@@ -196,6 +199,9 @@ public class DocumentTypePackAppService : VaultExtractAppService, IDocumentTypeP
             }
             else if (mode == PackImportMode.CreateOrUpdate)
             {
+                // Updating an existing field needs the Update permission — asserted lazily; a CreateOnly or
+                // all-new import never reaches here.
+                await CheckPolicyAsync(VaultExtractPermissions.FieldDefinitions.Update);
                 await GuardFieldMutationAsync(existing, f);
                 existing.Update(
                     f.Name,
