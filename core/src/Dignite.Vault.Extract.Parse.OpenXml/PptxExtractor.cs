@@ -114,8 +114,29 @@ public class PptxExtractor : IMarkdownTextProvider, ITransientDependency
 
         using (document)
         {
-            var presentation = document.PresentationPart?.Presentation;
-            var slideIds = presentation?.SlideIdList?.Elements<P.SlideId>().ToList() ?? new List<P.SlideId>();
+            List<P.SlideId> slideIds;
+            try
+            {
+                // presentation.xml parses lazily, so markup-compatibility processing (mc:AlternateContent
+                // collapsing, #319) runs on this access — a fault (e.g. an AlternateContent with no valid
+                // Choice/Fallback for the target FileFormatVersions) surfaces HERE, outside the per-slide
+                // try/catch below. Report empty + incomplete (the honest #268 escape hatch) rather than
+                // letting it escape ExtractAsync, mirroring the Open failure path above.
+                var presentation = document.PresentationPart?.Presentation;
+                slideIds = presentation?.SlideIdList?.Elements<P.SlideId>().ToList() ?? new List<P.SlideId>();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Logger.LogWarning(ex, "Could not read the presentation part; reporting empty + incomplete.");
+                return new TextExtractionResult
+                {
+                    Markdown = string.Empty,
+                    ProviderName = ProviderIdentifier,
+                    UsedOcr = false,
+                    IsComplete = false,
+                    IncompleteReason = "The presentation could not be opened (corrupt or unsupported file)."
+                };
+            }
 
             var state = new PptxExtractionState
             {
@@ -550,9 +571,10 @@ public class PptxExtractor : IMarkdownTextProvider, ITransientDependency
                 continue;
             }
 
-            // idx is the primary placeholder key; when the slide placeholder carries one, require the same
-            // idx. Otherwise fall back to a type match (title / body placeholders often omit idx).
-            var indexMatches = index is null ? ph.Index?.Value is null : ph.Index?.Value == index;
+            // idx is the primary placeholder key. Per ECMA-376 an absent idx defaults to 0, so a slide's
+            // <p:ph type="title"/> and a layout's <p:ph type="title" idx="0"/> are the same placeholder — treat
+            // absent and explicit 0 as equal (some producers write the explicit 0). Type must still match.
+            var indexMatches = (index ?? 0) == (ph.Index?.Value ?? 0);
             if (indexMatches
                 && PlaceholderTypesMatch(ph.Type?.Value, type)
                 && candidate.ShapeProperties?.Transform2D?.Offset is { } offset)
