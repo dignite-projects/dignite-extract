@@ -43,6 +43,12 @@ public static class VaultExtractErrorCodes
         public const string NoneConfigured = "Extract:NoDocumentTypesConfigured";
     }
 
+    // #444: config import/export ("pack") mechanism for a document type + its field definitions.
+    public static class DocumentTypePack
+    {
+        public const string UnsupportedVersion = "Extract:DocumentTypePackUnsupportedVersion";
+    }
+
     public static class FieldDefinition
     {
         public const string AlreadyExists = "Extract:FieldDefinitionAlreadyExists";
