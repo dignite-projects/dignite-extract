@@ -325,6 +325,7 @@
 
     "Extract:InvalidDocumentTypeCodeFormat": "Document type code '{typeCode}' is not allowed. Must match pattern '{pattern}' (letters, digits, underscore, hyphen segments, optionally separated by '.'; no leading/trailing/consecutive '.').",
     "Extract:DocumentTypeCodeAlreadyExists": "Document type code '{TypeCode}' is already in use (including soft-deleted records). Use a different code, or restore the existing one.",
+    "Extract:DocumentTypePackUnsupportedVersion": "Configuration pack for '{TypeCode}' uses an unsupported version ({Version}). This deployment supports pack version {Supported}.",
     "Extract:DocumentTypeInUse": "Document type '{TypeCode}' is still referenced by one or more documents. Reclassify those documents before deleting this type.",
     "Extract:DocumentTypeRestoreConflict": "Cannot restore document type '{TypeCode}': another active document type with the same code already exists.",
     "Extract:FieldDefinitionAlreadyExists": "Field '{Name}' is already defined on document type '{DocumentTypeCode}' (including soft-deleted records).",

@@ -325,6 +325,7 @@
 
     "Extract:InvalidDocumentTypeCodeFormat": "文件類型代碼 '{typeCode}' 不符合格式 '{pattern}'：僅允許字母 / 數字 / 底線 / 連字號區段，可選用 '.' 分隔多段；不允許開頭、結尾或連續 '.'。",
     "Extract:DocumentTypeCodeAlreadyExists": "文件類型代碼 '{TypeCode}' 已被佔用（包括已軟刪除的記錄）。請使用其他代碼，或先還原已存在的同名類型。",
+    "Extract:DocumentTypePackUnsupportedVersion": "設定包「{TypeCode}」的版本（{Version}）不受支援；本部署支援的包版本為 {Supported}。",
     "Extract:DocumentTypeInUse": "文件類型 '{TypeCode}' 仍被一份或多份文件參照，請先重新分類這些文件再刪除此類型。",
     "Extract:DocumentTypeRestoreConflict": "無法還原文件類型 '{TypeCode}'：已存在另一個未刪除的同代碼類型。",
     "Extract:FieldDefinitionAlreadyExists": "文件類型 '{DocumentTypeCode}' 下已定義欄位 '{Name}'（包括已軟刪除的記錄）。",

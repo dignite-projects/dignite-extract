@@ -325,6 +325,7 @@
 
     "Extract:InvalidDocumentTypeCodeFormat": "ドキュメントタイプコード '{typeCode}' は使用できません。パターン '{pattern}' に一致する必要があります（英字・数字・アンダースコア・ハイフンのセグメント。任意で '.' 区切り。先頭・末尾・連続する '.' は不可）。",
     "Extract:DocumentTypeCodeAlreadyExists": "ドキュメントタイプコード '{TypeCode}' は既に使用されています（論理削除済みのレコードを含む）。別のコードを使用するか、既存のものを復元してください。",
+    "Extract:DocumentTypePackUnsupportedVersion": "構成パック「{TypeCode}」のバージョン（{Version}）はサポートされていません。この配置がサポートするパックバージョンは {Supported} です。",
     "Extract:DocumentTypeInUse": "ドキュメントタイプ '{TypeCode}' は 1 件以上のドキュメントから参照されています。このタイプを削除する前に、それらのドキュメントを再分類してください。",
     "Extract:DocumentTypeRestoreConflict": "ドキュメントタイプ '{TypeCode}' を復元できません：同じコードの別のアクティブなドキュメントタイプが既に存在します。",
     "Extract:FieldDefinitionAlreadyExists": "フィールド '{Name}' はドキュメントタイプ '{DocumentTypeCode}' に既に定義されています（論理削除済みのレコードを含む）。",

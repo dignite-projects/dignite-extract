@@ -325,6 +325,7 @@
 
     "Extract:InvalidDocumentTypeCodeFormat": "文档类型代码 '{typeCode}' 不符合格式 '{pattern}'：仅允许字母 / 数字 / 下划线 / 短横线段，可选用 '.' 分隔多段；不允许首尾或连续 '.'。",
     "Extract:DocumentTypeCodeAlreadyExists": "文档类型代码 '{TypeCode}' 已被占用（包括已软删除的记录）。请使用其他代码，或先恢复已存在的同名类型。",
+    "Extract:DocumentTypePackUnsupportedVersion": "配置包「{TypeCode}」的版本（{Version}）不受支持；本部署支持的包版本为 {Supported}。",
     "Extract:DocumentTypeInUse": "文档类型 '{TypeCode}' 仍被一个或多个文档引用，请先重新分类这些文档再删除该类型。",
     "Extract:DocumentTypeRestoreConflict": "无法恢复文档类型 '{TypeCode}'：已存在另一个未删除的同代码类型。",
     "Extract:FieldDefinitionAlreadyExists": "文档类型 '{DocumentTypeCode}' 下已定义字段 '{Name}'（包括已软删除的记录）。",
