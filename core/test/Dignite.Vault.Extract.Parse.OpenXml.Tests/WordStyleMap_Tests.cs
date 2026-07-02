@@ -149,4 +149,54 @@ public class WordStyleMap_Tests
         // styles.xml, so it is not treated as a heading (the pre-#316 single-arg behavior is unchanged).
         WordStyleMap.HeadingLevel(WithStyle("ChapterTitle")).ShouldBeNull();
     }
+
+    [Fact]
+    public void An_explicit_paragraph_outline_of_nine_cancels_a_heading_style()
+    {
+        // #316: the paragraph's custom style is based on Heading1, but the paragraph carries a direct
+        // outlineLvl=9 ("Body Text" chosen in the paragraph dialog). Direct formatting overrides the style, so
+        // it is body text — not H1. Without the explicit-9 short-circuit this fell through to the style chain
+        // and wrongly rendered a heading.
+        var (document, mainPart, _) = BuildWithStyles(
+            "ChapterTitle",
+            "<w:style w:type=\"paragraph\" w:styleId=\"ChapterTitle\"><w:basedOn w:val=\"Heading1\"/></w:style>");
+        using (document)
+        {
+            var paragraph = new W.Paragraph(new W.ParagraphProperties(
+                new W.ParagraphStyleId { Val = "ChapterTitle" },
+                new W.OutlineLevel { Val = 9 }));
+            WordStyleMap.HeadingLevel(paragraph, mainPart).ShouldBeNull();
+        }
+    }
+
+    [Fact]
+    public void A_style_level_outline_of_nine_overrides_a_based_on_heading()
+    {
+        // #316: the custom style is based on Heading1 but explicitly sets outlineLvl=9 (body text) in its own
+        // definition — the closest override wins, so it is not a heading. Without the explicit-9 stop the walk
+        // continued up to Heading1 and returned H1.
+        var (document, mainPart, paragraph) = BuildWithStyles(
+            "QuietHeading",
+            "<w:style w:type=\"paragraph\" w:styleId=\"QuietHeading\"><w:basedOn w:val=\"Heading1\"/>"
+            + "<w:pPr><w:outlineLvl w:val=\"9\"/></w:pPr></w:style>");
+        using (document)
+        {
+            WordStyleMap.HeadingLevel(paragraph, mainPart).ShouldBeNull();
+        }
+    }
+
+    [Fact]
+    public void A_cyclic_basedOn_chain_terminates_and_is_not_a_heading()
+    {
+        // Defense: a malformed A -> B -> A cycle must not loop forever (MaxStyleChainDepth bounds the walk)
+        // and, resolving to no built-in heading / outline, is body text.
+        var (document, mainPart, paragraph) = BuildWithStyles(
+            "A",
+            "<w:style w:type=\"paragraph\" w:styleId=\"A\"><w:basedOn w:val=\"B\"/></w:style>"
+            + "<w:style w:type=\"paragraph\" w:styleId=\"B\"><w:basedOn w:val=\"A\"/></w:style>");
+        using (document)
+        {
+            WordStyleMap.HeadingLevel(paragraph, mainPart).ShouldBeNull();
+        }
+    }
 }

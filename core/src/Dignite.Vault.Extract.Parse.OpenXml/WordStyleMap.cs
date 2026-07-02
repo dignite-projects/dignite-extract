@@ -65,6 +65,15 @@ internal static class WordStyleMap
             return Math.Min(outline.Value + 1, MaxMarkdownHeadingLevel);
         }
 
+        // An EXPLICIT body-text outline level (9) is direct formatting too, so it must cancel a heading the
+        // paragraph's custom style would otherwise imply (step 3) — a paragraph based on a Heading style but
+        // set back to "Body Text" in the paragraph dialog is body text. Short-circuit rather than fall through.
+        // (An out-of-range value is malformed; leave it to the style chain as before.)
+        if (outline == 9)
+        {
+            return null;
+        }
+
         // 3. [#316] A custom style whose heading semantics live in styles.xml (based on a built-in HeadingN,
         //    or a style-level outlineLvl). Requires the style part; otherwise the paragraph is not a heading.
         if (!string.IsNullOrEmpty(styleId) && mainPart is not null)
@@ -144,6 +153,13 @@ internal static class WordStyleMap
             if (outline is >= 0 and < 9)
             {
                 return Math.Min(outline.Value + 1, MaxMarkdownHeadingLevel);
+            }
+
+            // An explicit body-text outline (9) on this style overrides whatever it is based on (the closest
+            // override wins), so it stops the chain and is not a heading — mirrors the paragraph-direct rule.
+            if (outline == 9)
+            {
+                return null;
             }
 
             currentId = style.BasedOn?.Val?.Value;
